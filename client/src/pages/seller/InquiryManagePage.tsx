@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import { Send, Bot, User, MessageCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,7 +35,7 @@ const InquiryManagePage: React.FC = () => {
         setSelectedSessionId(items[0].sessionId);
       }
     } catch (err) {
-      logger.error('获取会话列表失败', err);
+      console.error('获取会话列表失败', err);
     } finally {
       setLoadingSessions(false);
     }
@@ -48,7 +47,7 @@ const InquiryManagePage: React.FC = () => {
       const result = await inquiryApi.getSellerMessageList(sessionId);
       setMessages(result);
     } catch (err) {
-      logger.error('获取消息列表失败', err);
+      console.error('获取消息列表失败', err);
     } finally {
       setLoadingMessages(false);
     }
@@ -84,7 +83,6 @@ const InquiryManagePage: React.FC = () => {
       sessionId: selectedSessionId,
       role: 'seller',
       content: trimmed,
-      isAi: false,
       createdAt: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, tempMessage]);
@@ -101,7 +99,7 @@ const InquiryManagePage: React.FC = () => {
         )
       );
     } catch (err) {
-      logger.error('发送消息失败', err);
+      console.error('发送消息失败', err);
       toast('发送失败');
       setMessages((prev) =>
         prev.filter((m) => !m.id.startsWith('temp_'))
@@ -178,7 +176,7 @@ const InquiryManagePage: React.FC = () => {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-sm">
-                      {session.buyerName}
+                      {session.userId}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {formatDate(session.lastMessageAt)}
@@ -212,7 +210,7 @@ const InquiryManagePage: React.FC = () => {
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div>
               <div className="font-semibold">
-                {selectedSession?.buyerName || '选择会话'}
+                {selectedSession?.userId || '选择会话'}
               </div>
               <div className="text-xs text-muted-foreground">
                 {selectedSession?.status === 'active'
@@ -238,7 +236,7 @@ const InquiryManagePage: React.FC = () => {
               {messages.map((msg) => {
                 const isUser = msg.role === 'user';
                 const isSeller = msg.role === 'seller';
-                const isAi = msg.isAi;
+                const isAi = msg.role === 'assistant';
 
                 return (
                   <div

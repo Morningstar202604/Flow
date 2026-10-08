@@ -1,8 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
 import { eq, and, desc, gte, sql, sum, count } from 'drizzle-orm';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService } from './ai-gateway.service';
-import { products, categories, orders, orderItems, aiReports } from '@server/database/schema';
+import { products, categories, orders, orderItems } from '@server/database/schema';
 import type { AITrendReport } from '@shared/api.interface';
 
 @Injectable()
@@ -10,7 +10,7 @@ export class TrendService {
   private readonly logger = new Logger(TrendService.name);
 
   constructor(
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly aiGateway: AiGatewayService,
   ) {}
 
@@ -31,6 +31,9 @@ export class TrendService {
       categories: allCategories,
     }, null, 2);
 
+    const now = new Date();
+    const seasonMonth = now.getMonth() + 1;
+    const seasonYear = now.getFullYear();
     const systemPrompt = '你是专业的跨境电商市场分析师，擅长基于销售数据分析市场趋势并给出可执行的建议。请用中文输出 Markdown 格式的报告。';
 
     const userPrompt = `基于以下本店销售数据，生成一份深度市场趋势分析报告（Markdown 格式）。
@@ -42,7 +45,7 @@ ${dataContext}
 请包含以下章节（Markdown ## 二级标题）：
 1. 热搜词分析 - 基于热销商品关键词提炼当前热门搜索词
 2. 价格带分析 - 分析各价格区间的销售表现，找出黄金价格带
-3. 季节性趋势建议 - 结合当前季节（2026年9月）给出选品和营销建议
+3. 季节性趋势建议 - 结合当前季节（${seasonYear}年${seasonMonth}月）给出选品和营销建议
 4. 行动建议 - 给出3-5条具体可执行的运营行动建议
 
 请直接输出完整的 Markdown 报告内容，不要包裹在代码块中。`;
@@ -55,31 +58,13 @@ ${dataContext}
       { temperature: 0.7, maxTokens: 3000, agent: 'trend', userId: appUserId },
     );
 
-    const title = '市场趋势分析报告';
-    const [inserted] = await this.db.insert(aiReports)
-      .values({
-        reportType: 'trend',
-        title,
-        content,
-        status: 'completed',
-        createdBy: userId,
-      })
-      .returning({
-        id: aiReports.id,
-        reportType: aiReports.reportType,
-        title: aiReports.title,
-        content: aiReports.content,
-        status: aiReports.status,
-        createdAt: aiReports.createdAt,
-      });
-
     return {
-      id: inserted.id,
-      reportType: inserted.reportType,
-      title: inserted.title,
-      content: inserted.content,
-      status: inserted.status ?? 'completed',
-      createdAt: inserted.createdAt.toISOString(),
+      id: `trend-${Date.now()}`,
+      reportType: 'trend',
+      title: '市场趋势分析报告',
+      content,
+      status: 'completed',
+      createdAt: new Date().toISOString(),
     };
   }
 
@@ -92,7 +77,6 @@ ${dataContext}
       .select({
         date: sql<string>`to_char(${orders.createdAt}, 'YYYY-MM-DD')`,
         amount: sum(orders.totalAmount).mapWith(Number),
-        // eslint-disable-next-line @lark-apaas/require-number-wrapped-count
         orders: count(orders.id).mapWith(Number),
       })
       .from(orders)
@@ -130,23 +114,23 @@ ${dataContext}
     }));
   }
 
-  private async getTopProducts(): Promise<Array<{ id: string; titleEn: string; soldCount: number; price: string }>> {
+  private async getTopProducts(): Promise<Array<{ id: string; titleEn: string; sold: number; price: string }>> {
     const rows = await this.db
       .select({
         id: products.id,
         titleEn: products.titleEn,
-        soldCount: products.soldCount,
+        sold: products.sold,
         price: products.price,
       })
       .from(products)
       .where(eq(products.status, 'active'))
-      .orderBy(desc(products.soldCount))
+      .orderBy(desc(products.sold))
       .limit(10);
 
     return rows.map((row) => ({
       id: row.id,
       titleEn: row.titleEn,
-      soldCount: row.soldCount,
+      sold: row.sold,
       price: String(row.price),
     }));
   }

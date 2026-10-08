@@ -1,6 +1,6 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
 import { eq, desc, ilike, or, and, inArray } from 'drizzle-orm';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService, type ChatMessage } from './ai-gateway.service';
 import { products, inquiryMessages, orders } from '@server/database/schema';
 import type { SupportChatRequest, SupportChatResponse } from '@shared/api.interface';
@@ -43,7 +43,7 @@ const SHOP_FAQS: FAQEntry[] = [
 @Injectable()
 export class SupportService {
   constructor(
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly aiGateway: AiGatewayService,
     @Optional() private readonly embeddingService?: EmbeddingService,
   ) {}
@@ -193,7 +193,7 @@ export class SupportService {
             ilike(products.descEn, `%${query}%`),
           ),
         ))
-        .orderBy(desc(products.soldCount))
+        .orderBy(desc(products.sold))
         .limit(5);
 
       return rows.map((row) => ({
@@ -220,7 +220,7 @@ export class SupportService {
           orderNo: orders.orderNo,
           status: orders.status,
           totalAmount: orders.totalAmount,
-          trackingNo: orders.trackingNo,
+          trackingNo: orders.trackingNumber,
           createdAt: orders.createdAt,
           shippedAt: orders.shippedAt,
         })
@@ -244,7 +244,7 @@ export class SupportService {
         `订单号: ${order.orderNo}`,
         `状态: ${statusMap[order.status] || order.status}`,
         `金额: $${order.totalAmount}`,
-        order.trackingNo ? `运单号: ${order.trackingNo}` : '',
+          order.trackingNo ? `运单号: ${order.trackingNo}` : '',
         order.shippedAt ? `发货时间: ${order.shippedAt.toISOString()}` : '',
       ].filter(Boolean).join('\n');
     } catch {

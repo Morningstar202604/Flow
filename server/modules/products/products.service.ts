@@ -1,6 +1,6 @@
 import { Injectable, Inject, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
-import { products, categories, productReviews } from '@server/database/schema';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
+import { products, categories, reviews } from '@server/database/schema';
 import { eq, and, count, desc, asc, ilike, gte, lte, sql } from 'drizzle-orm';
 import type {
   Product,
@@ -46,7 +46,7 @@ export class ProductsService {
   private readonly logger = new Logger(ProductsService.name);
 
   constructor(
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly auditService: AuditService,
   ) {}
 
@@ -66,11 +66,11 @@ export class ProductsService {
       price: String(row.price),
       originalPrice: row.originalPrice ? String(row.originalPrice) : undefined,
       stock: row.stock,
-      soldCount: row.soldCount,
+      sold: row.sold,
       status: row.status as 'draft' | 'active' | 'inactive',
       coverImage: row.coverImage ?? undefined,
       images: row.images ?? [],
-      specs: (row.specs as ProductSpec) ?? {},
+      specs: row.specs ? JSON.parse(row.specs) as ProductSpec : {},
       seoKeywordsZh: row.seoKeywordsZh ?? '',
       seoKeywordsEn: row.seoKeywordsEn ?? '',
       bulletPointsZh: row.bulletPointsZh ?? [],
@@ -122,7 +122,7 @@ export class ProductsService {
       case 'price_desc':
         return [desc(products.price)];
       case 'sold_desc':
-        return [desc(products.soldCount)];
+        return [desc(products.sold)];
       case 'newest':
       default:
         return [desc(products.createdAt)];
@@ -184,11 +184,11 @@ export class ProductsService {
 
     const reviewStats = await this.db
       .select({
-        avgRating: sql<number>`round(avg(${productReviews.rating})::numeric, 1)`,
-        reviewCount: count(productReviews.id),
+        avgRating: sql<number>`round(avg(${reviews.rating})::numeric, 1)`,
+        reviewCount: count(reviews.id),
       })
-      .from(productReviews)
-      .where(eq(productReviews.productId, id));
+      .from(reviews)
+      .where(eq(reviews.productId, id));
 
     if (reviewStats.length > 0) {
       result.avgRating = reviewStats[0].avgRating != null ? Number(reviewStats[0].avgRating) : 0;
@@ -211,7 +211,7 @@ export class ProductsService {
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
       .where(eq(products.status, 'active'))
-      .orderBy(desc(products.soldCount), desc(products.createdAt))
+      .orderBy(desc(products.sold), desc(products.createdAt))
       .limit(8);
 
     return (rows as unknown as ProductWithCategory[]).map((row: ProductWithCategory) =>
@@ -226,6 +226,7 @@ export class ProductsService {
       const [row] = await this.db
         .insert(products)
         .values({
+          sellerId: userId,
           sku: input.sku,
           titleZh: input.titleZh,
           titleEn: input.titleEn,
@@ -240,14 +241,12 @@ export class ProductsService {
           status: input.status ?? 'draft',
           coverImage: input.coverImage,
           images: input.images ?? [],
-          specs: (input.specs ?? {}) as Record<string, unknown>,
+          specs: input.specs ? JSON.stringify(input.specs) : '{}',
           seoKeywordsZh: input.seoKeywordsZh,
           seoKeywordsEn: input.seoKeywordsEn,
           bulletPointsZh: input.bulletPointsZh ?? [],
           bulletPointsEn: input.bulletPointsEn ?? [],
           weight: input.weight !== undefined ? String(input.weight) : undefined,
-          createdBy: userId,
-          updatedBy: userId,
         })
         .returning();
 
@@ -302,7 +301,7 @@ export class ProductsService {
     if (input.status !== undefined) patch.status = input.status;
     if (input.coverImage !== undefined) patch.coverImage = input.coverImage;
     if (input.images !== undefined) patch.images = input.images;
-    if (input.specs !== undefined) patch.specs = input.specs as Record<string, unknown>;
+    if (input.specs !== undefined) patch.specs = JSON.stringify(input.specs);
     if (input.seoKeywordsZh !== undefined) patch.seoKeywordsZh = input.seoKeywordsZh;
     if (input.seoKeywordsEn !== undefined) patch.seoKeywordsEn = input.seoKeywordsEn;
     if (input.bulletPointsZh !== undefined) patch.bulletPointsZh = input.bulletPointsZh;
@@ -333,12 +332,12 @@ export class ProductsService {
       try {
         void this.auditService.log({
           action: 'product.price_change',
-          targetType: 'product',
-          targetId: id,
-          beforeValue: { oldPrice },
-          afterValue: { newPrice: String(input.price) },
-          actorUserId: userId,
-          actorRole: auditMeta?.role,
+          entity: 'product',
+          entityId: id,
+          before: { oldPrice },
+          after: { newPrice: String(input.price) },
+          userId: userId,
+          role: auditMeta?.role,
           ip: auditMeta?.ip,
         }).catch(() => {});
       } catch {
@@ -351,12 +350,12 @@ export class ProductsService {
       try {
         void this.auditService.log({
           action: 'product.toggle_status',
-          targetType: 'product',
-          targetId: id,
-          beforeValue: { oldStatus },
-          afterValue: { newStatus: input.status },
-          actorUserId: userId,
-          actorRole: auditMeta?.role,
+          entity: 'product',
+          entityId: id,
+          before: { oldStatus },
+          after: { newStatus: input.status },
+          userId: userId,
+          role: auditMeta?.role,
           ip: auditMeta?.ip,
         }).catch(() => {});
       } catch {
@@ -487,6 +486,7 @@ export class ProductsService {
         : [];
 
       validRecords.push({
+        sellerId: userId,
         titleZh: row.nameZh.trim(),
         titleEn: row.nameEn.trim(),
         descZh: row.descriptionZh || null,
@@ -497,7 +497,6 @@ export class ProductsService {
         status: 'active',
         coverImage: imageList[0] ?? null,
         images: imageList,
-        createdBy: userId,
         updatedBy: userId,
       });
     });
@@ -542,11 +541,11 @@ export class ProductsService {
       try {
         void this.auditService.log({
           action: 'csv.import',
-          targetType: 'product',
-          targetId: 'batch',
-          afterValue: { count: successCount },
-          actorUserId: userId,
-          actorRole: auditMeta?.role,
+          entity: 'product',
+          entityId: 'batch',
+          after: { count: successCount },
+          userId: userId,
+          role: auditMeta?.role,
           ip: auditMeta?.ip,
         }).catch(() => {});
       } catch {

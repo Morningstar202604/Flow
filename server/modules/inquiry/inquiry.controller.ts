@@ -28,7 +28,7 @@ interface SessionListResponse {
 
 interface CreateSessionRequest {
   sessionId: string;
-  buyerName?: string;
+  userId?: string;
 }
 
 @Controller('api/inquiry')
@@ -92,6 +92,6 @@ export class InquiryController {
     if (!body.sessionId) {
       throw new BadRequestException('sessionId 不能为空');
     }
-    return this.inquiryService.createSession(body.sessionId, body.buyerName);
+    return this.inquiryService.createSession(body.sessionId, body.userId);
   }
 }

@@ -28,7 +28,6 @@ import { getCart } from '@/api/cart';
 import { createOrder } from '@/api/orders';
 import { payForOrder, getPaymentConfig } from '@/api/payments';
 import { validateCoupon } from '@/api/coupons';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import { toast } from 'sonner';
 import { getProductTitle } from '@/utils/product-i18n';
 import type {
@@ -132,7 +131,7 @@ const CheckoutPage: React.FC = () => {
           navigate('/cart');
         }
       } catch (error: unknown) {
-        logger.error('[checkout] load error', error);
+        console.error('[checkout] load error', error);
       } finally {
         setLoading(false);
       }
@@ -166,7 +165,7 @@ const CheckoutPage: React.FC = () => {
       setOrderId(order.id);
       await handlePay(order.id);
     } catch (error: unknown) {
-      logger.error('[checkout] submit error', error);
+      console.error('[checkout] submit error', error);
       toast.error(t.common.error);
     } finally {
       setSubmitting(false);
@@ -200,7 +199,7 @@ const CheckoutPage: React.FC = () => {
         });
       }
     } catch (error: unknown) {
-      logger.error('[checkout] apply coupon error', error);
+      console.error('[checkout] apply coupon error', error);
       setCouponMessage({
         type: 'error',
         text: t.cart.couponInvalid,
@@ -233,7 +232,7 @@ const CheckoutPage: React.FC = () => {
         toast.error(result.message || t.common.error);
       }
     } catch (error: unknown) {
-      logger.error('[checkout] pay error', error);
+      console.error('[checkout] pay error', error);
       toast.error(t.common.error);
     } finally {
       setPaying(false);

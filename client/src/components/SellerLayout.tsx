@@ -23,7 +23,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { Language } from '@shared/api.interface';
-import { Image } from '@client/src/components/ui/image';
+import { Image } from '@/components/ui/image';
 
 const SellerLayout: React.FC = () => {
   const location = useLocation();

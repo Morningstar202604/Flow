@@ -34,7 +34,6 @@ import {
   createReview,
 } from '@/api/reviews';
 import { toggleFavorite, checkFavorite } from '@/api/favorites';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import { toast } from 'sonner';
 import {
   Product,
@@ -81,7 +80,7 @@ const ProductDetailPage: React.FC = () => {
         const data = await getProduct(id);
         setProduct(data);
       } catch (error: unknown) {
-        logger.error('[productDetail] load error', error);
+        console.error('[productDetail] load error', error);
       } finally {
         setLoading(false);
       }
@@ -97,7 +96,7 @@ const ProductDetailPage: React.FC = () => {
       const data = await getProductReviews(id);
       setReviewsData(data);
     } catch (error: unknown) {
-      logger.error('[productDetail] load reviews error', error);
+      console.error('[productDetail] load reviews error', error);
     } finally {
       setReviewsLoading(false);
     }
@@ -120,7 +119,7 @@ const ProductDetailPage: React.FC = () => {
         setHasPurchased(reviewData.hasPurchased);
         setIsFavorited(favData.favorited);
       } catch (error: unknown) {
-        logger.error('[productDetail] load user data error', error);
+        console.error('[productDetail] load user data error', error);
       }
     };
     void loadUserSpecific();
@@ -169,7 +168,7 @@ const ProductDetailPage: React.FC = () => {
       await addToCart(id, quantity);
       toast.success(t.product.addToCart);
     } catch (error: unknown) {
-      logger.error('[productDetail] add to cart error', error);
+      console.error('[productDetail] add to cart error', error);
       toast.error(t.common.error);
     } finally {
       setAddingToCart(false);
@@ -183,7 +182,7 @@ const ProductDetailPage: React.FC = () => {
       await addToCart(id, quantity);
       navigate('/checkout');
     } catch (error: unknown) {
-      logger.error('[productDetail] buy now error', error);
+      console.error('[productDetail] buy now error', error);
       toast.error(t.common.error);
     } finally {
       setAddingToCart(false);
@@ -206,7 +205,7 @@ const ProductDetailPage: React.FC = () => {
           : t.product.removeFromFavorites,
       );
     } catch (error: unknown) {
-      logger.error('[productDetail] toggle favorite error', error);
+      console.error('[productDetail] toggle favorite error', error);
       toast.error(t.common.error);
     } finally {
       setFavoriteLoading(false);
@@ -236,7 +235,7 @@ const ProductDetailPage: React.FC = () => {
         setMyReview(reviewData.review);
       }
     } catch (error: unknown) {
-      logger.error('[productDetail] submit review error', error);
+      console.error('[productDetail] submit review error', error);
       toast.error(t.common.error);
     } finally {
       setSubmittingReview(false);
@@ -375,7 +374,7 @@ const ProductDetailPage: React.FC = () => {
               </div>
               <div className="flex items-center gap-1">
                 <Tag className="size-4" />
-                {t.product.sold}: {product.soldCount}
+                {t.product.sold}: {product.sold}
               </div>
             </div>
 

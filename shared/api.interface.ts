@@ -66,7 +66,7 @@ export interface Product {
   price: string;
   originalPrice?: string;
   stock: number;
-  soldCount: number;
+  sold: number;
   status: 'draft' | 'active' | 'inactive';
   coverImage?: string;
   images: string[];
@@ -207,6 +207,7 @@ export interface OrderItem {
 export interface Order {
   id: string;
   orderNo: string;
+  userId?: string;
   buyerName: string;
   buyerEmail?: string;
   buyerPhone?: string;
@@ -267,14 +268,13 @@ export interface InquiryMessage {
   sessionId: string;
   role: 'user' | 'assistant' | 'seller';
   content: string;
-  isAi: boolean;
   createdAt: string;
 }
 
 export interface InquirySession {
   id: string;
   sessionId: string;
-  buyerName: string;
+  userId?: string;
   status: 'active' | 'closed';
   lastMessage?: string;
   lastMessageAt?: string;
@@ -316,7 +316,7 @@ export interface DashboardData {
 }
 
 export interface AICopywriterRequest {
-  productNameZh: string;
+  productNameZh?: string;
   specs?: string;
   category?: string;
   targetMarket?: string;
@@ -463,10 +463,10 @@ export interface Coupon {
   type: CouponType;
   value: string;
   minOrderAmount: string;
-  usageLimit: number;
+  totalQuantity: number;
   usedCount: number;
   expiresAt?: string;
-  isActive: boolean;
+  active: boolean;
   createdAt: string;
 }
 
@@ -475,9 +475,9 @@ export interface CreateCouponRequest {
   type: CouponType;
   value: number;
   minOrderAmount?: number;
-  usageLimit?: number;
+  totalQuantity?: number;
   expiresAt?: string;
-  isActive?: boolean;
+  active?: boolean;
 }
 
 export interface UpdateCouponRequest {
@@ -485,9 +485,9 @@ export interface UpdateCouponRequest {
   type?: CouponType;
   value?: number;
   minOrderAmount?: number;
-  usageLimit?: number;
+  totalQuantity?: number;
   expiresAt?: string;
-  isActive?: boolean;
+  active?: boolean;
 }
 
 export interface CouponListParams {
@@ -557,13 +557,13 @@ export interface CreateLogisticsRequest {
 
 export interface AuditLog {
   id: string;
-  actorUserId?: string;
-  actorRole?: string;
+  userId?: string;
+  role?: string;
   action: string;
-  targetType?: string;
-  targetId?: string;
-  beforeValue?: Record<string, unknown>;
-  afterValue?: Record<string, unknown>;
+  entity?: string;
+  entityId?: string;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
   ip?: string;
   createdAt: string;
 }

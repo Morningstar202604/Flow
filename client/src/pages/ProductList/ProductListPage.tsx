@@ -25,7 +25,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { listProducts } from '@/api/products';
 import { listCategories } from '@/api/categories';
 import { checkFavoriteBatch } from '@/api/favorites';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import type {
   Product,
   Category,
@@ -91,11 +90,11 @@ const ProductListPage: React.FC = () => {
            const faves = await checkFavoriteBatch(ids);
            setFavoriteIds(new Set(faves));
          } catch (favErr) {
-           logger.error('[productList] favorites error', favErr);
+           console.error('[productList] favorites error', favErr);
          }
        }
      } catch (error: unknown) {
-      logger.error('[productList] fetch error', error);
+      console.error('[productList] fetch error', error);
     } finally {
       setLoading(false);
     }
@@ -107,7 +106,7 @@ const ProductListPage: React.FC = () => {
         const cats = await listCategories();
         setCategories(cats);
       } catch (error: unknown) {
-        logger.error('[productList] categories error', error);
+        console.error('[productList] categories error', error);
       }
     };
     void load();

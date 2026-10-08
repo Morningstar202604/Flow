@@ -1,5 +1,4 @@
-import { axiosForBackend } from '@lark-apaas/client-toolkit/utils/getAxiosForBackend';
-import { logger } from '@lark-apaas/client-toolkit/logger';
+import { http } from '../lib/http';
 import type {
   Coupon,
   CouponListResponse,
@@ -13,16 +12,16 @@ export async function listCoupons(
   page = 1,
   pageSize = 20,
 ): Promise<CouponListResponse> {
-  logger.info('[coupons] list');
-  const { data } = await axiosForBackend.get<CouponListResponse>(
+  console.info('[coupons] list');
+  const { data } = await http.get<CouponListResponse>(
     `/api/coupons?page=${page}&pageSize=${pageSize}`,
   );
   return data;
 }
 
 export async function createCoupon(body: CreateCouponRequest): Promise<Coupon> {
-  logger.info('[coupons] create');
-  const { data } = await axiosForBackend.post<Coupon>(
+  console.info('[coupons] create');
+  const { data } = await http.post<Coupon>(
     '/api/coupons',
     body,
   );
@@ -33,8 +32,8 @@ export async function updateCoupon(
   id: string,
   body: UpdateCouponRequest,
 ): Promise<Coupon> {
-  logger.info('[coupons] update', id);
-  const { data } = await axiosForBackend.patch<Coupon>(
+  console.info('[coupons] update', id);
+  const { data } = await http.patch<Coupon>(
     `/api/coupons/${id}`,
     body,
   );
@@ -44,8 +43,8 @@ export async function updateCoupon(
 export async function validateCoupon(
   body: ValidateCouponRequest,
 ): Promise<ValidateCouponResponse> {
-  logger.info('[coupons] validate', body.code);
-  const { data } = await axiosForBackend.post<ValidateCouponResponse>(
+  console.info('[coupons] validate', body.code);
+  const { data } = await http.post<ValidateCouponResponse>(
     '/api/coupons/validate',
     body,
   );

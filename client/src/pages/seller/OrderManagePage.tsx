@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import { Search, Eye, Truck, CheckCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,7 +31,6 @@ import { ordersApi } from '@/api';
 import { createLogistics } from '@/api/logistics';
 import type { Order, OrderStatus, OrderListParams } from '@shared/api.interface';
 import { toast } from 'sonner';
-import { showConfirm } from '@lark-apaas/client-toolkit';
 
 const STATUS_MAP: Record<OrderStatus, { label: string; variant: string; color: string }> = {
   pending_payment: { label: '待付款', variant: 'secondary', color: 'text-amber-600' },
@@ -74,7 +72,7 @@ const OrderManagePage: React.FC = () => {
         setOrders(result.items);
         setTotal(result.total);
       } catch (err) {
-        logger.error('获取订单列表失败', err);
+        console.error('获取订单列表失败', err);
       } finally {
         setLoading(false);
       }
@@ -97,7 +95,7 @@ const OrderManagePage: React.FC = () => {
       setSelectedOrder(detail);
       setDetailOpen(true);
     } catch (err) {
-      logger.error('获取订单详情失败', err);
+      console.error('获取订单详情失败', err);
       setSelectedOrder(order);
       setDetailOpen(true);
     }
@@ -138,13 +136,13 @@ const OrderManagePage: React.FC = () => {
         handleViewDetail(shippingOrder);
       }
     } catch (err) {
-      logger.error('发货失败', err);
+      console.error('发货失败', err);
       toast('发货失败');
     }
   };
 
   const handleComplete = async (order: Order) => {
-    if (!await showConfirm('确认标记订单为已完成？')) return;
+    if (!window.confirm('确认标记订单为已完成？')) return;
     try {
       await ordersApi.updateOrderStatus(order.id, {
         status: 'delivered',
@@ -154,7 +152,7 @@ const OrderManagePage: React.FC = () => {
         handleViewDetail(order);
       }
     } catch (err) {
-      logger.error('标记完成失败', err);
+      console.error('标记完成失败', err);
     }
   };
 

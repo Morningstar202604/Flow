@@ -1,13 +1,7 @@
 import { Injectable, Inject, Logger, ConflictException } from '@nestjs/common';
-import {
-  DRIZZLE_DATABASE,
-  type PostgresJsDatabase,
-} from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, desc, count, and, asc } from 'drizzle-orm';
-import {
-  inquirySessions,
-  inquiryMessages,
-} from '@server/database/schema';
+import { inquirySessions, inquiryMessages } from '@server/database/schema';
 import type {
   InquirySession,
   InquiryMessage,
@@ -19,7 +13,7 @@ export class InquiryService {
   private readonly logger = new Logger(InquiryService.name);
 
   constructor(
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
   ) {}
 
   async getSessions(
@@ -60,9 +54,11 @@ export class InquiryService {
     const items: InquirySession[] = rows.map((row) => ({
       id: row.id,
       sessionId: row.sessionId,
-      buyerName: row.buyerName ?? '访客',
+      userId: row.userId ?? undefined,
       status: (row.status as 'active' | 'closed') ?? 'active',
-      lastMessage: row.lastMessage ?? undefined,
+      lastMessage: row.lastMessageAt
+        ? row.lastMessageAt.toISOString()
+        : undefined,
       lastMessageAt: row.lastMessageAt
         ? row.lastMessageAt.toISOString()
         : undefined,
@@ -84,7 +80,6 @@ export class InquiryService {
       sessionId: row.sessionId,
       role: row.role as 'user' | 'assistant' | 'seller',
       content: row.content,
-      isAi: row.isAi ?? false,
       createdAt: row.createdAt.toISOString(),
     }));
   }
@@ -93,15 +88,12 @@ export class InquiryService {
     body: SendMessageRequest,
     sellerUserId?: string,
   ): Promise<InquiryMessage> {
-    const now = new Date();
-
     const [inserted] = await this.db
       .insert(inquiryMessages)
       .values({
         sessionId: body.sessionId,
         role: body.role,
         content: body.content,
-        isAi: false,
       })
       .returning();
 
@@ -109,20 +101,19 @@ export class InquiryService {
       throw new Error('消息创建失败');
     }
 
-    // 更新会话的 last_message 和 last_message_at
+    // update session's last_message_at
     await this.db
       .update(inquirySessions)
       .set({
-        lastMessage: body.content,
-        lastMessageAt: now,
+        lastMessageAt: new Date(),
       })
       .where(eq(inquirySessions.sessionId, body.sessionId));
 
-    // 如果是卖家发送，尝试更新 assigned_to
+    // if seller responded, mark status
     if (sellerUserId && body.role === 'seller') {
       await this.db
         .update(inquirySessions)
-        .set({ assignedTo: sellerUserId })
+        .set({ status: 'active' })
         .where(eq(inquirySessions.sessionId, body.sessionId));
     }
 
@@ -131,21 +122,20 @@ export class InquiryService {
       sessionId: inserted.sessionId,
       role: inserted.role as 'user' | 'assistant' | 'seller',
       content: inserted.content,
-      isAi: inserted.isAi ?? false,
       createdAt: inserted.createdAt.toISOString(),
     };
   }
 
   async createSession(
     sessionId: string,
-    buyerName?: string,
+    userId?: string,
   ): Promise<InquirySession> {
     try {
       const [inserted] = await this.db
         .insert(inquirySessions)
         .values({
           sessionId,
-          buyerName: buyerName || '访客',
+          userId: userId || null,
           status: 'active',
         })
         .returning();
@@ -157,16 +147,18 @@ export class InquiryService {
       return {
         id: inserted.id,
         sessionId: inserted.sessionId,
-        buyerName: inserted.buyerName ?? '访客',
+        userId: inserted.userId ?? undefined,
         status: (inserted.status as 'active' | 'closed') ?? 'active',
-        lastMessage: inserted.lastMessage ?? undefined,
+        lastMessage: inserted.lastMessageAt
+          ? inserted.lastMessageAt.toISOString()
+          : undefined,
         lastMessageAt: inserted.lastMessageAt
           ? inserted.lastMessageAt.toISOString()
           : undefined,
         createdAt: inserted.createdAt.toISOString(),
       };
     } catch (error) {
-      // 唯一键冲突：会话已存在，直接返回已有会话
+      // unique violation: session already exists
       const code = this.extractErrorCode(error);
       if (code === '23505') {
         const existing = await this.db
@@ -179,9 +171,11 @@ export class InquiryService {
           return {
             id: row.id,
             sessionId: row.sessionId,
-            buyerName: row.buyerName ?? '访客',
+            userId: row.userId ?? undefined,
             status: (row.status as 'active' | 'closed') ?? 'active',
-            lastMessage: row.lastMessage ?? undefined,
+            lastMessage: row.lastMessageAt
+              ? row.lastMessageAt.toISOString()
+              : undefined,
             lastMessageAt: row.lastMessageAt
               ? row.lastMessageAt.toISOString()
               : undefined,

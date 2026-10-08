@@ -1,8 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import {
-  DRIZZLE_DATABASE,
-  type PostgresJsDatabase,
-} from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database,
+} from '../../database/database.provider';
 import { sql } from 'drizzle-orm';
 import {
   products,
@@ -20,7 +18,7 @@ export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
 
   constructor(
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
   ) {}
 
   async getStats(): Promise<DashboardData> {

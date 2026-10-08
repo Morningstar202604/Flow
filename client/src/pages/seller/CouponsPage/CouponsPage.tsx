@@ -36,7 +36,6 @@ import {
   createCoupon,
   updateCoupon,
 } from '@/api/coupons';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import { toast } from 'sonner';
 import type {
   Coupon,
@@ -50,9 +49,9 @@ interface CouponFormData {
   type: CouponType;
   value: string;
   minOrderAmount: string;
-  usageLimit: string;
+  totalQuantity: string;
   expiresAt: string;
-  isActive: boolean;
+  active: boolean;
 }
 
 const initialFormData: CouponFormData = {
@@ -60,9 +59,9 @@ const initialFormData: CouponFormData = {
   type: 'percent',
   value: '',
   minOrderAmount: '0',
-  usageLimit: '100',
+  totalQuantity: '100',
   expiresAt: '',
-  isActive: true,
+  active: true,
 };
 
 const CouponsPage: React.FC = () => {
@@ -86,7 +85,7 @@ const CouponsPage: React.FC = () => {
       setCoupons(result.items);
       setTotal(result.total);
     } catch (error: unknown) {
-      logger.error('[seller coupons] load error', error);
+      console.error('[seller coupons] load error', error);
       toast.error(t.common.error);
     } finally {
       setLoading(false);
@@ -110,11 +109,11 @@ const CouponsPage: React.FC = () => {
       type: coupon.type,
       value: coupon.value,
       minOrderAmount: coupon.minOrderAmount,
-      usageLimit: String(coupon.usageLimit),
+      totalQuantity: String(coupon.totalQuantity),
       expiresAt: coupon.expiresAt
         ? new Date(coupon.expiresAt).toISOString().slice(0, 16)
         : '',
-      isActive: coupon.isActive,
+      active: coupon.active,
     });
     setEditDialogOpen(true);
   };
@@ -135,11 +134,11 @@ const CouponsPage: React.FC = () => {
         minOrderAmount: formData.minOrderAmount
           ? Number(formData.minOrderAmount)
           : 0,
-        usageLimit: formData.usageLimit ? Number(formData.usageLimit) : undefined,
+        totalQuantity: formData.totalQuantity ? Number(formData.totalQuantity) : undefined,
         expiresAt: formData.expiresAt
           ? new Date(formData.expiresAt).toISOString()
           : undefined,
-        isActive: formData.isActive,
+        active: formData.active,
       };
       await createCoupon(payload);
       toast.success(
@@ -148,7 +147,7 @@ const CouponsPage: React.FC = () => {
       setCreateDialogOpen(false);
       void loadCoupons();
     } catch (error: unknown) {
-      logger.error('[seller coupons] create error', error);
+      console.error('[seller coupons] create error', error);
       toast.error(t.common.error);
     } finally {
       setSubmitting(false);
@@ -171,11 +170,11 @@ const CouponsPage: React.FC = () => {
         minOrderAmount: formData.minOrderAmount
           ? Number(formData.minOrderAmount)
           : 0,
-        usageLimit: formData.usageLimit ? Number(formData.usageLimit) : undefined,
+        totalQuantity: formData.totalQuantity ? Number(formData.totalQuantity) : undefined,
         expiresAt: formData.expiresAt
           ? new Date(formData.expiresAt).toISOString()
           : undefined,
-        isActive: formData.isActive,
+        active: formData.active,
       };
       await updateCoupon(editingCoupon.id, payload);
       toast.success(
@@ -185,7 +184,7 @@ const CouponsPage: React.FC = () => {
       setEditingCoupon(null);
       void loadCoupons();
     } catch (error: unknown) {
-      logger.error('[seller coupons] update error', error);
+      console.error('[seller coupons] update error', error);
       toast.error(t.common.error);
     } finally {
       setSubmitting(false);
@@ -194,19 +193,19 @@ const CouponsPage: React.FC = () => {
 
   const handleToggleStatus = async (coupon: Coupon): Promise<void> => {
     try {
-      await updateCoupon(coupon.id, { isActive: !coupon.isActive });
+      await updateCoupon(coupon.id, { active: !coupon.active });
       toast.success(
         language === 'zh'
-          ? coupon.isActive
+          ? coupon.active
             ? '已停用'
             : '已启用'
-          : coupon.isActive
+          : coupon.active
             ? 'Disabled'
             : 'Enabled',
       );
       void loadCoupons();
     } catch (error: unknown) {
-      logger.error('[seller coupons] toggle status error', error);
+      console.error('[seller coupons] toggle status error', error);
       toast.error(t.common.error);
     }
   };
@@ -296,9 +295,9 @@ const CouponsPage: React.FC = () => {
         <Label>{t.seller.usageLimit}</Label>
         <Input
           type="number"
-          value={formData.usageLimit}
+          value={formData.totalQuantity}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-            setFormData({ ...formData, usageLimit: e.target.value })
+            setFormData({ ...formData, totalQuantity: e.target.value })
           }
           placeholder="100"
         />
@@ -323,13 +322,13 @@ const CouponsPage: React.FC = () => {
         <Label>{t.seller.status}</Label>
         <div className="flex items-center gap-2">
           <Switch
-            checked={formData.isActive}
+            checked={formData.active}
             onCheckedChange={(checked: boolean) =>
-              setFormData({ ...formData, isActive: checked })
+              setFormData({ ...formData, active: checked })
             }
           />
           <span className="text-sm text-slate-600">
-            {formData.isActive ? t.seller.active : t.seller.inactive}
+            {formData.active ? t.seller.active : t.seller.inactive}
           </span>
         </div>
       </div>
@@ -431,12 +430,12 @@ const CouponsPage: React.FC = () => {
                           <div
                             className="h-full bg-indigo-500 rounded-full"
                             style={{
-                              width: `${coupon.usageLimit > 0 ? Math.min(100, (coupon.usedCount / coupon.usageLimit) * 100) : 0}%`,
+                              width: `${coupon.totalQuantity > 0 ? Math.min(100, (coupon.usedCount / coupon.totalQuantity) * 100) : 0}%`,
                             }}
                           />
                         </div>
                         <span className="text-xs text-slate-500">
-                          {coupon.usedCount}/{coupon.usageLimit}
+                          {coupon.usedCount}/{coupon.totalQuantity}
                         </span>
                       </div>
                     </td>
@@ -450,12 +449,12 @@ const CouponsPage: React.FC = () => {
                     <td className="py-3 px-4">
                       <Badge
                         className={
-                          coupon.isActive
+                          coupon.active
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : 'bg-slate-100 text-slate-500 border-slate-200'
                         }
                       >
-                        {coupon.isActive ? t.seller.active : t.seller.inactive}
+                        {coupon.active ? t.seller.active : t.seller.inactive}
                       </Badge>
                     </td>
                     <td className="py-3 px-4 text-right">
@@ -472,14 +471,14 @@ const CouponsPage: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => void handleToggleStatus(coupon)}
-                          className={coupon.isActive ? 'text-amber-600' : 'text-emerald-600'}
+                          className={coupon.active ? 'text-amber-600' : 'text-emerald-600'}
                         >
-                          {coupon.isActive ? (
+                          {coupon.active ? (
                             <ToggleRight className="size-4 mr-1" />
                           ) : (
                             <ToggleLeft className="size-4 mr-1" />
                           )}
-                          {coupon.isActive ? t.seller.disable : t.seller.enable}
+                          {coupon.active ? t.seller.disable : t.seller.enable}
                         </Button>
                       </div>
                     </td>

@@ -13,7 +13,7 @@ import {
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Language } from '@shared/api.interface';
-import { Image } from '@client/src/components/ui/image';
+import { Image } from '@/components/ui/image';
 
 const BuyerLayout: React.FC = () => {
   const { language, setLanguage, t } = useLanguage();

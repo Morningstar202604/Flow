@@ -55,8 +55,8 @@ export class CouponsController {
     const role = req.user?.role;
     const ip = this.getClientIp(req);
     return this.couponsService.create(body, {
-      actorUserId: userId,
-      actorRole: role,
+      userId: userId,
+      role: role,
       ip,
     });
   }

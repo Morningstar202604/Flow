@@ -1,5 +1,5 @@
-import { axiosForBackend } from '@lark-apaas/client-toolkit/utils/getAxiosForBackend';
-import { logger } from '@lark-apaas/client-toolkit/logger';
+import { http } from '../lib/http';
+// logger removed (was lark-specific)
 import type {
   RegisterRequest,
   LoginRequest,
@@ -8,7 +8,7 @@ import type {
 } from '@shared/api.interface';
 
 // Global CSRF protection: add X-Requested-With header to all non-GET requests
-axiosForBackend.interceptors.request.use((config) => {
+http.interceptors.request.use((config) => {
   const method = (config.method || 'get').toLowerCase();
   if (method !== 'get') {
     config.headers.set('X-Requested-With', 'XMLHttpRequest');
@@ -51,37 +51,37 @@ export function removeStoredUser(): void {
 }
 
 export async function register(dto: RegisterRequest): Promise<{ user: User }> {
-  logger.info('[auth] register', dto.email);
-  const { data } = await axiosForBackend.post<{ user: User }>('/api/auth/register', dto);
+  console.info('[auth] register', dto.email);
+  const { data } = await http.post<{ user: User }>('/api/auth/register', dto);
   setStoredUser(data.user);
   return data;
 }
 
 export async function login(dto: LoginRequest): Promise<{ user: User }> {
-  logger.info('[auth] login', dto.email);
-  const { data } = await axiosForBackend.post<{ user: User }>('/api/auth/login', dto);
+  console.info('[auth] login', dto.email);
+  const { data } = await http.post<{ user: User }>('/api/auth/login', dto);
   setStoredUser(data.user);
   return data;
 }
 
 export async function getMe(): Promise<User | null> {
-  logger.info('[auth] me');
+  console.info('[auth] me');
   try {
-    const { data } = await axiosForBackend.get<User | null>('/api/auth/me');
+    const { data } = await http.get<User | null>('/api/auth/me');
     return data;
   } catch (err) {
-    logger.warn('[auth] me failed', err);
+    console.warn('[auth] me failed', err);
     return null;
   }
 }
 
 export async function getGoogleStatus(): Promise<GoogleAuthStatus> {
-  const { data } = await axiosForBackend.get<GoogleAuthStatus>('/api/auth/google/status');
+  const { data } = await http.get<GoogleAuthStatus>('/api/auth/google/status');
   return data;
 }
 
 export async function mergeCart(sessionId: string): Promise<{ success: boolean }> {
-  const { data } = await axiosForBackend.post<{ success: boolean }>(
+  const { data } = await http.post<{ success: boolean }>(
     '/api/auth/merge-cart',
     { sessionId },
   );
@@ -89,17 +89,17 @@ export async function mergeCart(sessionId: string): Promise<{ success: boolean }
 }
 
 export async function refreshToken(): Promise<User> {
-  logger.info('[auth] refresh token');
-  const { data } = await axiosForBackend.post<{ user: User }>('/api/auth/refresh');
+  console.info('[auth] refresh token');
+  const { data } = await http.post<{ user: User }>('/api/auth/refresh');
   setStoredUser(data.user);
   return data.user;
 }
 
 export async function logout(): Promise<void> {
   try {
-    await axiosForBackend.post('/api/auth/logout', {});
+    await http.post('/api/auth/logout', {});
   } catch (err) {
-    logger.warn('[auth] logout api failed', err);
+    console.warn('[auth] logout api failed', err);
   }
   removeStoredUser();
 }

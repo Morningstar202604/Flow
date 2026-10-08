@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
 import { eq, desc } from 'drizzle-orm';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService } from './ai-gateway.service';
 import { products, categories } from '@server/database/schema';
 import type { AISelectResponse } from '@shared/api.interface';
@@ -8,7 +8,7 @@ import type { AISelectResponse } from '@shared/api.interface';
 @Injectable()
 export class SelectService {
   constructor(
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly aiGateway: AiGatewayService,
   ) {}
 
@@ -24,13 +24,13 @@ export class SelectService {
         id: products.id,
         titleEn: products.titleEn,
         categoryId: products.categoryId,
-        soldCount: products.soldCount,
+        sold: products.sold,
         price: products.price,
         stock: products.stock,
       })
       .from(products)
       .where(eq(products.status, 'active'))
-      .orderBy(desc(products.soldCount))
+      .orderBy(desc(products.sold))
       .limit(20);
 
     const stockLevels = topProducts.map((p) => ({

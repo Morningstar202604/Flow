@@ -2,35 +2,38 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ErrorBoundary } from 'react-error-boundary';
-
-import { AppContainer } from '@lark-apaas/client-toolkit/components/AppContainer';
-import { ErrorRender } from '@lark-apaas/client-toolkit/components/ErrorRender';
-
-import RoutesComponent from './app.tsx';
+import { Toaster } from 'sonner';
+import RoutesComponent from './app';
 import './index.css';
-import { createPortal } from 'react-dom';
-import { Toaster } from '@client/src/components/ui/sonner';
-
-const CLIENT_BASE_PATH = process.env.CLIENT_BASE_PATH || '/';
 
 const MainApp = () => {
   return (
-    <BrowserRouter basename={CLIENT_BASE_PATH}>
-      <AppContainer defaultTheme="light">
-        <ErrorBoundary
-          fallbackRender={({ error, resetErrorBoundary }) => (
-            <ErrorRender
-              error={error as Error}
-              resetErrorBoundary={resetErrorBoundary}
-            />
-          )}
-        >
-          <RoutesComponent />
-          {createPortal(<Toaster />, document.body)}
-        </ErrorBoundary>
-      </AppContainer>
+    <BrowserRouter>
+      <ErrorBoundary
+        fallbackRender={({ error, resetErrorBoundary }) => (
+          <div className="flex h-screen items-center justify-center bg-slate-50">
+            <div className="text-center max-w-md p-8">
+              <h1 className="text-xl font-bold text-slate-900 mb-2">出错了</h1>
+              <p className="text-sm text-slate-500 mb-4">{error.message}</p>
+              <button
+                onClick={resetErrorBoundary}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+              >
+                重试
+              </button>
+            </div>
+          </div>
+        )}
+      >
+        <RoutesComponent />
+        <Toaster position="top-right" />
+      </ErrorBoundary>
     </BrowserRouter>
   );
 };
 
-createRoot(document.getElementById('root')!).render(<MainApp />);
+createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <MainApp />
+  </React.StrictMode>,
+);

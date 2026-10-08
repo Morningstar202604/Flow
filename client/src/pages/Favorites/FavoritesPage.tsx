@@ -8,7 +8,6 @@ import { Image } from '@/components/ui/image';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getMyFavorites, toggleFavorite } from '@/api/favorites';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import { toast } from 'sonner';
 import type { FavoriteProduct } from '@shared/api.interface';
 import { getProductTitle } from '@/utils/product-i18n';
@@ -32,7 +31,7 @@ const FavoritesPage: React.FC = () => {
         const data = await getMyFavorites();
         setFavorites(data);
       } catch (error: unknown) {
-        logger.error('[favorites] load error', error);
+        console.error('[favorites] load error', error);
         toast.error(t.common.error);
       } finally {
         setLoading(false);
@@ -52,7 +51,7 @@ const FavoritesPage: React.FC = () => {
         language === 'zh' ? '已取消收藏' : 'Removed from wishlist',
       );
     } catch (error: unknown) {
-      logger.error('[favorites] remove error', error);
+      console.error('[favorites] remove error', error);
       toast.error(t.common.error);
     } finally {
       setRemovingId(null);

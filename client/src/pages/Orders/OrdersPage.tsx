@@ -25,7 +25,6 @@ import {
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getBuyerOrders, getOrderDetail } from '@/api/orders';
 import { getLogistics } from '@/api/logistics';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import type { Order, OrderStatus, LogisticsTracking } from '@shared/api.interface';
 
 const STATUS_STEPS: OrderStatus[] = [
@@ -73,7 +72,7 @@ const OrdersPage: React.FC = () => {
         setSelectedOrder(data.items[0]);
       }
     } catch (error: unknown) {
-      logger.error('[orders] list error', error);
+      console.error('[orders] list error', error);
     } finally {
       setLoading(false);
     }
@@ -95,14 +94,14 @@ const OrdersPage: React.FC = () => {
           setLogisticsData(data);
         })
         .catch((err: unknown) => {
-          logger.error('[orders] logistics error', err);
+          console.error('[orders] logistics error', err);
           setLogisticsData(null);
         })
         .finally(() => {
           setLogisticsLoading(false);
         });
     } catch (error: unknown) {
-      logger.error('[orders] detail error', error);
+      console.error('[orders] detail error', error);
     } finally {
       setDetailLoading(false);
     }

@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc, or, isNull, sql } from 'drizzle-orm';
 
 import { cartItems, products, cartRecoveryCodes } from '@server/database/schema';
@@ -9,7 +9,7 @@ import type { CartResponse, CartItem } from '@shared/api.interface';
 export class CartService {
   private readonly logger = new Logger(CartService.name);
 
-  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase) {}
+  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
 
   async getCart(userId: string | undefined, sessionId: string | undefined): Promise<CartResponse> {
     let whereCondition;
@@ -53,7 +53,7 @@ export class CartService {
         longDescEn: '',
         price: row.productPrice as string,
         stock: row.productStock,
-        soldCount: 0,
+        sold: 0,
         status: row.productStatus as 'draft' | 'active' | 'inactive',
         coverImage: row.productCoverImage ?? undefined,
         images: (row.productImages as string[] | null) ?? [],

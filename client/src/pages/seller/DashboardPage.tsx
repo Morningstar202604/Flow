@@ -9,7 +9,6 @@ import {
   Clock,
   Truck,
 } from 'lucide-react';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { dashboardApi } from '@/api';
 import type { DashboardData } from '@shared/api.interface';
@@ -26,7 +25,7 @@ const DashboardPage: React.FC = () => {
         const result = await dashboardApi.getDashboardStats();
         setData(result);
       } catch (err) {
-        logger.error('获取看板数据失败', err);
+        console.error('获取看板数据失败', err);
         setError('数据加载失败');
       } finally {
         setLoading(false);

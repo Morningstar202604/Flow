@@ -1,8 +1,8 @@
 version: "3.9"
 
-# GlobalEcom AI 出口电商平台 — 部署编排
-# 说明：本文件为导出重建时按 .env.example / docker/postgres/init.sql 的约定补齐的参考版本。
-# 首次启动 postgres 会自动执行 init.sql 创建 vector / pg_trgm 扩展。
+# GlobalEcom AI — 部署编排
+# 使用: docker-compose up -d
+# 首次启动会自动创建表 (db:push)
 
 services:
   postgres:
@@ -10,11 +10,11 @@ services:
     container_name: globalecom-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-globalecom}
       POSTGRES_USER: ${POSTGRES_USER:-globalecom}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-globalecom_pass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-globalecom_pass_2024}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -24,17 +24,27 @@ services:
       timeout: 5s
       retries: 5
 
-  # 应用服务：按实际构建产物补充；此处先以注释占位，按需启用
-  # app:
-  #   build: .
-  #   container_name: globalecom-app
-  #   restart: unless-stopped
-  #   ports:
-  #     - "${SERVER_PORT:-3000}:3000"
-  #   env_file: .env
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: globalecom-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-globalecom}:${POSTGRES_PASSWORD:-globalecom_pass_2024}@postgres:5432/${POSTGRES_DB:-globalecom}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
 volumes:
   postgres_data:

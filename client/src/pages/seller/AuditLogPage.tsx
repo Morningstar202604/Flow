@@ -17,7 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import { toast } from 'sonner';
 import { getAuditLogs } from '@/api/audit';
 import type { AuditLog } from '@shared/api.interface';
@@ -73,7 +72,7 @@ const AuditLogPage: React.FC = () => {
       setLogs(result.items);
       setTotal(result.total);
     } catch (error: unknown) {
-      logger.error('[audit] load error', error);
+      console.error('[audit] load error', error);
       toast.error('加载审计日志失败');
     } finally {
       setLoading(false);
@@ -227,12 +226,12 @@ const AuditLogPage: React.FC = () => {
                         {formatTime(log.createdAt)}
                       </td>
                       <td className="py-3 px-4">
-                        {log.actorRole ? (
+                        {log.role ? (
                           <Badge
                             variant="secondary"
                             className="bg-slate-100 text-slate-600 border-slate-200"
                           >
-                            {log.actorRole}
+                            {log.role}
                           </Badge>
                         ) : (
                           <span className="text-slate-400">未登录</span>
@@ -247,10 +246,10 @@ const AuditLogPage: React.FC = () => {
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-slate-600">
-                        {log.targetType || '-'}
+                        {log.entity || '-'}
                       </td>
                       <td className="py-3 px-4 text-slate-600 font-mono text-xs max-w-32 truncate">
-                        {log.targetId || '-'}
+                        {log.entityId || '-'}
                       </td>
                       <td className="py-3 px-4 text-slate-500 font-mono text-xs">
                         {log.ip || '-'}
@@ -265,7 +264,7 @@ const AuditLogPage: React.FC = () => {
                                 变更前 (before_value)
                               </div>
                               <pre className="bg-slate-900 text-slate-100 rounded-lg p-3 text-xs overflow-x-auto font-mono whitespace-pre-wrap">
-                                {formatJson(log.beforeValue)}
+                                {formatJson(log.before)}
                               </pre>
                             </div>
                             <div>
@@ -273,7 +272,7 @@ const AuditLogPage: React.FC = () => {
                                 变更后 (after_value)
                               </div>
                               <pre className="bg-slate-900 text-slate-100 rounded-lg p-3 text-xs overflow-x-auto font-mono whitespace-pre-wrap">
-                                {formatJson(log.afterValue)}
+                                {formatJson(log.after)}
                               </pre>
                             </div>
                           </div>

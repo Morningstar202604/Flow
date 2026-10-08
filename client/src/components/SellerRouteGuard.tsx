@@ -4,9 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Shield } from 'lucide-react';
-import { UniversalLink } from '@lark-apaas/client-toolkit/components/UniversalLink';
-import logoWhite from '@/assets/branding/logo-white.png';
-import { Image } from '@client/src/components/ui/image';
+import { Link } from 'react-router-dom';
 
 const SELLER_ROLES = new Set(['seller', 'admin']);
 
@@ -19,11 +17,9 @@ const SellerRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children })
     return (
       <div className="flex h-screen items-center justify-center bg-[#0B1F3A]">
         <div className="flex flex-col items-center gap-4">
-          <Image
-            src={logoWhite}
-            alt="GlobalEcom AI"
-            className="h-14 w-14 object-contain rounded-xl"
-          />
+          <div className="size-14 rounded-xl bg-[#00C2B8]/20 flex items-center justify-center text-2xl font-bold text-[#00C2B8]">
+            G
+          </div>
           <div className="size-8 border-4 border-[#00C2B8] border-t-transparent rounded-full animate-spin" />
           <div className="text-sm text-slate-300">{t.common.loading}...</div>
         </div>
@@ -48,8 +44,8 @@ const SellerRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children })
           <p className="text-sm text-slate-500 mb-6">
             {t.auth.sellerAccessDeniedDesc}
           </p>
-          <Button asChild variant="default">
-            <UniversalLink to="/">{t.auth.backToHome}</UniversalLink>
+          <Button variant="default">
+            <Link to="/" className="text-white no-underline">{t.auth.backToHome}</Link>
           </Button>
         </div>
       </div>

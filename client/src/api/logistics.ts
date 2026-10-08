@@ -1,5 +1,4 @@
-import { axiosForBackend } from '@lark-apaas/client-toolkit/utils/getAxiosForBackend';
-import { logger } from '@lark-apaas/client-toolkit/logger';
+import { http } from '../lib/http';
 import type {
   LogisticsTracking,
   CreateLogisticsRequest,
@@ -8,8 +7,8 @@ import type {
 export async function getLogistics(
   orderId: string,
 ): Promise<LogisticsTracking> {
-  logger.info('[logistics] get', orderId);
-  const { data } = await axiosForBackend.get<LogisticsTracking>(
+  console.info('[logistics] get', orderId);
+  const { data } = await http.get<LogisticsTracking>(
     `/api/logistics/${orderId}`,
   );
   return data;
@@ -18,8 +17,8 @@ export async function getLogistics(
 export async function createLogistics(
   payload: CreateLogisticsRequest,
 ): Promise<LogisticsTracking> {
-  logger.info('[logistics] create', payload.orderId, payload.carrier);
-  const { data } = await axiosForBackend.post<LogisticsTracking>(
+  console.info('[logistics] create', payload.orderId, payload.carrier);
+  const { data } = await http.post<LogisticsTracking>(
     '/api/logistics',
     payload,
   );

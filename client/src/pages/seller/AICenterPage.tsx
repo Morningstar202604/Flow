@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import {
   Sparkles,
   MessageSquareText,
@@ -48,7 +47,7 @@ const AICenterPage: React.FC = () => {
         const result = await aiApi.getAIStatus();
         setStatus(result);
       } catch (err) {
-        logger.error('获取 AI 状态失败', err);
+        console.error('获取 AI 状态失败', err);
         setStatus({ configured: false });
       } finally {
         setLoadingStatus(false);
@@ -64,7 +63,7 @@ const AICenterPage: React.FC = () => {
       const result = await aiApi.getUsageStats();
       setUsageStats(result);
     } catch (err) {
-      logger.error('获取 AI 用量统计失败', err);
+      console.error('获取 AI 用量统计失败', err);
     } finally {
       setUsageLoading(false);
     }
@@ -76,7 +75,7 @@ const AICenterPage: React.FC = () => {
       const result = await aiApi.generateTrendReport();
       setTrendReport(result);
     } catch (err) {
-      logger.error('生成趋势报告失败', err);
+      console.error('生成趋势报告失败', err);
       toast('生成失败，请检查 AI 配置');
     } finally {
       setTrendLoading(false);
@@ -89,7 +88,7 @@ const AICenterPage: React.FC = () => {
       const result = await aiApi.generateSelectSuggestion();
       setSelectResult(result);
     } catch (err) {
-      logger.error('生成选品建议失败', err);
+      console.error('生成选品建议失败', err);
       toast('生成失败，请检查 AI 配置');
     } finally {
       setSelectLoading(false);

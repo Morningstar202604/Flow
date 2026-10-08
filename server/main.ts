@@ -1,31 +1,35 @@
 import { NestFactory } from '@nestjs/core';
-import { Logger } from '@nestjs/common';
-import { configureApp } from '@lark-apaas/fullstack-nestjs-core';
-import { join } from 'path';
-import { __express as hbsExpressEngine } from 'hbs';
-
-import type { NestExpressApplication } from '@nestjs/platform-express';
+import { ValidationPipe, Logger } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
-async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    abortOnError: process.env.NODE_ENV !== 'development',
-  });
-  await configureApp(app, { 
-    disableSwagger: true,
-  });
-  const logger = new Logger('Bootstrap');
-  const host = process.env.SERVER_HOST || 'localhost';
-  const port = Number(process.env.SERVER_PORT || '3000');
+async function bootstrap(): Promise<void> {
+  const app = await NestFactory.create(AppModule);
 
-  // 注册视图引擎, 渲染 client 目录下的 html 文件
-  app.setBaseViewsDir(join(process.cwd(), 'dist/client'));
-  app.setViewEngine('html');
-  app.engine('html', hbsExpressEngine);
+  app.use(cookieParser());
 
-  await app.listen(port, host);
-  logger.log(`Server running on ${host}:${port}`);
-  logger.log(`API endpoints ready at http://${host}:${port}/api`);
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
+
+  const isProd = process.env.NODE_ENV === 'production';
+  app.enableCors({
+    origin: isProd
+      ? (process.env.CORS_ORIGINS?.split(',') ?? [process.env.APP_URL ?? 'http://localhost:3000'])
+      : true,
+    credentials: true,
+  });
+
+  app.setGlobalPrefix('api');
+
+  const port = parseInt(process.env.PORT ?? '3000', 10);
+  await app.listen(port);
+  Logger.log(`GlobalEcom AI server running on http://localhost:${port}/api`, 'Bootstrap');
 }
 
-bootstrap();
+void bootstrap();

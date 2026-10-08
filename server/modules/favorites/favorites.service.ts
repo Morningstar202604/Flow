@@ -5,7 +5,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, desc, and, inArray } from 'drizzle-orm';
 
 import { favorites, products } from '@server/database/schema';
@@ -15,7 +15,7 @@ import type { FavoriteProduct } from '@shared/api.interface';
 export class FavoritesService {
   private readonly logger = new Logger(FavoritesService.name);
 
-  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase) {}
+  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
 
   async getMyFavorites(userId: string | undefined): Promise<FavoriteProduct[]> {
     if (!userId) return [];
@@ -51,7 +51,7 @@ export class FavoritesService {
         price: row.product.price.toString(),
         originalPrice: row.product.originalPrice?.toString(),
         stock: Number(row.product.stock),
-        soldCount: Number(row.product.soldCount),
+        sold: Number(row.product.sold),
         status: row.product.status as any,
         coverImage: row.product.coverImage ?? undefined,
         images: (row.product.images as string[]) ?? [],

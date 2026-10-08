@@ -62,7 +62,15 @@ export class PayPalService {
       }),
     });
 
-    const data = await response.json();
+    const data = await response.json() as {
+      id?: string;
+      links?: Array<{ rel: string; href: string }>;
+      status?: string;
+      purchase_units?: Array<{
+        payments?: { captures?: Array<{ id?: string }> };
+        amount?: { value?: string; currency_code?: string };
+      }>;
+    };
     if (!response.ok) {
       throw new Error(`PayPal create order failed: ${JSON.stringify(data)}`);
     }
@@ -72,7 +80,7 @@ export class PayPalService {
     );
 
     return {
-      paypalOrderId: data.id,
+      paypalOrderId: data.id ?? '',
       approveUrl: approveLink?.href ?? '',
     };
   }
@@ -100,7 +108,14 @@ export class PayPalService {
       },
     );
 
-    const data = await response.json();
+    const data = await response.json() as {
+      id?: string;
+      status?: string;
+      purchase_units?: Array<{
+        payments?: { captures?: Array<{ id?: string }> };
+        amount?: { value?: string; currency_code?: string };
+      }>;
+    };
     if (!response.ok) {
       throw new Error(`PayPal capture failed: ${JSON.stringify(data)}`);
     }
@@ -207,13 +222,13 @@ export class PayPalService {
       body: 'grant_type=client_credentials',
     });
 
-    const data = await response.json();
+    const data = await response.json() as { access_token?: string; expires_in?: number };
     if (!response.ok) {
       throw new Error(`PayPal auth failed: ${JSON.stringify(data)}`);
     }
 
-    this.accessToken = data.access_token;
-    this.tokenExpiresAt = now + data.expires_in * 1000;
+    this.accessToken = data.access_token ?? null;
+    this.tokenExpiresAt = now + (data.expires_in ?? 0) * 1000;
     return this.accessToken!;
   }
 }

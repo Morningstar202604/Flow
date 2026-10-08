@@ -10,7 +10,7 @@ import { getFeaturedProducts, listProducts } from '@/api/products';
 import { listCategories } from '@/api/categories';
 import { checkFavoriteBatch } from '@/api/favorites';
 import { useAuth } from '@/contexts/AuthContext';
-import { logger } from '@lark-apaas/client-toolkit/logger';
+// logger removed (was lark-specific)
 import type { Product, Category } from '@shared/api.interface';
 
 const HomePage: React.FC = () => {
@@ -42,11 +42,11 @@ const HomePage: React.FC = () => {
              const faves = await checkFavoriteBatch(uniqueIds);
              setFavoriteIds(new Set(faves));
            } catch (favErr) {
-             logger.error('[home] load favorites error', favErr);
+             console.error('[home] load favorites error', favErr);
            }
          }
       } catch (error: unknown) {
-        logger.error('[home] load error', error);
+        console.error('[home] load error', error);
       } finally {
         setLoading(false);
       }

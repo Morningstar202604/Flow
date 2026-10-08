@@ -47,14 +47,14 @@ export class StripeService {
       body,
     });
 
-    const data = await response.json();
+    const data = await response.json() as { client_secret?: string; id?: string };
     if (!response.ok) {
       throw new Error(`Stripe createPaymentIntent failed: ${JSON.stringify(data)}`);
     }
 
     return {
       clientSecret: data.client_secret ?? '',
-      paymentIntentId: data.id,
+      paymentIntentId: data.id ?? '',
     };
   }
 
@@ -113,12 +113,12 @@ export class StripeService {
       body: params,
     });
 
-    const data = await response.json();
+    const data = await response.json() as { id?: string };
     if (!response.ok) {
       throw new Error(`Stripe refund failed: ${JSON.stringify(data)}`);
     }
 
-    return { refundId: data.id };
+    return { refundId: data.id ?? '' };
   }
 
   private signHmac(message: string, secret: string): string {

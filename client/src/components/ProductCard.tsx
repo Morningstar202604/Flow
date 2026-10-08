@@ -7,7 +7,6 @@ import { Image } from '@/components/ui/image';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toggleFavorite } from '@/api/favorites';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import { toast } from 'sonner';
 import type { Product } from '@shared/api.interface';
 import { getProductTitle } from '@/utils/product-i18n';
@@ -42,7 +41,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, favorited = false })
       const result = await toggleFavorite(product.id);
       setIsFavorited(result.favorited);
     } catch (error: unknown) {
-      logger.error('[productCard] toggle favorite error', error);
+      console.error('[productCard] toggle favorite error', error);
       toast.error(t.common.error);
     } finally {
       setFavLoading(false);
@@ -96,7 +95,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, favorited = false })
             )}
           </div>
           <div className="text-xs text-slate-500">
-            {productText.sold}: {product.soldCount}
+            {productText.sold}: {product.sold}
           </div>
           {product.stock === 0 && (
             <div className="text-xs text-slate-400">

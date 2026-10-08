@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import logoMain from '@/assets/branding/logo-main.png';
-import { Image } from '@client/src/components/ui/image';
+import { Image } from '@/components/ui/image';
 
 const LoginPage: React.FC = () => {
   const { t } = useLanguage();
@@ -36,7 +35,7 @@ const LoginPage: React.FC = () => {
       toast.success('登录成功');
       navigate(from, { replace: true });
     } catch (err) {
-      logger.error('Login failed', err);
+      console.error('Login failed', err);
       const msg = (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message || '登录失败';
       toast.error(msg);
     } finally {

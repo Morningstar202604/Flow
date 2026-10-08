@@ -30,7 +30,6 @@ import {
 } from '@/components/ui/empty';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getCart, updateCartItem, removeCartItem, exportRecoveryCode, importRecoveryCode } from '@/api/cart';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import { toast } from 'sonner';
 import type { CartResponse, CartItem } from '@shared/api.interface';
 import { getProductTitle } from '@/utils/product-i18n';
@@ -54,7 +53,7 @@ const CartPage: React.FC = () => {
       const data = await getCart();
       setCart(data);
     } catch (error: unknown) {
-      logger.error('[cart] fetch error', error);
+      console.error('[cart] fetch error', error);
     } finally {
       setLoading(false);
     }
@@ -74,7 +73,7 @@ const CartPage: React.FC = () => {
       const data = await updateCartItem(itemId, newQty);
       setCart(data);
     } catch (error: unknown) {
-      logger.error('[cart] update error', error);
+      console.error('[cart] update error', error);
       toast.error(t.common.error);
     } finally {
       setUpdating(null);
@@ -88,7 +87,7 @@ const CartPage: React.FC = () => {
       setCart(data);
       toast.success(t.cart.remove);
     } catch (error: unknown) {
-      logger.error('[cart] remove error', error);
+      console.error('[cart] remove error', error);
       toast.error(t.common.error);
     } finally {
       setUpdating(null);
@@ -102,7 +101,7 @@ const CartPage: React.FC = () => {
       setRecoveryCode(data.code);
       setExportDialogOpen(true);
     } catch (error: unknown) {
-      logger.error('[cart] export code error', error);
+      console.error('[cart] export code error', error);
       toast.error(t.common.error);
     } finally {
       setExporting(false);
@@ -114,7 +113,7 @@ const CartPage: React.FC = () => {
       await navigator.clipboard.writeText(recoveryCode);
       toast.success(t.cart.codeCopied);
     } catch (error: unknown) {
-      logger.error('[cart] copy error', error);
+      console.error('[cart] copy error', error);
     }
   };
 
@@ -128,7 +127,7 @@ const CartPage: React.FC = () => {
       setImportCode('');
       toast.success(t.cart.importSuccess);
     } catch (error: unknown) {
-      logger.error('[cart] import code error', error);
+      console.error('[cart] import code error', error);
       toast.error(
         error instanceof Error ? error.message : t.common.error,
       );

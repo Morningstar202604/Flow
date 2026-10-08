@@ -1,4 +1,4 @@
-import { axiosForBackend } from '@lark-apaas/client-toolkit/utils/getAxiosForBackend';
+import { http } from '../lib/http';
 import type { AuditLogListResponse, AuditLogQuery } from '@shared/api.interface';
 
 export async function getAuditLogs(params?: AuditLogQuery): Promise<AuditLogListResponse> {
@@ -12,6 +12,6 @@ export async function getAuditLogs(params?: AuditLogQuery): Promise<AuditLogList
   const query = queryParams.toString();
   const url = query ? `/api/audit-logs?${query}` : '/api/audit-logs';
 
-  const response = await axiosForBackend.get(url);
+  const response = await http.get(url);
   return response.data;
 }

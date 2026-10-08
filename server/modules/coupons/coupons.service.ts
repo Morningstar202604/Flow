@@ -7,7 +7,7 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc, count, gte, lt, sql } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
 
@@ -26,7 +26,7 @@ export class CouponsService {
   private readonly logger = new Logger(CouponsService.name);
 
   constructor(
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly auditService: AuditService,
   ) {}
 
@@ -37,10 +37,10 @@ export class CouponsService {
       type: row.type as any,
       value: row.value.toString(),
       minOrderAmount: row.minOrderAmount.toString(),
-      usageLimit: Number(row.usageLimit),
+      totalQuantity: Number(row.totalQuantity),
       usedCount: Number(row.usedCount),
       expiresAt: row.expiresAt ? row.expiresAt.toISOString() : undefined,
-      isActive: row.isActive,
+      active: row.active,
       createdAt: row.createdAt.toISOString(),
     };
   }
@@ -71,7 +71,7 @@ export class CouponsService {
 
   async create(
     dto: CreateCouponRequest,
-    auditMeta?: { actorUserId?: string; actorRole?: string; ip?: string },
+    auditMeta?: { userId?: string; role?: string; ip?: string },
   ): Promise<Coupon> {
     if (!dto.code?.trim()) {
       throw new BadRequestException('优惠码不能为空');
@@ -94,13 +94,14 @@ export class CouponsService {
     const inserted = await this.db
       .insert(coupons)
       .values({
+        sellerId: auditMeta?.userId ?? null,
         code: dto.code.trim().toUpperCase(),
         type: dto.type,
         value: dto.value.toString(),
         minOrderAmount: (dto.minOrderAmount ?? 0).toString(),
-        usageLimit: dto.usageLimit ?? 1,
+        totalQuantity: dto.totalQuantity ?? 1,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
-        isActive: dto.isActive ?? true,
+        active: dto.active ?? true,
       })
       .returning();
 
@@ -110,15 +111,15 @@ export class CouponsService {
     try {
       void this.auditService.log({
         action: 'coupon.create',
-        targetType: 'coupon',
-        targetId: coupon.id,
-        afterValue: {
+        entity: 'coupon',
+        entityId: coupon.id,
+        after: {
           code: coupon.code,
           type: coupon.type,
           value: coupon.value,
         },
-        actorUserId: auditMeta?.actorUserId,
-        actorRole: auditMeta?.actorRole,
+        userId: auditMeta?.userId,
+        role: auditMeta?.role,
         ip: auditMeta?.ip,
       });
     } catch {
@@ -149,11 +150,11 @@ export class CouponsService {
     if (dto.type !== undefined) patch.type = dto.type;
     if (dto.value !== undefined) patch.value = dto.value.toString();
     if (dto.minOrderAmount !== undefined) patch.minOrderAmount = dto.minOrderAmount.toString();
-    if (dto.usageLimit !== undefined) patch.usageLimit = dto.usageLimit;
+    if (dto.totalQuantity !== undefined) patch.totalQuantity = dto.totalQuantity;
     if (dto.expiresAt !== undefined) {
       patch.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
     }
-    if (dto.isActive !== undefined) patch.isActive = dto.isActive;
+    if (dto.active !== undefined) patch.active = dto.active;
 
     if (Object.keys(patch).length === 0) {
       return this.mapCoupon(rows[0]);
@@ -196,7 +197,7 @@ export class CouponsService {
 
     const coupon = rows[0];
 
-    if (!coupon.isActive) {
+    if (!coupon.active) {
       return {
         valid: false,
         discountAmount: 0,
@@ -214,7 +215,7 @@ export class CouponsService {
       };
     }
 
-    if (Number(coupon.usedCount) >= Number(coupon.usageLimit)) {
+    if (Number(coupon.usedCount) >= Number(coupon.totalQuantity)) {
       return {
         valid: false,
         discountAmount: 0,
@@ -265,7 +266,7 @@ export class CouponsService {
 
   async incrementUsedCount(
     id: string,
-    auditMeta?: { actorUserId?: string; actorRole?: string; ip?: string; orderId?: string },
+    auditMeta?: { userId?: string; role?: string; ip?: string; orderId?: string },
   ): Promise<void> {
     await this.db
       .update(coupons)
@@ -281,14 +282,14 @@ export class CouponsService {
       if (couponRows.length > 0) {
         void this.auditService.log({
           action: 'coupon.redeem',
-          targetType: 'coupon',
-          targetId: id,
-          afterValue: {
+          entity: 'coupon',
+          entityId: id,
+          after: {
             orderId: auditMeta?.orderId,
             usedCount: Number(couponRows[0].usedCount),
           },
-          actorUserId: auditMeta?.actorUserId,
-          actorRole: auditMeta?.actorRole,
+          userId: auditMeta?.userId,
+          role: auditMeta?.role,
           ip: auditMeta?.ip,
         });
       }

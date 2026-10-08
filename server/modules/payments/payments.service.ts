@@ -6,7 +6,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, desc } from 'drizzle-orm';
 
 import { payments, orders, orderItems } from '@server/database/schema';
@@ -27,7 +27,7 @@ export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
 
   constructor(
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly stripeService: StripeService,
     private readonly payPalService: PayPalService,
     private readonly auditService: AuditService,
@@ -139,6 +139,7 @@ export class PaymentsService {
         .insert(payments)
         .values({
           orderId,
+          method: provider,
           provider,
           amount: amount.toString(),
           currency,
@@ -169,15 +170,15 @@ export class PaymentsService {
     try {
       void this.auditService.log({
         action: 'payment.pay',
-        targetType: 'payment',
-        targetId: result.payment.id,
-        afterValue: {
+        entity: 'payment',
+        entityId: result.payment.id,
+        after: {
           amount: result.payment.amount,
           provider,
           status: 'paid',
         },
-        actorUserId: order.userId ?? undefined,
-        actorRole: order.userId ? 'buyer' : undefined,
+        userId: order.userId ?? undefined,
+        role: order.userId ? 'buyer' : undefined,
         ip: auditMeta?.ip,
       });
     } catch {
@@ -193,7 +194,8 @@ export class PaymentsService {
     const orderResponse: Order = {
       id: updatedOrder.id,
       orderNo: updatedOrder.orderNo,
-      buyerName: updatedOrder.buyerName,
+      userId: updatedOrder.userId,
+      buyerName: updatedOrder.buyerName ?? '',
       buyerEmail: updatedOrder.buyerEmail ?? undefined,
       buyerPhone: updatedOrder.buyerPhone ?? undefined,
       shippingAddress: updatedOrder.shippingAddress,
@@ -245,6 +247,7 @@ export class PaymentsService {
       .insert(payments)
       .values({
         orderId,
+        method: provider,
         provider,
         amount: amount.toString(),
         currency,
@@ -336,6 +339,7 @@ export class PaymentsService {
           .insert(payments)
           .values({
             orderId,
+            method: 'paypal',
             provider: 'paypal',
             amount: amount?.toString() ?? '0',
             currency,

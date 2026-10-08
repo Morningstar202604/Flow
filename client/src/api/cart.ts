@@ -1,5 +1,5 @@
-import { axiosForBackend } from '@lark-apaas/client-toolkit/utils/getAxiosForBackend';
-import { logger } from '@lark-apaas/client-toolkit/logger';
+import { http } from '../lib/http';
+// logger removed (was lark-specific)
 import { getSessionId } from '@/utils/session';
 import type {
   CartResponse,
@@ -14,8 +14,8 @@ function cartHeaders(): Record<string, string> {
 }
 
 export async function getCart(): Promise<CartResponse> {
-  logger.info('[cart] get');
-  const { data } = await axiosForBackend.get<CartResponse>('/api/cart', {
+  console.info('[cart] get');
+  const { data } = await http.get<CartResponse>('/api/cart', {
     headers: cartHeaders(),
   });
   return data;
@@ -25,9 +25,9 @@ export async function addToCart(
   productId: string,
   quantity: number,
 ): Promise<CartResponse> {
-  logger.info('[cart] add', { productId, quantity });
+  console.info('[cart] add', { productId, quantity });
   const body: AddCartRequest = { productId, quantity };
-  const { data } = await axiosForBackend.post<CartResponse>(
+  const { data } = await http.post<CartResponse>(
     '/api/cart/items',
     body,
     { headers: cartHeaders() },
@@ -39,9 +39,9 @@ export async function updateCartItem(
   itemId: string,
   quantity: number,
 ): Promise<CartResponse> {
-  logger.info('[cart] update', { itemId, quantity });
+  console.info('[cart] update', { itemId, quantity });
   const body: UpdateCartRequest = { quantity };
-  const { data } = await axiosForBackend.patch<CartResponse>(
+  const { data } = await http.patch<CartResponse>(
     `/api/cart/items/${itemId}`,
     body,
     { headers: cartHeaders() },
@@ -50,8 +50,8 @@ export async function updateCartItem(
 }
 
 export async function removeCartItem(itemId: string): Promise<CartResponse> {
-  logger.info('[cart] remove', itemId);
-  const { data } = await axiosForBackend.delete<CartResponse>(
+  console.info('[cart] remove', itemId);
+  const { data } = await http.delete<CartResponse>(
     `/api/cart/items/${itemId}`,
     { headers: cartHeaders() },
   );
@@ -59,8 +59,8 @@ export async function removeCartItem(itemId: string): Promise<CartResponse> {
 }
 
 export async function exportRecoveryCode(): Promise<{ code: string }> {
-  logger.info('[cart] export recovery code');
-  const { data } = await axiosForBackend.get<CartRecoveryCodeResponse>(
+  console.info('[cart] export recovery code');
+  const { data } = await http.get<CartRecoveryCodeResponse>(
     '/api/cart/export-code',
     { headers: cartHeaders() },
   );
@@ -70,9 +70,9 @@ export async function exportRecoveryCode(): Promise<{ code: string }> {
 export async function importRecoveryCode(
   code: string,
 ): Promise<CartResponse> {
-  logger.info('[cart] import recovery code', { code });
+  console.info('[cart] import recovery code', { code });
   const body: CartImportCodeRequest = { code };
-  const { data } = await axiosForBackend.post<CartResponse>(
+  const { data } = await http.post<CartResponse>(
     '/api/cart/import-code',
     body,
     { headers: cartHeaders() },

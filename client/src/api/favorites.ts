@@ -1,10 +1,10 @@
-import { axiosForBackend } from '@lark-apaas/client-toolkit/utils/getAxiosForBackend';
-import { logger } from '@lark-apaas/client-toolkit/logger';
+import { http } from '../lib/http';
+// logger removed (was lark-specific)
 import type { FavoriteProduct } from '@shared/api.interface';
 
 export async function getMyFavorites(): Promise<FavoriteProduct[]> {
-  logger.info('[favorites] list');
-  const { data } = await axiosForBackend.get<FavoriteProduct[]>(
+  console.info('[favorites] list');
+  const { data } = await http.get<FavoriteProduct[]>(
     '/api/favorites',
   );
   return data;
@@ -13,8 +13,8 @@ export async function getMyFavorites(): Promise<FavoriteProduct[]> {
 export async function toggleFavorite(
   productId: string,
 ): Promise<{ favorited: boolean; id?: string }> {
-  logger.info('[favorites] toggle', productId);
-  const { data } = await axiosForBackend.post<{ favorited: boolean; id?: string }>(
+  console.info('[favorites] toggle', productId);
+  const { data } = await http.post<{ favorited: boolean; id?: string }>(
     `/api/favorites/${productId}`,
     {},
   );
@@ -24,16 +24,16 @@ export async function toggleFavorite(
 export async function checkFavoriteBatch(
   productIds: string[],
 ): Promise<string[]> {
-  logger.info('[favorites] check batch', productIds.length);
-  const { data } = await axiosForBackend.get<{ favoritedIds: string[] }>(
+  console.info('[favorites] check batch', productIds.length);
+  const { data } = await http.get<{ favoritedIds: string[] }>(
     `/api/favorites/check-batch?productIds=${productIds.join(',')}`,
   );
   return data.favoritedIds || [];
 }
 
 export async function checkFavorite(productId: string): Promise<{ favorited: boolean }> {
-  logger.info('[favorites] check', productId);
-  const { data } = await axiosForBackend.get<{ favorited: boolean }>(
+  console.info('[favorites] check', productId);
+  const { data } = await http.get<{ favorited: boolean }>(
     `/api/favorites/check/${productId}`,
   );
   return data;

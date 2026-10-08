@@ -1,18 +1,17 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc, count, gte, lt } from 'drizzle-orm';
-
 import { auditLogs } from '@server/database/schema';
 import type { AuditLog, AuditLogListResponse, AuditLogQuery } from '@shared/api.interface';
 
 export interface AuditLogParams {
   action: string;
-  targetType?: string;
-  targetId?: string;
-  beforeValue?: Record<string, unknown>;
-  afterValue?: Record<string, unknown>;
-  actorUserId?: string;
-  actorRole?: string;
+  entity?: string;
+  entityId?: string;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  userId?: string;
+  role?: string;
   ip?: string;
 }
 
@@ -20,19 +19,28 @@ export interface AuditLogParams {
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
 
-  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase) {}
+  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
+
+  private serialize(val: Record<string, unknown> | undefined): string | undefined {
+    return val ? JSON.stringify(val) : undefined;
+  }
+
+  private deserialize(val: string | null | undefined): Record<string, unknown> | undefined {
+    if (!val) return undefined;
+    try { return JSON.parse(val); } catch { return undefined; }
+  }
 
   private mapRow(row: typeof auditLogs.$inferSelect): AuditLog {
     return {
       id: row.id,
-      actorUserId: row.actorUserId ?? undefined,
-      actorRole: row.actorRole ?? undefined,
+      userId: row.userId ?? undefined,
+      role: row.role ?? undefined,
       action: row.action,
-      targetType: row.targetType ?? undefined,
-      targetId: row.targetId ?? undefined,
-      beforeValue: (row.beforeValue as Record<string, unknown> | null) ?? undefined,
-      afterValue: (row.afterValue as Record<string, unknown> | null) ?? undefined,
-      ip: row.ip ?? undefined,
+      entity: row.entity ?? undefined,
+      entityId: row.entityId ?? undefined,
+      before: this.deserialize(row.before),
+      after: this.deserialize(row.after),
+      ip: row.ipAddress ?? undefined,
       createdAt: row.createdAt.toISOString(),
     };
   }
@@ -41,23 +49,22 @@ export class AuditService {
     try {
       await this.db.insert(auditLogs).values({
         action: params.action,
-        targetType: params.targetType,
-        targetId: params.targetId,
-        beforeValue: params.beforeValue as Record<string, unknown> | undefined,
-        afterValue: params.afterValue as Record<string, unknown> | undefined,
-        actorUserId: params.actorUserId,
-        actorRole: params.actorRole,
-        ip: params.ip,
+        entity: params.entity,
+        entityId: params.entityId,
+        before: this.serialize(params.before),
+        after: this.serialize(params.after),
+        userId: params.userId,
+        ipAddress: params.ip ?? undefined,
       });
     } catch (error) {
       this.logger.error(
-        `Failed to write audit log: action=${params.action} target=${params.targetType}/${params.targetId}`,
+        'Failed to write audit log',
         error instanceof Error ? error.stack : String(error),
       );
     }
   }
 
-  async getAuditLogs(params: AuditLogQuery & { actorUserId?: string }): Promise<AuditLogListResponse> {
+  async getAuditLogs(params: AuditLogQuery & { userId?: string }): Promise<AuditLogListResponse> {
     const page = params.page ?? 1;
     const pageSize = params.pageSize ?? 20;
     const safePage = Math.max(1, page);
@@ -74,8 +81,8 @@ export class AuditService {
     if (params.endDate) {
       conditions.push(lt(auditLogs.createdAt, new Date(params.endDate)));
     }
-    if (params.actorUserId) {
-      conditions.push(eq(auditLogs.actorUserId, params.actorUserId));
+    if (params.userId) {
+      conditions.push(eq(auditLogs.userId, params.userId));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

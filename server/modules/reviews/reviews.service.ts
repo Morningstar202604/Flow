@@ -7,10 +7,9 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
-
-import { productReviews, products, orders, orderItems, appUsers } from '@server/database/schema';
+import { reviews, products, orders, orderItems, users } from '@server/database/schema';
 import type {
   ProductReview,
   ProductReviewsResponse,
@@ -21,7 +20,7 @@ import type {
 export class ReviewsService {
   private readonly logger = new Logger(ReviewsService.name);
 
-  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase) {}
+  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
 
   async getProductReviews(productId: string): Promise<ProductReviewsResponse> {
     const productRows = await this.db
@@ -34,28 +33,28 @@ export class ReviewsService {
 
     const rows = await this.db
       .select({
-        id: productReviews.id,
-        productId: productReviews.productId,
-        userId: productReviews.userId,
-        userName: appUsers.name,
-        rating: productReviews.rating,
-        comment: productReviews.comment,
-        createdAt: productReviews.createdAt,
+        id: reviews.id,
+        productId: reviews.productId,
+        userId: reviews.userId,
+        userName: users.name,
+        rating: reviews.rating,
+        content: reviews.content,
+        createdAt: reviews.createdAt,
       })
-      .from(productReviews)
-      .innerJoin(appUsers, eq(productReviews.userId, appUsers.id))
-      .where(eq(productReviews.productId, productId))
-      .orderBy(desc(productReviews.createdAt));
+      .from(reviews)
+      .innerJoin(users, eq(reviews.userId, users.id))
+      .where(eq(reviews.productId, productId))
+      .orderBy(desc(reviews.createdAt));
 
     const avgResult = await this.db
-      .select({ avg: sql<number>`AVG(${productReviews.rating})::numeric` })
-      .from(productReviews)
-      .where(eq(productReviews.productId, productId));
+      .select({ avg: sql<number>`AVG(${reviews.rating})::numeric` })
+      .from(reviews)
+      .where(eq(reviews.productId, productId));
 
     const countResult = await this.db
       .select({ count: count() })
-      .from(productReviews)
-      .where(eq(productReviews.productId, productId));
+      .from(reviews)
+      .where(eq(reviews.productId, productId));
 
     const items: ProductReview[] = rows.map((row) => ({
       id: row.id,
@@ -63,7 +62,7 @@ export class ReviewsService {
       userId: row.userId,
       userName: row.userName,
       rating: Number(row.rating),
-      comment: row.comment ?? undefined,
+      content: row.content ?? undefined,
       createdAt: row.createdAt.toISOString(),
     }));
 
@@ -95,10 +94,10 @@ export class ReviewsService {
     }
 
     const existing = await this.db
-      .select({ id: productReviews.id })
-      .from(productReviews)
+      .select({ id: reviews.id })
+      .from(reviews)
       .where(
-        and(eq(productReviews.productId, productId), eq(productReviews.userId, userId)),
+        and(eq(reviews.productId, productId), eq(reviews.userId, userId)),
       );
     if (existing.length > 0) {
       throw new ConflictException('你已评价过该商品');
@@ -122,19 +121,19 @@ export class ReviewsService {
     }
 
     const inserted = await this.db
-      .insert(productReviews)
+      .insert(reviews)
       .values({
         productId,
         userId,
         rating: dto.rating,
-        comment: dto.comment ?? null,
+        content: dto.comment ?? null,
       })
       .returning();
 
     const userRows = await this.db
-      .select({ name: appUsers.name })
-      .from(appUsers)
-      .where(eq(appUsers.id, userId));
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, userId));
 
     return {
       id: inserted[0].id,
@@ -142,7 +141,7 @@ export class ReviewsService {
       userId: inserted[0].userId,
       userName: userRows[0]?.name ?? '用户',
       rating: Number(inserted[0].rating),
-      comment: inserted[0].comment ?? undefined,
+      comment: inserted[0].content ?? undefined,
       createdAt: inserted[0].createdAt.toISOString(),
     };
   }
@@ -154,18 +153,18 @@ export class ReviewsService {
     if (!userId) return null;
     const rows = await this.db
       .select({
-        id: productReviews.id,
-        productId: productReviews.productId,
-        userId: productReviews.userId,
-        userName: appUsers.name,
-        rating: productReviews.rating,
-        comment: productReviews.comment,
-        createdAt: productReviews.createdAt,
+        id: reviews.id,
+        productId: reviews.productId,
+        userId: reviews.userId,
+        userName: users.name,
+        rating: reviews.rating,
+        content: reviews.content,
+        createdAt: reviews.createdAt,
       })
-      .from(productReviews)
-      .innerJoin(appUsers, eq(productReviews.userId, appUsers.id))
+      .from(reviews)
+      .innerJoin(users, eq(reviews.userId, users.id))
       .where(
-        and(eq(productReviews.productId, productId), eq(productReviews.userId, userId)),
+        and(eq(reviews.productId, productId), eq(reviews.userId, userId)),
       );
     if (rows.length === 0) return null;
     return {
@@ -174,7 +173,7 @@ export class ReviewsService {
       userId: rows[0].userId,
       userName: rows[0].userName,
       rating: Number(rows[0].rating),
-      comment: rows[0].comment ?? undefined,
+      comment: rows[0].content ?? undefined,
       createdAt: rows[0].createdAt.toISOString(),
     };
   }

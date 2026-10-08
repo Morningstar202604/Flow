@@ -1,10 +1,10 @@
 import { Injectable, Inject, Logger, BadRequestException, UnauthorizedException, ConflictException } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, sql } from 'drizzle-orm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 
-import { appUsers, cartItems } from '@server/database/schema';
+import { users, cartItems } from '@server/database/schema';
 import type { AuthResponse, User, RegisterRequest, LoginRequest } from '@shared/api.interface';
 
 @Injectable()
@@ -12,7 +12,7 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -25,9 +25,9 @@ export class AuthService {
     }
 
     const existing = await this.db
-      .select({ id: appUsers.id })
-      .from(appUsers)
-      .where(eq(appUsers.email, email));
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email));
 
     if (existing.length > 0) {
       throw new ConflictException('该邮箱已注册');
@@ -46,7 +46,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
     const inserted = await this.db
-      .insert(appUsers)
+      .insert(users)
       .values({
         email,
         passwordHash,
@@ -54,11 +54,11 @@ export class AuthService {
         role,
       })
       .returning({
-        id: appUsers.id,
-        email: appUsers.email,
-        name: appUsers.name,
-        role: appUsers.role,
-        createdAt: appUsers.createdAt,
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        createdAt: users.createdAt,
       });
 
     const user = this.mapUser(inserted[0]);
@@ -76,15 +76,15 @@ export class AuthService {
 
     const rows = await this.db
       .select({
-        id: appUsers.id,
-        email: appUsers.email,
-        name: appUsers.name,
-        role: appUsers.role,
-        passwordHash: appUsers.passwordHash,
-        createdAt: appUsers.createdAt,
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        passwordHash: users.passwordHash,
+        createdAt: users.createdAt,
       })
-      .from(appUsers)
-      .where(eq(appUsers.email, email));
+      .from(users)
+      .where(eq(users.email, email));
 
     if (rows.length === 0) {
       throw new UnauthorizedException('邮箱或密码错误');
@@ -135,14 +135,14 @@ export class AuthService {
   async getUserById(id: string): Promise<User | null> {
     const rows = await this.db
       .select({
-        id: appUsers.id,
-        email: appUsers.email,
-        name: appUsers.name,
-        role: appUsers.role,
-        createdAt: appUsers.createdAt,
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        createdAt: users.createdAt,
       })
-      .from(appUsers)
-      .where(eq(appUsers.id, id));
+      .from(users)
+      .where(eq(users.id, id));
 
     if (rows.length === 0) return null;
     return this.mapUser(rows[0]);

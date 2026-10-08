@@ -5,7 +5,7 @@ import React, {
   useEffect,
   useCallback,
 } from 'react';
-import { logger } from '@lark-apaas/client-toolkit/logger';
+// logger removed (was lark-specific)
 
 import {
   getStoredUser,
@@ -72,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       await apiMergeCart(sid);
     } catch (err) {
-      logger.warn('[auth] merge cart failed', err);
+      console.warn('[auth] merge cart failed', err);
     }
 
     return result.user;
@@ -87,7 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       await apiMergeCart(sid);
     } catch (err) {
-      logger.warn('[auth] merge cart failed', err);
+      console.warn('[auth] merge cart failed', err);
     }
 
     return result.user;

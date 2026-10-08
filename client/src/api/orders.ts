@@ -1,5 +1,4 @@
-import { axiosForBackend } from '@lark-apaas/client-toolkit/utils/getAxiosForBackend';
-import { logger } from '@lark-apaas/client-toolkit/logger';
+import { http } from '../lib/http';
 import { getSessionId } from '@/utils/session';
 import type {
   Order,
@@ -16,8 +15,8 @@ function buyerHeaders(): Record<string, string> {
 export async function createOrder(
   payload: CreateOrderRequest,
 ): Promise<Order> {
-  logger.info('[orders] create');
-  const { data } = await axiosForBackend.post<Order>('/api/orders', payload, {
+  console.info('[orders] create');
+  const { data } = await http.post<Order>('/api/orders', payload, {
     headers: buyerHeaders(),
   });
   return data;
@@ -26,8 +25,8 @@ export async function createOrder(
 export async function getBuyerOrders(
   params: OrderListParams = {},
 ): Promise<OrderListResponse> {
-  logger.info('[orders] list', params);
-  const { data } = await axiosForBackend.get<OrderListResponse>(
+  console.info('[orders] list', params);
+  const { data } = await http.get<OrderListResponse>(
     '/api/orders/buyer',
     { params, headers: buyerHeaders() },
   );
@@ -35,8 +34,8 @@ export async function getBuyerOrders(
 }
 
 export async function getOrderDetail(id: string): Promise<Order> {
-  logger.info('[orders] detail', id);
-  const { data } = await axiosForBackend.get<Order>(`/api/orders/${id}`, {
+  console.info('[orders] detail', id);
+  const { data } = await http.get<Order>(`/api/orders/${id}`, {
     headers: buyerHeaders(),
   });
   return data;
@@ -45,8 +44,8 @@ export async function getOrderDetail(id: string): Promise<Order> {
 export async function getSellerOrders(
   params: OrderListParams = {},
 ): Promise<OrderListResponse> {
-  logger.info('[orders] seller list', params);
-  const { data } = await axiosForBackend.get<OrderListResponse>(
+  console.info('[orders] seller list', params);
+  const { data } = await http.get<OrderListResponse>(
     '/api/orders',
     { params },
   );
@@ -54,8 +53,8 @@ export async function getSellerOrders(
 }
 
 export async function getSellerOrderDetail(id: string): Promise<Order> {
-  logger.info('[orders] seller detail', id);
-  const { data } = await axiosForBackend.get<Order>(
+  console.info('[orders] seller detail', id);
+  const { data } = await http.get<Order>(
     `/api/orders/${id}`,
   );
   return data;
@@ -65,8 +64,8 @@ export async function updateOrderStatus(
   id: string,
   payload: OrderStatusUpdateRequest,
 ): Promise<Order> {
-  logger.info('[orders] update status', id, payload.status);
-  const { data } = await axiosForBackend.patch<Order>(
+  console.info('[orders] update status', id, payload.status);
+  const { data } = await http.patch<Order>(
     `/api/orders/${id}/status`,
     payload,
   );

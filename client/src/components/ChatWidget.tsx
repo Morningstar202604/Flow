@@ -7,7 +7,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getSessionId } from '@/utils/session';
 import { supportChat, getAIStatus } from '@/api/ai';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import type { AIStatusResponse } from '@shared/api.interface';
 
 interface ChatMessage {
@@ -55,7 +54,7 @@ const ChatWidget: React.FC = () => {
       };
       setMessages((prev: ChatMessage[]) => [...prev, assistantMessage]);
     } catch (error: unknown) {
-      logger.error('[chat] send error', error);
+      console.error('[chat] send error', error);
       setAiConfigured(false);
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -110,7 +109,7 @@ const ChatWidget: React.FC = () => {
         const status: AIStatusResponse = await getAIStatus();
         setAiConfigured(status.configured);
       } catch (error: unknown) {
-        logger.warn('[chat] ai status check failed', error);
+        console.warn('[chat] ai status check failed', error);
         setAiConfigured(false);
       }
     };

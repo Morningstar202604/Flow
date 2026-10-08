@@ -1,5 +1,4 @@
-import { axiosForBackend } from '@lark-apaas/client-toolkit/utils/getAxiosForBackend';
-import { logger } from '@lark-apaas/client-toolkit/logger';
+import { http } from '../lib/http';
 import { getSessionId } from '@/utils/session';
 import type { PayRequest, PayResponse, Payment } from '@shared/api.interface';
 
@@ -8,8 +7,8 @@ function buyerHeaders(): Record<string, string> {
 }
 
 export async function payForOrder(body: PayRequest): Promise<PayResponse> {
-  logger.info('[payments] pay', body.orderId, body.provider);
-  const { data } = await axiosForBackend.post<PayResponse>(
+  console.info('[payments] pay', body.orderId, body.provider);
+  const { data } = await http.post<PayResponse>(
     '/api/payments/pay',
     body,
     { headers: buyerHeaders() },
@@ -22,8 +21,8 @@ export async function getPaymentConfig(): Promise<{
   paypalConfigured: boolean;
   demoMode: boolean;
 }> {
-  logger.info('[payments] config');
-  const { data } = await axiosForBackend.get<{
+  console.info('[payments] config');
+  const { data } = await http.get<{
     stripeConfigured: boolean;
     paypalConfigured: boolean;
     demoMode: boolean;
@@ -32,8 +31,8 @@ export async function getPaymentConfig(): Promise<{
 }
 
 export async function getPaymentsByOrder(orderId: string): Promise<Payment[]> {
-  logger.info('[payments] by order', orderId);
-  const { data } = await axiosForBackend.get<Payment[]>(
+  console.info('[payments] by order', orderId);
+  const { data } = await http.get<Payment[]>(
     `/api/payments/order/${orderId}`,
     { headers: buyerHeaders() },
   );

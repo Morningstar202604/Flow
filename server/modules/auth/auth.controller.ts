@@ -17,12 +17,12 @@ import {
 import type { Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 
 import { AuthService } from './auth.service';
 import { RolesGuard } from '@server/common/guards/roles.guard';
 import { JWT_COOKIE_NAME } from '@server/common/middleware/jwt-auth.middleware';
-import { appUsers } from '@server/database/schema';
+import { users } from '@server/database/schema';
 import type {
   User,
   RegisterRequest,
@@ -83,7 +83,7 @@ export class AuthController {
 
   constructor(
     private readonly authService: AuthService,
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
   ) {
     this.googleClientId = process.env.GOOGLE_CLIENT_ID;
     this.googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -214,8 +214,12 @@ export class AuthController {
         return;
       }
 
-      const tokenData = await tokenResp.json();
-      const accessToken = tokenData.access_token as string;
+      const tokenData = await tokenResp.json() as { access_token?: string };
+      const accessToken = tokenData.access_token;
+      if (!accessToken) {
+        res.redirect('/login?google_error=no_access_token');
+        return;
+      }
 
       const userInfoResp = await fetch(
         'https://www.googleapis.com/oauth2/v2/userinfo',
@@ -229,9 +233,9 @@ export class AuthController {
         return;
       }
 
-      const userInfo = await userInfoResp.json();
-      const email = (userInfo.email as string || '').toLowerCase();
-      const name = (userInfo.name as string) || email.split('@')[0] || 'Google 用户';
+      const userInfo = await userInfoResp.json() as { email?: string; name?: string };
+      const email = (userInfo.email ?? '').toLowerCase();
+      const name = userInfo.name || email.split('@')[0] || 'Google 用户';
 
       if (!email) {
         res.redirect('/login?google_error=no_email');
@@ -240,8 +244,8 @@ export class AuthController {
 
       const existingRows = await this.db
         .select()
-        .from(appUsers)
-        .where(eq(appUsers.email, email));
+        .from(users)
+        .where(eq(users.email, email));
 
       let userRow: typeof existingRows[0];
 
@@ -250,7 +254,7 @@ export class AuthController {
       } else {
         const randomPw = await bcrypt.hash(Math.random().toString(36).slice(2), 10);
         const inserted = await this.db
-          .insert(appUsers)
+          .insert(users)
           .values({
             email,
             passwordHash: randomPw,

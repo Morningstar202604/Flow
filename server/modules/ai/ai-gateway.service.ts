@@ -1,8 +1,8 @@
 import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
 import { eq, and, gte, lte, count, sum } from 'drizzle-orm';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { aiUsageLog } from '@server/database/schema';
 
 export interface ChatMessage {
@@ -51,7 +51,7 @@ export class AiGatewayService {
 
   constructor(
     private readonly httpService: HttpService,
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
   ) {
     this.baseUrl = process.env.LLM_BASE_URL || '';
     this.apiKey = process.env.LLM_API_KEY || '';

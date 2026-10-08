@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq } from 'drizzle-orm';
 import { logistics, orders } from '@server/database/schema';
 
@@ -23,7 +23,7 @@ export class LogisticsService {
   private readonly apiKey: string;
   private readonly isDemoMode: boolean;
 
-  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase) {
+  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {
     this.apiKey = process.env['17TRACK_API_KEY'] || '';
     this.isDemoMode = !this.apiKey;
   }

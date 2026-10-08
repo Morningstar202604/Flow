@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { logger } from '@lark-apaas/client-toolkit/logger';
 import {
   Search,
   Plus,
@@ -63,7 +62,6 @@ import type {
   ImportFailure,
 } from '@shared/api.interface';
 import { toast } from 'sonner';
-import { showConfirm } from '@lark-apaas/client-toolkit';
 
 const productSchema = z.object({
   sku: z.string().optional(),
@@ -184,7 +182,7 @@ const ProductManagePage: React.FC = () => {
         setProducts(result.items);
         setTotal(result.total);
       } catch (err) {
-        logger.error('获取商品列表失败', err);
+        console.error('获取商品列表失败', err);
       } finally {
         setLoading(false);
       }
@@ -197,7 +195,7 @@ const ProductManagePage: React.FC = () => {
       const result = await categoriesApi.listCategories();
       setCategories(result);
     } catch (err) {
-      logger.error('获取分类失败', err);
+      console.error('获取分类失败', err);
     }
   }, []);
 
@@ -259,12 +257,12 @@ const ProductManagePage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!await showConfirm('确定要删除该商品吗？')) return;
+    if (!window.confirm('确定要删除该商品吗？')) return;
     try {
       await productsApi.deleteProduct(id);
       fetchProducts();
     } catch (err) {
-      logger.error('删除商品失败', err);
+      console.error('删除商品失败', err);
     }
   };
 
@@ -277,7 +275,7 @@ const ProductManagePage: React.FC = () => {
       await productsApi.updateProductStatus(product.id, newStatus);
       fetchProducts();
     } catch (err) {
-      logger.error('更新商品状态失败', err);
+      console.error('更新商品状态失败', err);
     }
   };
 
@@ -318,7 +316,7 @@ const ProductManagePage: React.FC = () => {
       setDialogOpen(false);
       fetchProducts();
     } catch (err) {
-      logger.error('保存商品失败', err);
+      console.error('保存商品失败', err);
       toast('保存失败');
     }
   };
@@ -329,7 +327,7 @@ const ProductManagePage: React.FC = () => {
       const result = await aiApi.generateCopywriter(values);
       setCopywriterResult(result);
     } catch (err) {
-      logger.error('AI 文案生成失败', err);
+      console.error('AI 文案生成失败', err);
       toast('AI 文案生成失败，请检查配置');
     } finally {
       setCopywriterLoading(false);
@@ -358,7 +356,7 @@ const ProductManagePage: React.FC = () => {
       });
       productForm.setValue('titleEn', result.translatedText);
     } catch (err) {
-      logger.error('翻译失败', err);
+      console.error('翻译失败', err);
       toast('翻译失败');
     }
   };
@@ -403,7 +401,7 @@ const ProductManagePage: React.FC = () => {
       }
       fetchProducts();
     } catch (err) {
-      logger.error('CSV 导入失败', err);
+      console.error('CSV 导入失败', err);
       toast.error('导入失败，请检查文件格式');
     } finally {
       setImportLoading(false);
@@ -540,7 +538,7 @@ const ProductManagePage: React.FC = () => {
                       ${product.price}
                     </TableCell>
                     <TableCell>{product.stock}</TableCell>
-                    <TableCell>{product.soldCount}</TableCell>
+                    <TableCell>{product.sold}</TableCell>
                     <TableCell>
                       <Badge
                         variant={

@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { categories } from '@server/database/schema';
 import { eq, asc } from 'drizzle-orm';
 import type { Category } from '@shared/api.interface';
@@ -24,7 +24,7 @@ interface UpdateCategoryInput {
 export class CategoriesService {
   private readonly logger = new Logger(CategoriesService.name);
 
-  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase) {}
+  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
 
   private toDto(row: typeof categories.$inferSelect): Category {
     return {
@@ -56,7 +56,6 @@ export class CategoriesService {
           slug: input.slug,
           icon: input.icon,
           sortOrder: input.sortOrder ?? 0,
-          createdBy: userId,
           updatedBy: userId,
         })
         .returning();

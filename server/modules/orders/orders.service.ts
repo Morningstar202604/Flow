@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger, BadRequestException, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc, count, ilike, or, inArray, sql, gte, lt } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
 import { nanoid } from 'nanoid';
@@ -23,7 +23,7 @@ export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
 
   constructor(
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly couponsService: CouponsService,
     private readonly auditService: AuditService,
   ) {}
@@ -70,7 +70,8 @@ export class OrdersService {
   private mapOrder(orderRow: {
     id: string;
     orderNo: string;
-    buyerName: string;
+    userId: string;
+    buyerName?: string | null;
     buyerEmail: string | null;
     buyerPhone: string | null;
     shippingAddress: string;
@@ -91,7 +92,8 @@ export class OrdersService {
     return {
       id: orderRow.id,
       orderNo: orderRow.orderNo,
-      buyerName: orderRow.buyerName,
+      userId: orderRow.userId,
+      buyerName: orderRow.buyerName ?? undefined,
       buyerEmail: orderRow.buyerEmail ?? undefined,
       buyerPhone: orderRow.buyerPhone ?? undefined,
       shippingAddress: orderRow.shippingAddress,
@@ -126,7 +128,7 @@ export class OrdersService {
       const kw = `%${keyword.trim()}%`;
       whereConditions.push(or(
         ilike(orders.orderNo, kw),
-        ilike(orders.buyerName, kw),
+        ilike(orders.userId, kw),
       ));
     }
 
@@ -177,7 +179,7 @@ export class OrdersService {
       {
         id: row.id,
         orderNo: row.orderNo,
-        buyerName: row.buyerName,
+        userId: row.userId,
         buyerEmail: row.buyerEmail,
         buyerPhone: row.buyerPhone,
         shippingAddress: row.shippingAddress,
@@ -261,7 +263,7 @@ export class OrdersService {
       {
         id: row.id,
         orderNo: row.orderNo,
-        buyerName: row.buyerName,
+        userId: row.userId,
         buyerEmail: row.buyerEmail,
         buyerPhone: row.buyerPhone,
         shippingAddress: row.shippingAddress,
@@ -325,7 +327,7 @@ export class OrdersService {
       {
         id: orderRow.id,
         orderNo: orderRow.orderNo,
-        buyerName: orderRow.buyerName,
+        userId: orderRow.userId,
         buyerEmail: orderRow.buyerEmail,
         buyerPhone: orderRow.buyerPhone,
         shippingAddress: orderRow.shippingAddress,
@@ -463,10 +465,11 @@ export class OrdersService {
 
     let totalAmount = new Decimal(0);
     const orderItemValues: Array<{
+      orderId?: string;
       productId: string;
-      productTitle: string;
+      productName: string;
       productImage: string | null;
-      price: string;
+      unitPrice: string;
       quantity: number;
       subtotal: string;
     }> = [];
@@ -478,9 +481,9 @@ export class OrdersService {
       totalAmount = totalAmount.plus(subtotal);
       orderItemValues.push({
         productId: product.id,
-        productTitle: product.titleEn,
+        productName: product.titleEn,
         productImage: product.coverImage,
-        price: price.toFixed(2),
+        unitPrice: price.toFixed(2),
         quantity: item.quantity,
         subtotal: subtotal.toFixed(2),
       });
@@ -510,7 +513,8 @@ export class OrdersService {
         .insert(orders)
         .values({
           orderNo,
-          buyerName: dto.buyerName.trim(),
+          userId: userId ?? null,
+          buyerName,
           buyerEmail: dto.buyerEmail?.trim() ?? null,
           buyerPhone: dto.buyerPhone?.trim() ?? null,
           shippingAddress: dto.shippingAddress.trim(),
@@ -523,9 +527,8 @@ export class OrdersService {
           couponId: couponId,
           discountAmount: discountAmount.toFixed(2),
           remark: dto.remark?.trim() ?? null,
-           sessionId: sessionId ?? null,
-           userId: userId ?? null,
-         })
+          sessionId: sessionId ?? null,
+        })
         .returning();
 
       const newOrder = insertedOrders[0];
@@ -534,9 +537,9 @@ export class OrdersService {
         orderItemValues.map((item) => ({
           orderId: newOrder.id,
           productId: item.productId,
-          productTitle: item.productTitle,
+          productName: item.productName,
           productImage: item.productImage,
-          price: item.price,
+          unitPrice: item.unitPrice,
           quantity: item.quantity,
           subtotal: item.subtotal,
         })),
@@ -547,7 +550,7 @@ export class OrdersService {
           .update(products)
           .set({
             stock: sql`${products.stock} - ${item.quantity}`,
-            soldCount: sql`${products.soldCount} + ${item.quantity}`,
+            sold: sql`${products.sold} + ${item.quantity}`,
           })
           .where(and(
             eq(products.id, item.productId),
@@ -566,8 +569,8 @@ export class OrdersService {
           .set({ usedCount: sql`${coupons.usedCount} + 1` })
           .where(and(
             eq(coupons.id, couponId),
-            lt(coupons.usedCount, coupons.usageLimit),
-            eq(coupons.isActive, true),
+            lt(coupons.usedCount, coupons.totalQuantity),
+            eq(coupons.active, true),
           ))
           .returning({ id: coupons.id });
         if (couponUpdated.length === 0) {
@@ -590,15 +593,15 @@ export class OrdersService {
     try {
       void this.auditService.log({
         action: 'order.create',
-        targetType: 'order',
-        targetId: orderNo,
-        afterValue: {
+        entity: 'order',
+        entityId: orderNo,
+        after: {
           totalAmount: createdOrder.totalAmount,
           status: createdOrder.status,
           itemsCount: createdOrder.items.length,
         },
-        actorUserId: userId,
-        actorRole: userId ? 'buyer' : undefined,
+        userId: userId,
+        role: userId ? 'buyer' : undefined,
         ip: auditMeta?.ip,
       });
     } catch {
@@ -610,13 +613,13 @@ export class OrdersService {
       try {
         void this.auditService.log({
           action: 'coupon.redeem',
-          targetType: 'coupon',
-          targetId: couponId,
-          afterValue: {
+          entity: 'coupon',
+          entityId: couponId,
+          after: {
             orderId: result.id,
           },
-          actorUserId: userId,
-          actorRole: userId ? 'buyer' : undefined,
+          userId: userId,
+          role: userId ? 'buyer' : undefined,
           ip: auditMeta?.ip,
         });
       } catch {
@@ -630,8 +633,8 @@ export class OrdersService {
   async updateStatus(
     id: string,
     dto: OrderStatusUpdateRequest,
-    actorUserId?: string,
-    actorRole?: string,
+    userId?: string,
+    role?: string,
     ip?: string,
   ): Promise<Order> {
     const orderRows = await this.db.select().from(orders).where(eq(orders.id, id));
@@ -668,7 +671,7 @@ export class OrdersService {
             .update(products)
             .set({
               stock: sql`${products.stock} + ${item.quantity}`,
-              soldCount: sql`GREATEST(${products.soldCount} - ${item.quantity}, 0)`,
+              sold: sql`GREATEST(${products.sold} - ${item.quantity}, 0)`,
             })
             .where(eq(products.id, item.productId));
         }
@@ -692,12 +695,12 @@ export class OrdersService {
       try {
         void this.auditService.log({
           action: 'order.status_change',
-          targetType: 'order',
-          targetId: orderNo,
-          beforeValue: { oldStatus: currentStatus },
-          afterValue: { newStatus },
-          actorUserId,
-          actorRole,
+          entity: 'order',
+          entityId: orderNo,
+          before: { oldStatus: currentStatus },
+          after: { newStatus },
+          userId,
+          role,
           ip,
         });
       } catch {
@@ -734,12 +737,12 @@ export class OrdersService {
     try {
       void this.auditService.log({
         action: 'order.status_change',
-        targetType: 'order',
-        targetId: orderNo,
-        beforeValue: { oldStatus: currentStatus },
-        afterValue: { newStatus },
-        actorUserId,
-        actorRole,
+        entity: 'order',
+        entityId: orderNo,
+        before: { oldStatus: currentStatus },
+        after: { newStatus },
+        userId,
+        role,
         ip,
       });
     } catch {
