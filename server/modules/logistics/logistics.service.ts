@@ -1,7 +1,7 @@
 import { Injectable, Inject, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { eq } from 'drizzle-orm';
-import { logistics, orders } from '@server/database/schema';
+import { eq, and, desc } from 'drizzle-orm';
+import { logistics, orders, orderFulfillments } from '@server/database/schema';
 
 export interface TrackingEvent {
   time: string;
@@ -14,6 +14,13 @@ export interface TrackingInfo {
   events: TrackingEvent[];
   carrier: string | null;
   trackingNumber: string | null;
+  fulfillments: Array<{
+    carrier: string;
+    trackingNumber: string | null;
+    trackingUrl: string | null;
+    status: string;
+    shippedAt: string | null;
+  }>;
   isDemo: boolean;
 }
 
@@ -32,63 +39,120 @@ export class LogisticsService {
     orderId: string,
     carrier: string,
     trackingNumber: string,
-  ): Promise<{ success: boolean; isDemo: boolean }> {
+    trackingUrl?: string,
+  ): Promise<{ success: boolean; isDemo: boolean; fulfillmentId: string }> {
     if (this.isDemoMode) {
-      await this.upsertLogisticsAndShipOrder(orderId, carrier, trackingNumber);
-      return { success: true, isDemo: true };
+      const fulfillmentId = await this.upsertFulfillmentAndShipOrder(orderId, carrier, trackingNumber, trackingUrl);
+      return { success: true, isDemo: true, fulfillmentId };
     }
 
     try {
-      await this.upsertLogisticsAndShipOrder(orderId, carrier, trackingNumber);
-      return { success: true, isDemo: false };
+      const fulfillmentId = await this.upsertFulfillmentAndShipOrder(orderId, carrier, trackingNumber, trackingUrl);
+      return { success: true, isDemo: false, fulfillmentId };
     } catch (error) {
       this.logger.error('注册运单失败', error);
       throw error;
     }
   }
 
-  private async upsertLogisticsAndShipOrder(
+  private async upsertFulfillmentAndShipOrder(
     orderId: string,
     carrier: string,
     trackingNumber: string,
-  ): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      const existing = await tx
-        .select({ id: logistics.id })
+    trackingUrl?: string,
+  ): Promise<string> {
+    const result = await this.db.transaction(async (tx) => {
+      // Check for existing pending fulfillment for this order
+      const existingFulfillments = await tx
+        .select()
+        .from(orderFulfillments)
+        .where(and(
+          eq(orderFulfillments.orderId, orderId),
+          eq(orderFulfillments.status, 'pending'),
+        ))
+        .limit(1);
+
+      let fulfillmentId: string;
+
+      if (existingFulfillments.length > 0) {
+        // Update existing pending fulfillment
+        await tx
+          .update(orderFulfillments)
+          .set({
+            carrier,
+            trackingNumber,
+            trackingUrl: trackingUrl ?? null,
+            status: 'shipped',
+            shippedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(orderFulfillments.id, existingFulfillments[0].id));
+        fulfillmentId = existingFulfillments[0].id;
+      } else {
+        // Create new fulfillment
+        const inserted = await tx.insert(orderFulfillments).values({
+          orderId,
+          carrier,
+          trackingNumber,
+          trackingUrl: trackingUrl ?? null,
+          status: 'shipped',
+          shippedAt: new Date(),
+        }).returning();
+        fulfillmentId = inserted[0].id;
+      }
+
+      // Update order status if not already shipped
+      const orderRows = await tx
+        .select({ status: orders.status })
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .limit(1);
+
+      if (orderRows.length > 0 && orderRows[0].status === 'paid') {
+        await tx
+          .update(orders)
+          .set({
+            status: 'shipped',
+            trackingNumber,
+            carrier,
+            shippedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(orders.id, orderId));
+      }
+
+      // Upsert logistics record for tracking data
+      const existingLogistics = await tx
+        .select({ id: logistics.id, fulfillmentId: logistics.fulfillmentId })
         .from(logistics)
         .where(eq(logistics.orderId, orderId))
         .limit(1);
 
-      if (existing.length > 0) {
+      if (existingLogistics.length > 0) {
         await tx
           .update(logistics)
           .set({
             carrier,
             trackingNumber,
+            fulfillmentId,
             status: 'in_transit',
             updatedAt: new Date(),
           })
-          .where(eq(logistics.orderId, orderId));
+          .where(eq(logistics.id, existingLogistics[0].id));
       } else {
         await tx.insert(logistics).values({
           orderId,
+          fulfillmentId,
           carrier,
           trackingNumber,
           status: 'in_transit',
-          updatedAt: new Date(),
         });
       }
 
-      await tx
-        .update(orders)
-        .set({
-          status: 'shipped',
-          trackingNo: trackingNumber,
-          shippedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(orders.id, orderId));
+      return fulfillmentId;
     });
+
+    return result;
   }
 
   async getTrackingInfo(orderId: string): Promise<TrackingInfo> {
@@ -100,6 +164,8 @@ export class LogisticsService {
         paidAt: orders.paidAt,
         shippedAt: orders.shippedAt,
         deliveredAt: orders.deliveredAt,
+        carrier: orders.carrier,
+        trackingNumber: orders.trackingNumber,
       })
       .from(orders)
       .where(eq(orders.id, orderId))
@@ -109,7 +175,15 @@ export class LogisticsService {
       throw new NotFoundException('订单不存在');
     }
 
-    const [logisticsRecord] = await this.db
+    // Load fulfillments for this order
+    const fulfillments = await this.db
+      .select()
+      .from(orderFulfillments)
+      .where(eq(orderFulfillments.orderId, orderId))
+      .orderBy(desc(orderFulfillments.createdAt));
+
+    // Load logistics records
+    const logisticsRecord = await this.db
       .select({
         carrier: logistics.carrier,
         trackingNumber: logistics.trackingNumber,
@@ -119,23 +193,23 @@ export class LogisticsService {
       .where(eq(logistics.orderId, orderId))
       .limit(1);
 
-    if (this.isDemoMode) {
-      const events = this.generateDemoTimeline(order);
-      return {
-        events,
-        carrier: logisticsRecord?.carrier ?? null,
-        trackingNumber: logisticsRecord?.trackingNumber ?? null,
-        isDemo: true,
-      };
-    }
+    const primaryCarrier = fulfillments.length > 0 ? fulfillments[0].carrier : (logisticsRecord[0]?.carrier ?? null);
+    const primaryTracking = fulfillments.length > 0 ? fulfillments[0].trackingNumber : (logisticsRecord[0]?.trackingNumber ?? null);
 
-    // Real 17Track API would go here; fallback to demo timeline
     const events = this.generateDemoTimeline(order);
+
     return {
       events,
-      carrier: logisticsRecord?.carrier ?? null,
-      trackingNumber: logisticsRecord?.trackingNumber ?? null,
-      isDemo: false,
+      carrier: primaryCarrier,
+      trackingNumber: primaryTracking,
+      fulfillments: fulfillments.map((f) => ({
+        carrier: f.carrier,
+        trackingNumber: f.trackingNumber,
+        trackingUrl: f.trackingUrl,
+        status: f.status,
+        shippedAt: f.shippedAt?.toISOString() ?? null,
+      })),
+      isDemo: this.isDemoMode,
     };
   }
 
@@ -144,26 +218,35 @@ export class LogisticsService {
     userId: string | undefined,
     sessionId: string | undefined,
   ): Promise<void> {
-    const [order] = await this.db
+    const orderRows = await this.db
       .select({
         id: orders.id,
         userId: orders.userId,
-        sessionId: orders.sessionId,
+        addressSnapshot: orders.addressSnapshot,
       })
       .from(orders)
       .where(eq(orders.id, orderId))
       .limit(1);
 
-    if (!order) {
+    if (orderRows.length === 0) {
       throw new NotFoundException('订单不存在');
     }
+    const order = orderRows[0];
 
     if (userId && order.userId === userId) {
       return;
     }
 
-    if (sessionId && order.sessionId === sessionId) {
-      return;
+    // Check session via addressSnapshot
+    if (sessionId && order.addressSnapshot) {
+      try {
+        const snap = JSON.parse(order.addressSnapshot) as { sessionId?: string };
+        if (snap.sessionId === sessionId) {
+          return;
+        }
+      } catch {
+        // ignore parse error
+      }
     }
 
     throw new ForbiddenException('无权查看该订单物流');

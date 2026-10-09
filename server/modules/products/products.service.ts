@@ -1,133 +1,138 @@
 import { Injectable, Inject, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { products, categories, reviews } from '@server/database/schema';
-import { eq, and, count, desc, asc, ilike, gte, lte, sql } from 'drizzle-orm';
+import { products, categories, productVariants, reviews, stockMovements } from '@server/database/schema';
+import { eq, and, count, desc, asc, ilike, sql, inArray, type SQL } from 'drizzle-orm';
 import type {
   Product,
   ProductListResponse,
   ProductListParams,
   CreateProductRequest,
   UpdateProductRequest,
-  ProductSpec,
 } from '@shared/api.interface';
 import { AuditService } from '../audit/audit.service';
 
-export interface ImportFailure {
-  row: number;
-  reason: string;
-}
-
-export interface ImportResult {
-  successCount: number;
-  failCount: number;
-  failures: ImportFailure[];
-}
+export interface ImportFailure { row: number; reason: string; }
+export interface ImportResult { successCount: number; failCount: number; failures: ImportFailure[]; }
 
 interface ParsedCsvRow {
-  nameZh: string;
-  nameEn: string;
-  category: string;
-  price: string;
-  stock: string;
-  descriptionZh: string;
-  descriptionEn: string;
-  images: string;
+  nameZh: string; nameEn: string; category: string; price: string;
+  stock: string; descriptionZh: string; descriptionEn: string; images: string;
+}
+
+export interface ProductVariantDto {
+  id: string; productId: string; sku: string; optionValues: string[];
+  price: string; originalPrice?: string; stock: number; sold: number;
+  image?: string; status: string;
+}
+
+export interface CreateVariantDto {
+  sku: string; optionValues: string[]; price: number; originalPrice?: number;
+  stock?: number; sold?: number; image?: string; status?: 'draft' | 'active' | 'inactive';
+}
+
+export interface UpdateVariantDto {
+  sku?: string; optionValues?: string[]; price?: number; originalPrice?: number;
+  stock?: number; sold?: number; image?: string; status?: 'draft' | 'active' | 'inactive';
+}
+
+export interface StockChangeParams {
+  variantId: string; delta: number;
+  reason: 'sale' | 'purchase' | 'refund_return' | 'adjustment';
+  referenceId?: string; note?: string; createdBy?: string;
 }
 
 type ProductWithCategory = typeof products.$inferSelect & {
-  categoryNameZh: string | null;
-  categoryNameEn: string | null;
-  avgRating: number | null;
-  reviewCount: number | null;
+  categoryNameZh: string | null; categoryNameEn: string | null;
+  avgRating: number | null; reviewCount: number | null;
 };
 
 @Injectable()
 export class ProductsService {
   private readonly logger = new Logger(ProductsService.name);
-
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly auditService: AuditService,
   ) {}
 
-  private toDto(row: ProductWithCategory): Product {
+  // ── DTO helpers ──────────────────────────────
+
+  private variantToDto(v: typeof productVariants.$inferSelect): ProductVariantDto {
     return {
-      id: row.id,
-      sku: row.sku ?? undefined,
-      titleZh: row.titleZh,
-      titleEn: row.titleEn,
-      descZh: row.descZh ?? '',
-      descEn: row.descEn ?? '',
-      longDescZh: row.longDescZh ?? '',
-      longDescEn: row.longDescEn ?? '',
-      categoryId: row.categoryId ?? undefined,
-      categoryNameZh: row.categoryNameZh ?? undefined,
-      categoryNameEn: row.categoryNameEn ?? undefined,
-      price: String(row.price),
-      originalPrice: row.originalPrice ? String(row.originalPrice) : undefined,
-      stock: row.stock,
-      sold: row.sold,
-      status: row.status as 'draft' | 'active' | 'inactive',
-      coverImage: row.coverImage ?? undefined,
-      images: row.images ?? [],
-      specs: row.specs ? JSON.parse(row.specs) as ProductSpec : {},
-      seoKeywordsZh: row.seoKeywordsZh ?? '',
-      seoKeywordsEn: row.seoKeywordsEn ?? '',
-      bulletPointsZh: row.bulletPointsZh ?? [],
-      bulletPointsEn: row.bulletPointsEn ?? [],
-      weight: row.weight ? String(row.weight) : undefined,
-      avgRating: row.avgRating != null ? Number(row.avgRating) : undefined,
-      reviewCount: row.reviewCount != null ? Number(row.reviewCount) : undefined,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
+      id: v.id, productId: v.productId, sku: v.sku,
+      optionValues: v.optionValues ?? [],
+      price: String(v.price),
+      originalPrice: v.originalPrice != null ? String(v.originalPrice) : undefined,
+      stock: v.stock, sold: v.sold, image: v.image ?? undefined, status: v.status,
     };
   }
 
-  private buildWhere(params: ProductListParams) {
-    const conditions = [];
+  private async toDto(row: ProductWithCategory): Promise<Product & { variants: ProductVariantDto[] }> {
+    const variants = await this.listVariants(row.id);
+    const activeVariants = variants.filter((v) => v.status === 'active');
+    const prices = activeVariants.map((v) => Number(v.price));
+    const minPrice = prices.length > 0 ? Math.min(...prices).toString() : '0';
+    return {
+      id: row.id, sku: activeVariants[0]?.sku ?? undefined,
+      titleZh: row.titleZh, titleEn: row.titleEn,
+      descZh: row.descZh ?? '', descEn: row.descEn ?? '',
+      longDescZh: row.longDescZh ?? '', longDescEn: row.longDescEn ?? '',
+      categoryId: row.categoryId ?? undefined,
+      categoryNameZh: row.categoryNameZh ?? undefined, categoryNameEn: row.categoryNameEn ?? undefined,
+      price: minPrice, originalPrice: activeVariants[0]?.originalPrice,
+      stock: row.totalStock, sold: row.totalSold,
+      status: row.status as 'draft' | 'active' | 'inactive',
+      coverImage: row.coverImage ?? undefined, images: row.images ?? [],
+      specs: {}, seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
+      bulletPointsZh: row.bulletPointsZh ?? [], bulletPointsEn: row.bulletPointsEn ?? [],
+      weight: row.weight ? String(row.weight) : undefined,
+      avgRating: row.avgRating != null ? Number(row.avgRating) : undefined,
+      reviewCount: row.reviewCount != null ? Number(row.reviewCount) : undefined,
+      createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
+      variants,
+    };
+  }
 
+  // ── Query helpers ────────────────────────────
+
+  private buildWhere(params: ProductListParams) {
+    const conditions: SQL[] = [];
     if (params.status !== undefined) {
       conditions.push(eq(products.status, params.status));
     } else {
       conditions.push(eq(products.status, 'active'));
     }
-
-    if (params.categoryId) {
-      conditions.push(eq(products.categoryId, params.categoryId));
-    }
-
+    if (params.categoryId) conditions.push(eq(products.categoryId, params.categoryId));
     if (params.keyword) {
       const escaped = params.keyword.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-      const keyword = `%${escaped}%`;
-      conditions.push(
-        sql`(${ilike(products.titleZh, keyword)} OR ${ilike(products.titleEn, keyword)})`
-      );
+      conditions.push(sql`(${ilike(products.titleZh, `%${escaped}%`)} OR ${ilike(products.titleEn, `%${escaped}%`)})`);
     }
-
-    if (params.minPrice !== undefined) {
-      conditions.push(gte(products.price, String(params.minPrice)));
-    }
-
-    if (params.maxPrice !== undefined) {
-      conditions.push(lte(products.price, String(params.maxPrice)));
-    }
-
     return conditions;
   }
 
   private getOrderBy(sortBy: ProductListParams['sortBy']) {
     switch (sortBy) {
-      case 'price_asc':
-        return [asc(products.price)];
-      case 'price_desc':
-        return [desc(products.price)];
-      case 'sold_desc':
-        return [desc(products.sold)];
-      case 'newest':
-      default:
-        return [desc(products.createdAt)];
+      case 'sold_desc': return [desc(products.totalSold)];
+      case 'newest': default: return [desc(products.createdAt)];
     }
   }
+
+  // ── Variant query ────────────────────────────
+
+  private async fetchVariantsForProducts(productIds: string[]): Promise<Map<string, ProductVariantDto[]>> {
+    if (productIds.length === 0) return new Map();
+    const rows = await this.db.select().from(productVariants)
+      .where(inArray(productVariants.productId, productIds))
+      .orderBy(asc(productVariants.createdAt));
+    const map = new Map<string, ProductVariantDto[]>();
+    for (const v of rows) {
+      const list = map.get(v.productId) ?? [];
+      list.push(this.variantToDto(v));
+      map.set(v.productId, list);
+    }
+    return map;
+  }
+
+  // ── List products ────────────────────────────
 
   async findAll(params: ProductListParams): Promise<ProductListResponse> {
     const page = params.page ?? 1;
@@ -137,58 +142,70 @@ export class ProductsService {
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const orderBy = this.getOrderBy(params.sortBy);
 
-    const baseQuery = this.db
-      .select({
-        ...(products as any),
-        categoryNameZh: categories.nameZh,
-        categoryNameEn: categories.nameEn,
-      })
-      .from(products)
+    const baseQuery = this.db.select({
+      ...(products as any),
+      categoryNameZh: categories.nameZh,
+      categoryNameEn: categories.nameEn,
+    }).from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
       .where(whereClause)
       .orderBy(...orderBy, desc(products.id));
 
     const [countResult, rows] = await Promise.all([
-      this.db
-        .select({ count: count() })
-        .from(products)
-        .where(whereClause),
+      this.db.select({ count: count() }).from(products).where(whereClause),
       baseQuery.limit(pageSize).offset(offset),
     ]);
 
     const total = Number(countResult[0]?.count ?? 0);
-    const items = (rows as unknown as ProductWithCategory[]).map((row: ProductWithCategory) =>
-      this.toDto(row),
-    );
+    const productRows = rows as unknown as ProductWithCategory[];
+    const variantsMap = await this.fetchVariantsForProducts(productRows.map((r: any) => r.id));
+
+    const items = productRows.map((row) => {
+      const variants = variantsMap.get(row.id) ?? [];
+      const activeVariants = variants.filter((v) => v.status === 'active');
+      const prices = activeVariants.map((v) => Number(v.price));
+      const minPrice = prices.length > 0 ? Math.min(...prices).toString() : '0';
+      return {
+        id: row.id, sku: activeVariants[0]?.sku ?? undefined,
+        titleZh: row.titleZh, titleEn: row.titleEn,
+        descZh: row.descZh ?? '', descEn: row.descEn ?? '',
+        longDescZh: row.longDescZh ?? '', longDescEn: row.longDescEn ?? '',
+        categoryId: row.categoryId ?? undefined,
+        categoryNameZh: row.categoryNameZh ?? undefined, categoryNameEn: row.categoryNameEn ?? undefined,
+        price: minPrice, originalPrice: activeVariants[0]?.originalPrice,
+        stock: row.totalStock, sold: row.totalSold,
+        status: row.status as 'draft' | 'active' | 'inactive',
+        coverImage: row.coverImage ?? undefined, images: row.images ?? [],
+        specs: {}, seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
+        bulletPointsZh: row.bulletPointsZh ?? [], bulletPointsEn: row.bulletPointsEn ?? [],
+        weight: row.weight ? String(row.weight) : undefined,
+        avgRating: row.avgRating != null ? Number(row.avgRating) : undefined,
+        reviewCount: row.reviewCount != null ? Number(row.reviewCount) : undefined,
+        createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
+        variants,
+      };
+    });
 
     return { items, total, page, pageSize };
   }
 
-  async findOne(id: string): Promise<Product> {
-    const rows = await this.db
-      .select({
-        ...(products as any),
-        categoryNameZh: categories.nameZh,
-        categoryNameEn: categories.nameEn,
-      })
-      .from(products)
+  async findOne(id: string): Promise<Product & { variants: ProductVariantDto[] }> {
+    const rows = await this.db.select({
+      ...(products as any),
+      categoryNameZh: categories.nameZh,
+      categoryNameEn: categories.nameEn,
+    }).from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
-      .where(eq(products.id, id))
-      .limit(1);
+      .where(eq(products.id, id)).limit(1);
 
-    if (rows.length === 0) {
-      throw new NotFoundException('商品不存在');
-    }
+    if (rows.length === 0) throw new NotFoundException('商品不存在');
 
-    const result = this.toDto(rows[0] as unknown as ProductWithCategory);
+    const result = await this.toDto(rows[0] as unknown as ProductWithCategory);
 
-    const reviewStats = await this.db
-      .select({
-        avgRating: sql<number>`round(avg(${reviews.rating})::numeric, 1)`,
-        reviewCount: count(reviews.id),
-      })
-      .from(reviews)
-      .where(eq(reviews.productId, id));
+    const reviewStats = await this.db.select({
+      avgRating: sql<number>`round(avg(${reviews.rating})::numeric, 1)`,
+      reviewCount: count(reviews.id),
+    }).from(reviews).where(eq(reviews.productId, id));
 
     if (reviewStats.length > 0) {
       result.avgRating = reviewStats[0].avgRating != null ? Number(reviewStats[0].avgRating) : 0;
@@ -197,97 +214,134 @@ export class ProductsService {
       result.avgRating = 0;
       result.reviewCount = 0;
     }
-
     return result;
   }
 
-  async getFeatured(): Promise<Product[]> {
-    const rows = await this.db
-      .select({
-        ...(products as any),
-        categoryNameZh: categories.nameZh,
-        categoryNameEn: categories.nameEn,
-      })
-      .from(products)
+  async getFeatured(): Promise<Array<Product & { variants: ProductVariantDto[] }>> {
+    const rows = await this.db.select({
+      ...(products as any),
+      categoryNameZh: categories.nameZh,
+      categoryNameEn: categories.nameEn,
+    }).from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
       .where(eq(products.status, 'active'))
-      .orderBy(desc(products.sold), desc(products.createdAt))
-      .limit(8);
+      .orderBy(desc(products.totalSold), desc(products.createdAt)).limit(8);
 
-    return (rows as unknown as ProductWithCategory[]).map((row: ProductWithCategory) =>
-      this.toDto(row),
-    );
+    const productRows = rows as unknown as ProductWithCategory[];
+    const variantsMap = await this.fetchVariantsForProducts(productRows.map((r: any) => r.id));
+
+    return productRows.map((row) => {
+      const variants = variantsMap.get(row.id) ?? [];
+      const activeVariants = variants.filter((v) => v.status === 'active');
+      const prices = activeVariants.map((v) => Number(v.price));
+      const minPrice = prices.length > 0 ? Math.min(...prices).toString() : '0';
+      return {
+        id: row.id, sku: activeVariants[0]?.sku ?? undefined,
+        titleZh: row.titleZh, titleEn: row.titleEn,
+        descZh: row.descZh ?? '', descEn: row.descEn ?? '',
+        longDescZh: row.longDescZh ?? '', longDescEn: row.longDescEn ?? '',
+        categoryId: row.categoryId ?? undefined,
+        categoryNameZh: row.categoryNameZh ?? undefined, categoryNameEn: row.categoryNameEn ?? undefined,
+        price: minPrice, originalPrice: activeVariants[0]?.originalPrice,
+        stock: row.totalStock, sold: row.totalSold,
+        status: row.status as 'draft' | 'active' | 'inactive',
+        coverImage: row.coverImage ?? undefined, images: row.images ?? [],
+        specs: {}, seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
+        bulletPointsZh: row.bulletPointsZh ?? [], bulletPointsEn: row.bulletPointsEn ?? [],
+        weight: row.weight ? String(row.weight) : undefined,
+        avgRating: row.avgRating != null ? Number(row.avgRating) : 0,
+        reviewCount: row.reviewCount != null ? Number(row.reviewCount) : 0,
+                createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
+        variants,
+      };
+    });
   }
 
-  async create(input: CreateProductRequest, userId: string): Promise<Product> {
+  // ── Create product ───────────────────────────
+
+  async create(
+    input: CreateProductRequest & { variants?: CreateVariantDto[] },
+    userId: string,
+  ): Promise<Product & { variants: ProductVariantDto[] }> {
     try {
       this.validateProductImages(input.coverImage, input.images);
-
-      const [row] = await this.db
-        .insert(products)
-        .values({
+      const result = await this.db.transaction(async (tx) => {
+        const [productRow] = await tx.insert(products).values({
           sellerId: userId,
-          sku: input.sku,
           titleZh: input.titleZh,
           titleEn: input.titleEn,
-          descZh: input.descZh,
-          descEn: input.descEn,
-          longDescZh: input.longDescZh,
-          longDescEn: input.longDescEn,
-          categoryId: input.categoryId,
-          price: String(input.price),
-          originalPrice: input.originalPrice !== undefined ? String(input.originalPrice) : undefined,
-          stock: input.stock ?? 0,
+          descZh: input.descZh ?? null,
+          descEn: input.descEn ?? null,
+          longDescZh: input.longDescZh ?? null,
+          longDescEn: input.longDescEn ?? null,
+          categoryId: input.categoryId ?? null,
           status: input.status ?? 'draft',
-          coverImage: input.coverImage,
+          coverImage: input.coverImage ?? null,
           images: input.images ?? [],
-          specs: input.specs ? JSON.stringify(input.specs) : '{}',
-          seoKeywordsZh: input.seoKeywordsZh,
-          seoKeywordsEn: input.seoKeywordsEn,
+          seoKeywordsZh: input.seoKeywordsZh ?? null,
+          seoKeywordsEn: input.seoKeywordsEn ?? null,
           bulletPointsZh: input.bulletPointsZh ?? [],
           bulletPointsEn: input.bulletPointsEn ?? [],
-          weight: input.weight !== undefined ? String(input.weight) : undefined,
-        })
-        .returning();
+          weight: input.weight !== undefined ? String(input.weight) : null,
+          optionNames: input.variants?.length ? this.deriveOptionNames(input.variants) : [],
+          totalStock: 0,
+          totalSold: 0,
+          updatedBy: userId,
+        }).returning();
 
-      if (!row) {
-        throw new BadRequestException('创建商品失败');
-      }
+        if (!productRow) throw new BadRequestException('创建商品失败');
 
-      return this.findOne(row.id);
+        if (input.variants?.length) {
+          const variantRows = await tx.insert(productVariants).values(
+            input.variants.map((v) => ({
+              productId: productRow.id,
+              sku: v.sku,
+              optionValues: v.optionValues ?? [],
+              price: String(v.price),
+              originalPrice: v.originalPrice !== undefined ? String(v.originalPrice) : null,
+              stock: v.stock ?? 0,
+              sold: v.sold ?? 0,
+              image: v.image ?? null,
+              status: v.status ?? 'active',
+            })),
+          ).returning();
+
+          const totalStock = variantRows.reduce((sum, v) => sum + v.stock, 0);
+          await tx.update(products).set({ totalStock }).where(eq(products.id, productRow.id));
+        }
+
+        return productRow;
+      });
+
+      return this.findOne(result.id);
     } catch (error) {
       this.logger.error('创建商品失败', error);
       throw error;
     }
   }
 
+  private deriveOptionNames(variants: CreateVariantDto[]): string[] {
+    if (!variants[0]?.optionValues?.length) return [];
+    return Array.from({ length: variants[0].optionValues.length }, (_, i) => `规格${i + 1}`);
+  }
+
+  // ── Update product ───────────────────────────
+
   async update(
     id: string,
     input: UpdateProductRequest,
     userId: string,
     auditMeta?: { role?: string; ip?: string },
-  ): Promise<Product> {
-    // Query current product for before-value audit
-    const existingRows = await this.db
-      .select({ price: products.price, status: products.status })
-      .from(products)
-      .where(eq(products.id, id));
-    if (existingRows.length === 0) {
-      throw new NotFoundException('商品不存在');
-    }
-    const existing = existingRows[0];
-    const oldPrice = existing.price as string;
-    const oldStatus = existing.status as string;
-    const patch: Partial<typeof products.$inferInsert> = {};
+  ): Promise<Product & { variants: ProductVariantDto[] }> {
+    const existingRows = await this.db.select({ status: products.status }).from(products).where(eq(products.id, id));
+    if (existingRows.length === 0) throw new NotFoundException('商品不存在');
+    const oldStatus = existingRows[0].status as string;
 
     if (input.coverImage !== undefined || input.images !== undefined) {
-      this.validateProductImages(
-        input.coverImage ?? undefined,
-        input.images ?? undefined,
-      );
+      this.validateProductImages(input.coverImage ?? undefined, input.images ?? undefined);
     }
 
-    if (input.sku !== undefined) patch.sku = input.sku;
+    const patch: Record<string, unknown> = {};
     if (input.titleZh !== undefined) patch.titleZh = input.titleZh;
     if (input.titleEn !== undefined) patch.titleEn = input.titleEn;
     if (input.descZh !== undefined) patch.descZh = input.descZh;
@@ -295,89 +349,189 @@ export class ProductsService {
     if (input.longDescZh !== undefined) patch.longDescZh = input.longDescZh;
     if (input.longDescEn !== undefined) patch.longDescEn = input.longDescEn;
     if (input.categoryId !== undefined) patch.categoryId = input.categoryId;
-    if (input.price !== undefined) patch.price = String(input.price);
-    if (input.originalPrice !== undefined) patch.originalPrice = String(input.originalPrice);
-    if (input.stock !== undefined) patch.stock = input.stock;
     if (input.status !== undefined) patch.status = input.status;
     if (input.coverImage !== undefined) patch.coverImage = input.coverImage;
     if (input.images !== undefined) patch.images = input.images;
-    if (input.specs !== undefined) patch.specs = JSON.stringify(input.specs);
     if (input.seoKeywordsZh !== undefined) patch.seoKeywordsZh = input.seoKeywordsZh;
     if (input.seoKeywordsEn !== undefined) patch.seoKeywordsEn = input.seoKeywordsEn;
     if (input.bulletPointsZh !== undefined) patch.bulletPointsZh = input.bulletPointsZh;
     if (input.bulletPointsEn !== undefined) patch.bulletPointsEn = input.bulletPointsEn;
     if (input.weight !== undefined) patch.weight = String(input.weight);
 
-    if (Object.keys(patch).length === 0) {
-      throw new BadRequestException('未提供可更新字段');
-    }
-
-    patch.updatedAt = new Date();
-    patch.updatedBy = userId;
-
-    const updated = await this.db
-      .update(products)
-      .set(patch)
-      .where(eq(products.id, id))
-      .returning({ id: products.id });
-
-    if (updated.length === 0) {
-      throw new NotFoundException('商品不存在');
+    if (Object.keys(patch).length > 0) {
+      patch.updatedAt = new Date();
+      patch.updatedBy = userId;
+      const updated = await this.db.update(products).set(patch).where(eq(products.id, id)).returning({ id: products.id });
+      if (updated.length === 0) throw new NotFoundException('商品不存在');
     }
 
     const result = await this.findOne(id);
 
-    // Audit log: price change
-    if (input.price !== undefined && String(input.price) !== oldPrice) {
-      try {
-        void this.auditService.log({
-          action: 'product.price_change',
-          entity: 'product',
-          entityId: id,
-          before: { oldPrice },
-          after: { newPrice: String(input.price) },
-          userId: userId,
-          role: auditMeta?.role,
-          ip: auditMeta?.ip,
-        }).catch(() => {});
-      } catch {
-        // Audit log failure must not affect main flow
-      }
-    }
-
-    // Audit log: status toggle
     if (input.status !== undefined && input.status !== oldStatus) {
       try {
         void this.auditService.log({
-          action: 'product.toggle_status',
-          entity: 'product',
-          entityId: id,
-          before: { oldStatus },
-          after: { newStatus: input.status },
-          userId: userId,
-          role: auditMeta?.role,
-          ip: auditMeta?.ip,
+          action: 'product.toggle_status', entity: 'product', entityId: id,
+          before: { oldStatus }, after: { newStatus: input.status },
+          userId, role: auditMeta?.role, ip: auditMeta?.ip,
         }).catch(() => {});
-      } catch {
-        // Audit log failure must not affect main flow
-      }
+      } catch { /* noop */ }
     }
 
     return result;
   }
 
+  // ── Delete product ───────────────────────────
+
   async remove(id: string): Promise<{ id: string }> {
-    const deleted = await this.db
-      .delete(products)
-      .where(eq(products.id, id))
-      .returning({ id: products.id });
-
-    if (deleted.length === 0) {
-      throw new NotFoundException('商品不存在');
-    }
-
+    const deleted = await this.db.delete(products).where(eq(products.id, id)).returning({ id: products.id });
+    if (deleted.length === 0) throw new NotFoundException('商品不存在');
     return { id };
   }
+
+  // ── Variant CRUD ─────────────────────────────
+
+  async createVariant(productId: string, dto: CreateVariantDto): Promise<ProductVariantDto> {
+    const productRows = await this.db.select({ id: products.id }).from(products).where(eq(products.id, productId)).limit(1);
+    if (productRows.length === 0) throw new NotFoundException('商品不存在');
+
+    const existingSku = await this.db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.sku, dto.sku)).limit(1);
+    if (existingSku.length > 0) throw new BadRequestException(`SKU "${dto.sku}" 已存在`);
+
+    const result = await this.db.transaction(async (tx) => {
+      const [variant] = await tx.insert(productVariants).values({
+        productId, sku: dto.sku, optionValues: dto.optionValues ?? [],
+        price: String(dto.price),
+        originalPrice: dto.originalPrice !== undefined ? String(dto.originalPrice) : null,
+        stock: dto.stock ?? 0, sold: dto.sold ?? 0, image: dto.image ?? null,
+        status: dto.status ?? 'active',
+      }).returning();
+
+      await tx.update(products)
+        .set({ totalStock: sql`${products.totalStock} + ${dto.stock ?? 0}` })
+        .where(eq(products.id, productId));
+
+      return variant;
+    });
+
+    return this.variantToDto(result);
+  }
+
+  async updateVariant(variantId: string, dto: UpdateVariantDto): Promise<ProductVariantDto> {
+    const existingRows = await this.db.select().from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
+    if (existingRows.length === 0) throw new NotFoundException('变体不存在');
+    const existing = existingRows[0];
+
+    if (dto.sku && dto.sku !== existing.sku) {
+      const dup = await this.db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.sku, dto.sku)).limit(1);
+      if (dup.length > 0) throw new BadRequestException(`SKU "${dto.sku}" 已存在`);
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (dto.sku !== undefined) patch.sku = dto.sku;
+    if (dto.optionValues !== undefined) patch.optionValues = dto.optionValues;
+    if (dto.price !== undefined) patch.price = String(dto.price);
+    if (dto.originalPrice !== undefined) patch.originalPrice = String(dto.originalPrice);
+    if (dto.stock !== undefined) patch.stock = dto.stock;
+    if (dto.sold !== undefined) patch.sold = dto.sold;
+    if (dto.image !== undefined) patch.image = dto.image;
+    if (dto.status !== undefined) patch.status = dto.status;
+    patch.updatedAt = new Date();
+
+    if (dto.stock !== undefined && dto.stock !== existing.stock) {
+      const diff = dto.stock - existing.stock;
+      await this.db.transaction(async (tx) => {
+        await tx.update(productVariants).set(patch).where(eq(productVariants.id, variantId));
+        await tx.update(products).set({ totalStock: sql`${products.totalStock} + ${diff}` }).where(eq(products.id, existing.productId));
+      });
+    } else {
+      await this.db.update(productVariants).set(patch).where(eq(productVariants.id, variantId));
+    }
+
+    const updated = await this.db.select().from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
+    return this.variantToDto(updated[0]);
+  }
+
+  async deleteVariant(variantId: string): Promise<{ id: string }> {
+    const existingRows = await this.db.select().from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
+    if (existingRows.length === 0) throw new NotFoundException('变体不存在');
+    const existing = existingRows[0];
+
+    await this.db.transaction(async (tx) => {
+      await tx.delete(productVariants).where(eq(productVariants.id, variantId));
+      await tx.update(products)
+        .set({ totalStock: sql`${products.totalStock} - ${existing.stock}` })
+        .where(eq(products.id, existing.productId));
+    });
+
+    return { id: variantId };
+  }
+
+  async listVariants(productId: string): Promise<ProductVariantDto[]> {
+    const variantRows = await this.db.select().from(productVariants)
+      .where(eq(productVariants.productId, productId))
+      .orderBy(asc(productVariants.createdAt));
+    return variantRows.map((v) => this.variantToDto(v));
+  }
+
+  async getVariant(variantId: string): Promise<ProductVariantDto & { product?: Product }> {
+    const rows = await this.db.select({
+      ...(productVariants as any),
+      productTitleZh: products.titleZh,
+      productTitleEn: products.titleEn,
+      productStatus: products.status,
+    }).from(productVariants)
+      .leftJoin(products, eq(productVariants.productId, products.id))
+      .where(eq(productVariants.id, variantId)).limit(1);
+
+    if (rows.length === 0) throw new NotFoundException('变体不存在');
+    const row = rows[0] as any;
+    return {
+      ...this.variantToDto(row as any),
+      product: {
+        id: row.productId, titleZh: row.productTitleZh,
+        titleEn: row.productTitleEn, status: row.productStatus,
+      } as any,
+    };
+  }
+
+  // ── Stock management ─────────────────────────
+
+  async changeStock(params: StockChangeParams): Promise<ProductVariantDto> {
+    const { variantId, delta, reason, referenceId, note, createdBy } = params;
+
+    const existingRows = await this.db.select().from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
+    if (existingRows.length === 0) throw new NotFoundException('变体不存在');
+    const existing = existingRows[0];
+
+    const newStock = existing.stock + delta;
+    if (newStock < 0) throw new BadRequestException('库存不足，无法扣减');
+
+    const result = await this.db.transaction(async (tx) => {
+      await tx.insert(stockMovements).values({
+        variantId, quantity: delta, reason,
+        referenceId: referenceId ?? null, note: note ?? null, createdBy: createdBy ?? null,
+      });
+
+      const variantPatch: Record<string, unknown> = { stock: newStock, updatedAt: new Date() };
+      if (reason === 'sale' && delta < 0) variantPatch.sold = existing.sold + Math.abs(delta);
+      else if (reason === 'refund_return' && delta > 0) variantPatch.sold = Math.max(0, existing.sold - delta);
+
+      await tx.update(productVariants).set(variantPatch).where(eq(productVariants.id, variantId));
+
+      const productPatch: Record<string, unknown> = { totalStock: sql`${products.totalStock} + ${delta}` };
+      if (reason === 'sale' && delta < 0) productPatch.totalSold = sql`${products.totalSold} + ${Math.abs(delta)}`;
+      else if (reason === 'refund_return' && delta > 0) productPatch.totalSold = sql`GREATEST(0, ${products.totalSold} - ${delta})`;
+
+      await tx.update(products).set(productPatch).where(eq(products.id, existing.productId));
+
+      const updated = await tx.select().from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
+      return updated[0];
+    });
+
+    return this.variantToDto(result);
+  }
+
+  // ── Validation helpers ───────────────────────
 
   private validateProductImages(
     coverImage: string | null | undefined,
@@ -392,9 +546,7 @@ export class ProductsService {
       try {
         const parsed = new URL(url);
         return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-      } catch {
-        return false;
-      }
+      } catch { return false; }
     };
 
     if (coverImage && !isValidImageUrl(coverImage)) {
@@ -413,6 +565,8 @@ export class ProductsService {
     }
   }
 
+  // ── Bulk import (CSV) ────────────────────────
+
   getImportTemplateCsv(): string {
     return 'nameZh,nameEn,category,price,stock,descriptionZh,descriptionEn,images\n';
   }
@@ -424,17 +578,10 @@ export class ProductsService {
   ): Promise<ImportResult> {
     const content = fileBuffer.toString('utf-8');
     const rows = this.parseCsv(content);
+    if (rows.length === 0) return { successCount: 0, failCount: 0, failures: [] };
 
-    if (rows.length === 0) {
-      return { successCount: 0, failCount: 0, failures: [] };
-    }
-
-    // Load all categories for matching
     const allCategories = await this.db.select({
-      id: categories.id,
-      nameZh: categories.nameZh,
-      nameEn: categories.nameEn,
-      slug: categories.slug,
+      id: categories.id, nameZh: categories.nameZh, nameEn: categories.nameEn, slug: categories.slug,
     }).from(categories);
 
     const categoryMap = new Map<string, string>();
@@ -448,32 +595,19 @@ export class ProductsService {
     const validRecords: Array<typeof products.$inferInsert> = [];
 
     rows.forEach((row: ParsedCsvRow, index: number) => {
-      const rowNum = index + 2; // row 1 is header
+      const rowNum = index + 2;
       const reasons: string[] = [];
-
-      if (!row.nameZh || row.nameZh.trim() === '') {
-        reasons.push('nameZh 必填');
-      }
-      if (!row.nameEn || row.nameEn.trim() === '') {
-        reasons.push('nameEn 必填');
-      }
-
+      if (!row.nameZh?.trim()) reasons.push('nameZh 必填');
+      if (!row.nameEn?.trim()) reasons.push('nameEn 必填');
       const priceNum = Number(row.price);
-      if (isNaN(priceNum) || priceNum <= 0) {
-        reasons.push('price 必须是正数');
-      }
-
+      if (isNaN(priceNum) || priceNum <= 0) reasons.push('price 必须是正数');
       const stockNum = Number(row.stock);
-      if (isNaN(stockNum) || !Number.isInteger(stockNum) || stockNum < 0) {
-        reasons.push('stock 必须是非负整数');
-      }
+      if (isNaN(stockNum) || !Number.isInteger(stockNum) || stockNum < 0) reasons.push('stock 必须是非负整数');
 
       let categoryId: string | undefined;
-      if (row.category && row.category.trim() !== '') {
+      if (row.category?.trim()) {
         categoryId = categoryMap.get(row.category.trim().toLowerCase());
-        if (!categoryId) {
-          reasons.push(`分类 "${row.category}" 未找到匹配`);
-        }
+        if (!categoryId) reasons.push(`分类 "${row.category}" 未找到匹配`);
       }
 
       if (reasons.length > 0) {
@@ -481,9 +615,7 @@ export class ProductsService {
         return;
       }
 
-      const imageList: string[] = row.images
-        ? row.images.split('|').map((s: string) => s.trim()).filter(Boolean)
-        : [];
+      const imageList: string[] = row.images ? row.images.split('|').map((s) => s.trim()).filter(Boolean) : [];
 
       validRecords.push({
         sellerId: userId,
@@ -491,12 +623,12 @@ export class ProductsService {
         titleEn: row.nameEn.trim(),
         descZh: row.descriptionZh || null,
         descEn: row.descriptionEn || null,
-        categoryId,
-        price: String(priceNum),
-        stock: Math.floor(stockNum),
+        categoryId: categoryId ?? null,
         status: 'active',
         coverImage: imageList[0] ?? null,
         images: imageList,
+        totalStock: Math.floor(stockNum),
+        totalSold: 0,
         updatedBy: userId,
       });
     });
@@ -504,118 +636,50 @@ export class ProductsService {
     let successCount = 0;
     if (validRecords.length > 0) {
       try {
-        // Insert in batches of 100
-        const batchSize = 100;
-        for (let i = 0; i < validRecords.length; i += batchSize) {
-          const batch = validRecords.slice(i, i + batchSize);
-          await this.db.insert(products).values(batch);
-        }
+        await this.db.transaction(async (tx) => {
+          for (let i = 0; i < validRecords.length; i++) {
+            const [inserted] = await tx.insert(products).values(validRecords[i]).returning();
+            const row = rows[i];
+            await tx.insert(productVariants).values({
+              productId: inserted.id as string,
+              sku: `SKU-${(inserted.id as string).slice(0, 8).toUpperCase()}`,
+              optionValues: [],
+              price: String(Number(row.price)),
+              stock: Math.floor(Number(row.stock)),
+              status: 'active',
+            } as any);
+          }
+        });
         successCount = validRecords.length;
       } catch (error) {
         this.logger.error('批量导入商品失败', error);
-        // Mark all valid records as failed
         for (let i = 0; i < validRecords.length; i++) {
-          const rowNum = rows.findIndex((_r: ParsedCsvRow, idx: number) => {
-            // find the original row index
-            const originalIdx = idx + 2;
-            return !failures.some((f: ImportFailure) => f.row === originalIdx) &&
-              failures.length + validRecords.length === rows.length &&
-              i === idx - failures.filter((f: ImportFailure) => f.row < originalIdx).length;
-          });
-          failures.push({
-            row: i + failures.length + 2,
-            reason: '数据库写入失败',
-          });
+          failures.push({ row: i + failures.length + 2, reason: '数据库写入失败' });
         }
       }
     }
 
-    const result: ImportResult = {
-      successCount,
-      failCount: failures.length,
-      failures,
-    };
-
-    // Audit log for CSV import
+    const result: ImportResult = { successCount, failCount: failures.length, failures };
     if (successCount > 0) {
       try {
         void this.auditService.log({
-          action: 'csv.import',
-          entity: 'product',
-          entityId: 'batch',
-          after: { count: successCount },
-          userId: userId,
-          role: auditMeta?.role,
-          ip: auditMeta?.ip,
+          action: 'csv.import', entity: 'product', entityId: 'batch',
+          after: { count: successCount }, userId, role: auditMeta?.role, ip: auditMeta?.ip,
         }).catch(() => {});
-      } catch {
-        // Audit log failure must not affect main flow
-      }
+      } catch { /* noop */ }
     }
-
     return result;
   }
 
+  // CSV 解析使用 papaparse（成熟开源库，正确处理 RFC 4180 转义、换行、BOM）
   private parseCsv(content: string): ParsedCsvRow[] {
-    const lines = content.split(/\r?\n/).filter((line: string) => line.trim() !== '');
-
-    if (lines.length <= 1) {
-      return [];
-    }
-
-    // Skip header line
-    const dataLines = lines.slice(1);
-
-    const result: ParsedCsvRow[] = [];
-    for (const line of dataLines) {
-      const fields = this.parseCsvLine(line);
-      result.push({
-        nameZh: fields[0] ?? '',
-        nameEn: fields[1] ?? '',
-        category: fields[2] ?? '',
-        price: fields[3] ?? '',
-        stock: fields[4] ?? '',
-        descriptionZh: fields[5] ?? '',
-        descriptionEn: fields[6] ?? '',
-        images: fields[7] ?? '',
-      });
-    }
-
-    return result;
-  }
-
-  private parseCsvLine(line: string): string[] {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-
-      if (inQuotes) {
-        if (char === '"') {
-          if (line[i + 1] === '"') {
-            current += '"';
-            i++;
-          } else {
-            inQuotes = false;
-          }
-        } else {
-          current += char;
-        }
-      } else {
-        if (char === '"') {
-          inQuotes = true;
-        } else if (char === ',') {
-          result.push(current);
-          current = '';
-        } else {
-          current += char;
-        }
-      }
-    }
-
-    result.push(current);
-    return result;
+    const Papa = require('papaparse');
+    const result = Papa.parse(content as any, { skipEmptyLines: true, header: false }) as { data: string[][] };
+    if (result.data.length <= 1) return [];
+    return result.data.slice(1).map((fields) => ({
+      nameZh: fields[0] ?? '', nameEn: fields[1] ?? '', category: fields[2] ?? '',
+      price: fields[3] ?? '', stock: fields[4] ?? '',
+      descriptionZh: fields[5] ?? '', descriptionEn: fields[6] ?? '', images: fields[7] ?? '',
+    }));
   }
 }

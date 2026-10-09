@@ -54,7 +54,7 @@ const OrderManagePage: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const [shipOpen, setShipOpen] = useState<boolean>(false);
-  const [trackingNo, setTrackingNo] = useState<string>('');
+  const [trackingNumber, setTrackingNo] = useState<string>('');
   const [carrier, setCarrier] = useState<string>('');
   const [shippingOrder, setShippingOrder] = useState<Order | null>(null);
 
@@ -114,20 +114,20 @@ const OrderManagePage: React.FC = () => {
       toast('请选择承运商');
       return;
     }
-    if (!trackingNo.trim()) {
+    if (!trackingNumber.trim()) {
       toast('请输入运单号');
       return;
     }
     try {
       await ordersApi.updateOrderStatus(shippingOrder.id, {
         status: 'shipped',
-        trackingNo: trackingNo || undefined,
+        trackingNumber: trackingNumber || undefined,
       });
       // 登记物流信息
       await createLogistics({
         orderId: shippingOrder.id,
         carrier,
-        trackingNumber: trackingNo,
+        trackingNumber: trackingNumber,
       });
       setShipOpen(false);
       setShippingOrder(null);
@@ -388,11 +388,11 @@ const OrderManagePage: React.FC = () => {
                       {selectedOrder.shippingCountry}{' '}
                       {selectedOrder.shippingZip || ''}
                     </div>
-                    {selectedOrder.trackingNo && (
+                    {selectedOrder.trackingNumber && (
                       <div>
                         <span className="text-muted-foreground">物流单号：</span>
                         <span className="font-mono">
-                          {selectedOrder.trackingNo}
+                          {selectedOrder.trackingNumber}
                         </span>
                       </div>
                     )}
@@ -542,7 +542,7 @@ const OrderManagePage: React.FC = () => {
               </label>
               <Input
                 placeholder="请输入运单号"
-                value={trackingNo}
+                value={trackingNumber}
                 onChange={(e) => setTrackingNo(e.target.value)}
               />
             </div>

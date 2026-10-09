@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq, desc, ilike, or, and } from 'drizzle-orm';
+import { eq, desc, ilike, or, and, inArray, sum, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService, type ChatMessage } from './ai-gateway.service';
-import { products, inquiryMessages, orders } from '@server/database/schema';
+import { products, productVariants, inquiryMessages, orders, orderFulfillments } from '@server/database/schema';
 import type { SupportChatRequest, SupportChatResponse } from '@shared/api.interface';
 
 interface FAQEntry {
@@ -49,7 +49,7 @@ export class SupportService {
   async chat(dto: SupportChatRequest, userId?: string): Promise<SupportChatResponse> {
     const messageLower = dto.message.toLowerCase();
 
-    // RAG: 检索相关商品（优先向量检索，失败回退关键词匹配）
+    // RAG: 检索相关商品
     const relatedProducts = await this.searchProducts(dto.message, dto.language);
 
     // RAG: 匹配店铺政策 FAQ
@@ -69,7 +69,7 @@ export class SupportService {
 
     if (relatedProducts.length > 0) {
       const productsText = relatedProducts
-        .map((p, i: number) => `${i + 1}. ${p.titleEn} - ${p.descEn || 'No description'} - Price: $${p.price}`)
+        .map((p, i: number) => `${i + 1}. ${p.titleEn} - ${p.descEn || 'No description'} - Price from $${p.minPrice}, Stock: ${p.totalStock}`)
         .join('\n');
       contextParts.push(`【相关商品】\n${productsText}`);
     }
@@ -119,11 +119,10 @@ export class SupportService {
   private async searchProducts(
     query: string,
     language?: string,
-  ): Promise<Array<{ id: string; titleEn: string; descEn: string | null; price: string }>> {
+  ): Promise<Array<{ id: string; titleEn: string; descEn: string | null; minPrice: string; totalStock: number }>> {
     void language;
 
     // 关键词匹配检索
-    // 判断是否包含商品相关词汇
     const productKeywords = ['product', '商品', '产品', 'item', '商品详情', '规格', 'spec', '多少钱', 'price', '价格'];
     const lowerQuery = query.toLowerCase();
     const isProductRelated = productKeywords.some((kw: string) => lowerQuery.includes(kw.toLowerCase()));
@@ -138,7 +137,6 @@ export class SupportService {
           id: products.id,
           titleEn: products.titleEn,
           descEn: products.descEn,
-          price: products.price,
         })
         .from(products)
         .where(and(
@@ -149,15 +147,39 @@ export class SupportService {
             ilike(products.descEn, `%${query}%`),
           ),
         ))
-        .orderBy(desc(products.sold))
-        .limit(5);
+        .limit(20);
 
-      return rows.map((row) => ({
-        id: row.id,
-        titleEn: row.titleEn,
-        descEn: row.descEn,
-        price: String(row.price),
-      }));
+      if (rows.length === 0) return [];
+
+      const productIds = rows.map((r) => r.id);
+
+      // Get variant aggregates for price and stock
+      const variantRows = await this.db
+        .select({
+          productId: productVariants.productId,
+          minPrice: sql<string>`MIN(${productVariants.price})::text`,
+          totalStock: sql<number>`COALESCE(SUM(${productVariants.stock}), 0)`,
+          totalSold: sql<number>`COALESCE(SUM(${productVariants.sold}), 0)`,
+        })
+        .from(productVariants)
+        .where(and(
+          inArray(productVariants.productId, productIds),
+          eq(productVariants.status, 'active'),
+        ))
+        .groupBy(productVariants.productId);
+
+      const variantMap = new Map(variantRows.map((v) => [v.productId, v]));
+
+      return rows.map((row) => {
+        const v = variantMap.get(row.id);
+        return {
+          id: row.id,
+          titleEn: row.titleEn,
+          descEn: row.descEn,
+          minPrice: v ? String(v.minPrice) : 'N/A',
+          totalStock: v ? Number(v.totalStock) : 0,
+        };
+      });
     } catch {
       return [];
     }
@@ -171,22 +193,26 @@ export class SupportService {
 
   private async getOrderInfo(orderNo: string): Promise<string> {
     try {
-      const [order] = await this.db
-        .select({
-          orderNo: orders.orderNo,
-          status: orders.status,
-          totalAmount: orders.totalAmount,
-          trackingNo: orders.trackingNumber,
-          createdAt: orders.createdAt,
-          shippedAt: orders.shippedAt,
-        })
+      const orderRows = await this.db
+        .select()
         .from(orders)
         .where(eq(orders.orderNo, orderNo))
         .limit(1);
 
-      if (!order) {
+      if (orderRows.length === 0) {
         return `订单号 ${orderNo} 未找到。`;
       }
+      const order = orderRows[0];
+
+      // Get fulfillments for tracking info
+      const fulfillments = await this.db
+        .select({
+          carrier: orderFulfillments.carrier,
+          trackingNumber: orderFulfillments.trackingNumber,
+          status: orderFulfillments.status,
+        })
+        .from(orderFulfillments)
+        .where(eq(orderFulfillments.orderId, order.id));
 
       const statusMap: Record<string, string> = {
         pending_payment: '待付款',
@@ -194,13 +220,33 @@ export class SupportService {
         shipped: '已发货',
         delivered: '已送达',
         cancelled: '已取消',
+        refunded: '已退款',
+        partially_refunded: '部分退款',
+        processing: '处理中',
       };
+
+      const trackingStr = fulfillments.length > 0
+        ? fulfillments.map((f) => `${f.carrier ?? ''}: ${f.trackingNumber ?? '无'}`).join(', ')
+        : '暂无';
+
+      // Parse address from snapshot
+      let addressStr = '';
+      if (order.addressSnapshot) {
+        try {
+          const addr = JSON.parse(order.addressSnapshot);
+          addressStr = `${addr.receiverName ?? ''}, ${addr.addressLine1 ?? ''}, ${addr.city ?? ''}, ${addr.country ?? ''}`;
+        } catch {
+          // ignore parse error
+        }
+      }
 
       return [
         `订单号: ${order.orderNo}`,
         `状态: ${statusMap[order.status] || order.status}`,
         `金额: $${order.totalAmount}`,
-          order.trackingNo ? `运单号: ${order.trackingNo}` : '',
+        `收货地址: ${addressStr || '暂无'}`,
+        `运单号: ${trackingStr}`,
+        `支付方式: ${order.paymentMethod ?? ''}`,
         order.shippedAt ? `发货时间: ${order.shippedAt.toISOString()}` : '',
       ].filter(Boolean).join('\n');
     } catch {
@@ -220,7 +266,6 @@ export class SupportService {
         .orderBy(desc(inquiryMessages.createdAt))
         .limit(10);
 
-      // 按时间升序排列，且只保留 user/assistant 角色
       return rows
         .reverse()
         .filter((row) => row.role === 'user' || row.role === 'assistant')

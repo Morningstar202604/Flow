@@ -52,6 +52,7 @@
     "echarts": "^6.1.0",
     "embla-carousel-react": "^8.6.0",
     "lucide-react": "^1.53.0",
+    "papaparse": "^5.7.0",
     "pg": "^8.13.1",
     "postcss-import": "^17.0.0",
     "postgres": "^3.4.5",

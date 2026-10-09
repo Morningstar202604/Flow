@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { eq, and, desc, gte, sql, sum, count } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService } from './ai-gateway.service';
-import { products, categories, orders, orderItems } from '@server/database/schema';
+import { products, productVariants, categories, orders, orderItems } from '@server/database/schema';
 import type { AITrendReport } from '@shared/api.interface';
 
 @Injectable()
@@ -115,23 +115,30 @@ ${dataContext}
   }
 
   private async getTopProducts(): Promise<Array<{ id: string; titleEn: string; sold: number; price: string }>> {
+    // Aggregate from productVariants: SUM(variants.sold) per product, MIN(price) for display
     const rows = await this.db
       .select({
         id: products.id,
         titleEn: products.titleEn,
-        sold: products.sold,
-        price: products.price,
+        totalSold: sql<number>`COALESCE(SUM(${productVariants.sold}), 0)`,
+        minPrice: sql<string>`MIN(${productVariants.price})::text`,
+        totalStock: sql<number>`COALESCE(SUM(${productVariants.stock}), 0)`,
       })
       .from(products)
+      .leftJoin(productVariants, and(
+        eq(productVariants.productId, products.id),
+        eq(productVariants.status, 'active'),
+      ))
       .where(eq(products.status, 'active'))
-      .orderBy(desc(products.sold))
+      .groupBy(products.id, products.titleEn)
+      .orderBy(desc(sql`COALESCE(SUM(${productVariants.sold}), 0)`))
       .limit(10);
 
     return rows.map((row) => ({
       id: row.id,
       titleEn: row.titleEn,
-      sold: row.sold,
-      price: String(row.price),
+      sold: Number(row.totalSold),
+      price: String(row.minPrice),
     }));
   }
 }

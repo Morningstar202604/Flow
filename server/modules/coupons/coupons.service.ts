@@ -4,14 +4,14 @@ import {
   Logger,
   BadRequestException,
   NotFoundException,
-  ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc, count, gte, lt, sql } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
+import { nanoid } from 'nanoid';
 
-import { coupons } from '@server/database/schema';
+import { coupons, couponUsage } from '@server/database/schema';
 import type {
   Coupon,
   CouponListResponse,
@@ -76,7 +76,7 @@ export class CouponsService {
     if (!dto.code?.trim()) {
       throw new BadRequestException('优惠码不能为空');
     }
-    if (!dto.value || dto.value <= 0) {
+    if (dto.type !== 'free_shipping' && (!dto.value || dto.value <= 0)) {
       throw new BadRequestException('面额必须大于 0');
     }
     if (dto.type === 'percent' && dto.value > 100) {
@@ -97,10 +97,15 @@ export class CouponsService {
         sellerId: auditMeta?.userId ?? null,
         code: dto.code.trim().toUpperCase(),
         type: dto.type,
-        value: dto.value.toString(),
+        value: (dto.value ?? 0).toString(),
+        appliesTo: dto.appliesTo ?? 'all',
+        appliesToIds: dto.appliesToIds ?? [],
+        freeShipping: dto.freeShipping ?? false,
         minOrderAmount: (dto.minOrderAmount ?? 0).toString(),
         totalQuantity: dto.totalQuantity ?? 1,
-        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+        perUserLimit: dto.perUserLimit ?? 1,
+        startsAt: dto.startsAt ? new Date(dto.startsAt) : new Date(),
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         active: dto.active ?? true,
       })
       .returning();
@@ -155,6 +160,13 @@ export class CouponsService {
       patch.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
     }
     if (dto.active !== undefined) patch.active = dto.active;
+    if (dto.appliesTo !== undefined) patch.appliesTo = dto.appliesTo;
+    if (dto.appliesToIds !== undefined) patch.appliesToIds = dto.appliesToIds;
+    if (dto.freeShipping !== undefined) patch.freeShipping = dto.freeShipping;
+    if (dto.perUserLimit !== undefined) patch.perUserLimit = dto.perUserLimit;
+    if (dto.startsAt !== undefined) {
+      patch.startsAt = dto.startsAt ? new Date(dto.startsAt) : new Date();
+    }
 
     if (Object.keys(patch).length === 0) {
       return this.mapCoupon(rows[0]);
@@ -169,7 +181,11 @@ export class CouponsService {
     return this.mapCoupon(updated[0]);
   }
 
-  async validate(code: string, orderAmountStr: string): Promise<ValidateCouponResponse> {
+  async validate(
+    code: string,
+    orderAmountStr: string,
+    userId?: string,
+  ): Promise<ValidateCouponResponse> {
     if (!code?.trim()) {
       return {
         valid: false,
@@ -206,6 +222,15 @@ export class CouponsService {
       };
     }
 
+    if (coupon.startsAt && new Date(coupon.startsAt) > new Date()) {
+      return {
+        valid: false,
+        discountAmount: 0,
+        finalAmount: orderAmount.toNumber(),
+        message: '该优惠码尚未生效',
+      };
+    }
+
     if (coupon.expiresAt && new Date(coupon.expiresAt) < new Date()) {
       return {
         valid: false,
@@ -224,6 +249,26 @@ export class CouponsService {
       };
     }
 
+    // Per-user limit check
+    if (userId && Number(coupon.perUserLimit) > 0) {
+      const userUsageCount = await this.db
+        .select({ count: count() })
+        .from(couponUsage)
+        .where(and(
+          eq(couponUsage.couponId, coupon.id),
+          eq(couponUsage.userId, userId),
+        ));
+
+      if (Number(userUsageCount[0]?.count ?? 0) >= Number(coupon.perUserLimit)) {
+        return {
+          valid: false,
+          discountAmount: 0,
+          finalAmount: orderAmount.toNumber(),
+          message: `该优惠码每人限用 ${coupon.perUserLimit} 次`,
+        };
+      }
+    }
+
     const minOrderAmount = new Decimal(coupon.minOrderAmount as string);
     if (orderAmount.lt(minOrderAmount)) {
       return {
@@ -231,6 +276,25 @@ export class CouponsService {
         discountAmount: 0,
         finalAmount: orderAmount.toNumber(),
         message: `订单金额需满 ¥${minOrderAmount.toFixed(2)} 才能使用`,
+      };
+    }
+
+    // Handle free_shipping type
+    if (coupon.type === 'free_shipping') {
+      if (coupon.freeShipping) {
+        return {
+          valid: true,
+          coupon: this.mapCoupon(coupon),
+          discountAmount: 0,
+          finalAmount: orderAmount.toNumber(),
+          message: '免运费已应用',
+        };
+      }
+      return {
+        valid: false,
+        discountAmount: 0,
+        finalAmount: orderAmount.toNumber(),
+        message: '该优惠码无法用于免运费',
       };
     }
 
@@ -296,5 +360,110 @@ export class CouponsService {
     } catch {
       // Audit log failure must not affect main flow
     }
+  }
+
+  /**
+   * Record that a specific user has used this coupon for a specific order.
+   * Used for per-user limit enforcement via coupon_usage table.
+   */
+  async recordCouponUsage(
+    couponId: string,
+    userId: string,
+    orderId: string,
+  ): Promise<void> {
+    await this.db
+      .insert(couponUsage)
+      .values({
+        couponId,
+        userId,
+        orderId,
+      })
+      .onConflictDoNothing({
+        target: [couponUsage.couponId, couponUsage.userId, couponUsage.orderId],
+      });
+  }
+
+  /**
+   * Get how many times a specific user has already used a coupon.
+   */
+  async getUserCouponUsageCount(couponId: string, userId: string): Promise<number> {
+    const rows = await this.db
+      .select({ count: count() })
+      .from(couponUsage)
+      .where(and(
+        eq(couponUsage.couponId, couponId),
+        eq(couponUsage.userId, userId),
+      ));
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  /**
+   * Generate bulk coupon codes for a template coupon.
+   * Creates N unique codes derived from a base pattern.
+   */
+  async generateBulkCodes(
+    baseCode: string,
+    count: number,
+    auditMeta?: { userId?: string; role?: string; ip?: string },
+  ): Promise<string[]> {
+    if (count <= 0 || count > 1000) {
+      throw new BadRequestException('批量生成数量必须在 1-1000 之间');
+    }
+
+    const created: string[] = [];
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    for (let i = 0; i < count; i += 1) {
+      const code = `${baseCode.trim().toUpperCase()}-${nanoid(6).toUpperCase()}`;
+
+      // Check for collision
+      const existing = await this.db
+        .select({ id: coupons.id })
+        .from(coupons)
+        .where(eq(coupons.code, code));
+
+      if (existing.length > 0) {
+        continue;
+      }
+
+      await this.db
+        .insert(coupons)
+        .values({
+          sellerId: auditMeta?.userId ?? null,
+          code,
+          type: 'fixed',
+          value: '10',
+          appliesTo: 'all',
+          appliesToIds: [],
+          freeShipping: false,
+          minOrderAmount: '50',
+          totalQuantity: 1,
+          perUserLimit: 1,
+          startsAt: now,
+          expiresAt,
+          active: true,
+        });
+
+      created.push(code);
+    }
+
+    this.logger.log(`Generated ${created.length} bulk coupon codes with base: ${baseCode}`);
+
+    try {
+      void this.auditService.log({
+        action: 'coupon.bulk_generate',
+        entity: 'coupon',
+        entityId: baseCode,
+        after: { count: created.length },
+        userId: auditMeta?.userId,
+        role: auditMeta?.role,
+        ip: auditMeta?.ip,
+      });
+    } catch {
+      // Audit log failure must not affect main flow
+    }
+
+    return created;
   }
 }

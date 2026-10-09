@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql, sum } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService } from './ai-gateway.service';
-import { products, categories } from '@server/database/schema';
+import { products, productVariants, categories } from '@server/database/schema';
 import type { AISelectResponse } from '@shared/api.interface';
 
 @Injectable()
@@ -19,25 +19,39 @@ export class SelectService {
       nameEn: categories.nameEn,
     }).from(categories);
 
-    const topProducts = await this.db
+    // Aggregate variant data per product for sold/price/stock
+    const variantAgg = await this.db
       .select({
-        id: products.id,
-        titleEn: products.titleEn,
-        categoryId: products.categoryId,
-        sold: products.sold,
-        price: products.price,
-        stock: products.stock,
+        productId: productVariants.productId,
+        totalSold: sql<number>`COALESCE(SUM(${productVariants.sold}), 0)`,
+        totalStock: sql<number>`COALESCE(SUM(${productVariants.stock}), 0)`,
+        minPrice: sql<string>`MIN(${productVariants.price})::text`,
       })
-      .from(products)
-      .where(eq(products.status, 'active'))
-      .orderBy(desc(products.sold))
+      .from(productVariants)
+      .where(eq(productVariants.status, 'active'))
+      .groupBy(productVariants.productId)
+      .orderBy(desc(sql`COALESCE(SUM(${productVariants.sold}), 0)`))
       .limit(20);
 
-    const stockLevels = topProducts.map((p) => ({
-      titleEn: p.titleEn,
-      stock: p.stock,
-      price: String(p.price),
-    }));
+    // Get product titles for the top variant products
+    const productIds = variantAgg.map((v) => v.productId);
+    const productRows = productIds.length > 0
+      ? await this.db
+        .select({ id: products.id, titleEn: products.titleEn, categoryId: products.categoryId })
+        .from(products)
+        .where(eq(products.status, 'active'))
+      : [];
+
+    const productMap = new Map(productRows.map((p) => [p.id, p]));
+
+    const stockLevels = variantAgg
+      .filter((v) => productMap.has(v.productId))
+      .map((v) => ({
+        titleEn: productMap.get(v.productId)!.titleEn,
+        stock: Number(v.totalStock),
+        sold: Number(v.totalSold),
+        price: String(v.minPrice),
+      }));
 
     const dataContext = JSON.stringify({
       categories: allCategories,

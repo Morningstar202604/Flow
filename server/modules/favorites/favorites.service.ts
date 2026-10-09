@@ -6,9 +6,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { eq, desc, and, inArray } from 'drizzle-orm';
+import { eq, desc, and, inArray, sql } from 'drizzle-orm';
 
-import { favorites, products } from '@server/database/schema';
+import { favorites, products, productVariants } from '@server/database/schema';
 import type { FavoriteProduct } from '@shared/api.interface';
 
 @Injectable()
@@ -33,38 +33,66 @@ export class FavoritesService {
       .where(eq(favorites.userId, userId))
       .orderBy(desc(favorites.createdAt));
 
-    return rows.map((row) => ({
-      id: row.id,
-      userId: row.userId,
-      productId: row.productId,
-      createdAt: row.createdAt.toISOString(),
-      product: {
-        id: row.product.id,
-        sku: row.product.sku ?? undefined,
-        titleZh: row.product.titleZh,
-        titleEn: row.product.titleEn,
-        descZh: row.product.descZh ?? '',
-        descEn: row.product.descEn ?? '',
-        longDescZh: row.product.longDescZh ?? '',
-        longDescEn: row.product.longDescEn ?? '',
-        categoryId: row.product.categoryId ?? undefined,
-        price: row.product.price.toString(),
-        originalPrice: row.product.originalPrice?.toString(),
-        stock: Number(row.product.stock),
-        sold: Number(row.product.sold),
-        status: row.product.status as any,
-        coverImage: row.product.coverImage ?? undefined,
-        images: (row.product.images as string[]) ?? [],
-        specs: row.product.specs as any,
-        seoKeywordsZh: row.product.seoKeywordsZh ?? '',
-        seoKeywordsEn: row.product.seoKeywordsEn ?? '',
-        bulletPointsZh: (row.product.bulletPointsZh as string[]) ?? [],
-        bulletPointsEn: (row.product.bulletPointsEn as string[]) ?? [],
-        weight: row.product.weight?.toString(),
-        createdAt: row.product.createdAt.toISOString(),
-        updatedAt: row.product.updatedAt.toISOString(),
-      },
-    }));
+    if (rows.length === 0) return [];
+
+    // Batch-load variant aggregates for all products
+    const productIds = [...new Set(rows.map((r) => r.productId))];
+    const variantAgg = await this.db
+      .select({
+        productId: productVariants.productId,
+        totalSold: sql<number>`COALESCE(SUM(${productVariants.sold}), 0)`,
+        totalStock: sql<number>`COALESCE(SUM(${productVariants.stock}), 0)`,
+        minPrice: sql<string>`MIN(${productVariants.price})::text`,
+        maxPrice: sql<string>`MAX(${productVariants.price})::text`,
+        minOriginalPrice: sql<string>`MIN(${productVariants.originalPrice})::text`,
+        sampleSku: sql<string>`MIN(${productVariants.sku})`,
+      })
+      .from(productVariants)
+      .where(and(
+        inArray(productVariants.productId, productIds),
+        eq(productVariants.status, 'active'),
+      ))
+      .groupBy(productVariants.productId);
+
+    const variantMap = new Map(variantAgg.map((v) => [v.productId, v]));
+
+    return rows.map((row) => {
+      const v = variantMap.get(row.productId);
+      return {
+        id: row.id,
+        userId: row.userId,
+        productId: row.productId,
+        createdAt: row.createdAt.toISOString(),
+        product: {
+          id: row.product.id,
+          sku: v ? String(v.sampleSku) : undefined,
+          titleZh: row.product.titleZh,
+          titleEn: row.product.titleEn,
+          descZh: row.product.descZh ?? '',
+          descEn: row.product.descEn ?? '',
+          longDescZh: row.product.longDescZh ?? '',
+          longDescEn: row.product.longDescEn ?? '',
+          categoryId: row.product.categoryId ?? undefined,
+          price: v ? String(v.minPrice) : '0',
+          originalPrice: v ? String(v.minOriginalPrice) : undefined,
+          stock: v ? Number(v.totalStock) : Number(row.product.totalStock ?? 0),
+          sold: v ? Number(v.totalSold) : Number(row.product.totalSold ?? 0),
+          status: row.product.status as any,
+          coverImage: row.product.coverImage ?? undefined,
+          images: (row.product.images as string[]) ?? [],
+          specs: {},
+          seoKeywordsZh: row.product.seoKeywordsZh ?? '',
+          seoKeywordsEn: row.product.seoKeywordsEn ?? '',
+          bulletPointsZh: (row.product.bulletPointsZh as string[]) ?? [],
+          bulletPointsEn: (row.product.bulletPointsEn as string[]) ?? [],
+          weight: row.product.weight?.toString(),
+          avgRating: Number(row.product.avgRating ?? 0),
+          reviewCount: Number(row.product.reviewCount ?? 0),
+          createdAt: row.product.createdAt.toISOString(),
+          updatedAt: row.product.updatedAt.toISOString(),
+        },
+      };
+    });
   }
 
   async toggle(productId: string, userId: string | undefined): Promise<{

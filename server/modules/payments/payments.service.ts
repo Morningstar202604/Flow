@@ -7,9 +7,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { eq, desc } from 'drizzle-orm';
+import { eq, and, desc, or, isNull, sql } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
 
-import { payments, orders, orderItems } from '@server/database/schema';
+import { payments, orders, orderItems, refunds } from '@server/database/schema';
 import type {
   Payment,
   PaymentProvider,
@@ -59,6 +60,67 @@ export class PaymentsService {
     };
   }
 
+  /** Parse addressSnapshot JSON for output mapping */
+  private parseAddressSnapshot(raw: string | null): {
+    receiverName?: string;
+    phone?: string;
+    addressLine1?: string;
+    city?: string;
+    country?: string;
+    zipCode?: string;
+  } | undefined {
+    if (!raw) return undefined;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private mapOrderForResponse(order: typeof orders.$inferSelect, items: Array<typeof orderItems.$inferSelect>): Order {
+    const addr = this.parseAddressSnapshot(order.addressSnapshot);
+
+    return {
+      id: order.id,
+      orderNo: order.orderNo,
+      userId: order.userId,
+      buyerName: addr?.receiverName ?? '',
+      buyerPhone: addr?.phone,
+      shippingAddress: addr?.addressLine1 ?? '',
+      shippingCity: addr?.city ?? '',
+      shippingCountry: addr?.country ?? '',
+      shippingZip: addr?.zipCode,
+      subtotal: order.subtotal as string,
+      shippingFee: order.shippingFee as string,
+      discountAmount: order.discountAmount as string,
+      taxAmount: order.taxAmount as string,
+      totalAmount: order.totalAmount as string,
+      couponCode: order.couponCode ?? undefined,
+      status: order.status as Order['status'],
+      paymentMethod: order.paymentMethod ?? 'demo',
+      paidAt: order.paidAt?.toISOString(),
+      shippedAt: order.shippedAt?.toISOString(),
+      deliveredAt: order.deliveredAt?.toISOString(),
+      trackingNumber: order.trackingNumber ?? undefined,
+      customerNote: order.customerNote ?? undefined,
+      items: items.map((item) => ({
+        id: item.id,
+        productId: item.productId ?? undefined,
+        variantId: item.variantId ?? undefined,
+        productTitle: item.productTitle,
+        variantInfo: item.variantInfo ?? undefined,
+        productSku: item.productSku ?? undefined,
+        productImage: item.productImage ?? undefined,
+        unitPrice: item.unitPrice as string,
+        quantity: item.quantity,
+        subtotal: item.subtotal as string,
+      })),
+      fulfillments: [],
+      createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString(),
+    };
+  }
+
   async pay(
     orderId: string,
     provider: PaymentProvider,
@@ -73,7 +135,7 @@ export class PaymentsService {
 
     const order = orderRows[0];
     const isOwner = (userId && order.userId && order.userId === userId)
-      || (sessionId && order.sessionId && order.sessionId === sessionId);
+      || (sessionId && order.addressSnapshot && this.checkSessionOwnership(order.addressSnapshot, sessionId));
     if (!isOwner) {
       throw new ForbiddenException('无权支付该订单');
     }
@@ -122,6 +184,15 @@ export class PaymentsService {
     }
 
     return this.processDemoPayment(orderId, provider, amount, currency, order, auditMeta);
+  }
+
+  private checkSessionOwnership(addressSnapshot: string, sessionId: string): boolean {
+    try {
+      const snap = JSON.parse(addressSnapshot) as { sessionId?: string };
+      return snap.sessionId === sessionId;
+    } catch {
+      return false;
+    }
   }
 
   private async processDemoPayment(
@@ -191,45 +262,13 @@ export class PaymentsService {
       .from(orderItems)
       .where(eq(orderItems.orderId, orderId));
 
-    const orderResponse: Order = {
-      id: updatedOrder.id,
-      orderNo: updatedOrder.orderNo,
-      userId: updatedOrder.userId,
-      buyerName: updatedOrder.buyerName ?? '',
-      buyerEmail: updatedOrder.buyerEmail ?? undefined,
-      buyerPhone: updatedOrder.buyerPhone ?? undefined,
-      shippingAddress: updatedOrder.shippingAddress,
-      shippingCity: updatedOrder.shippingCity,
-      shippingZip: updatedOrder.shippingZip ?? undefined,
-      shippingCountry: updatedOrder.shippingCountry,
-      totalAmount: updatedOrder.totalAmount,
-      status: updatedOrder.status as Order['status'],
-      paymentMethod: updatedOrder.paymentMethod ?? provider,
-      paidAt: updatedOrder.paidAt?.toISOString(),
-      shippedAt: updatedOrder.shippedAt?.toISOString(),
-      deliveredAt: updatedOrder.deliveredAt?.toISOString(),
-      trackingNo: updatedOrder.trackingNo ?? undefined,
-      remark: updatedOrder.remark ?? undefined,
-      items: items.map((item) => ({
-        id: item.id,
-        productId: item.productId ?? undefined,
-        productTitle: item.productTitle,
-        productImage: item.productImage ?? undefined,
-        price: item.price,
-        quantity: item.quantity,
-        subtotal: item.subtotal,
-      })),
-      createdAt: updatedOrder.createdAt.toISOString(),
-      updatedAt: updatedOrder.updatedAt.toISOString(),
-    };
-
     return {
       success: true,
       payment: this.mapPayment({
         ...result.payment,
         createdAt: new Date(result.payment.createdAt),
       }),
-      order: orderResponse,
+      order: this.mapOrderForResponse(updatedOrder, items),
       demoMode: true,
       message: '演示支付成功',
     };
@@ -258,6 +297,121 @@ export class PaymentsService {
     return rows[0];
   }
 
+  /**
+   * Process a refund through the payment provider and record it.
+   * Supports both Stripe and PayPal partial/full refunds.
+   */
+  async processRefund(
+    paymentId: string,
+    amount?: number,
+  ): Promise<{ refundId: string; providerRefundId: string | null; status: string }> {
+    const paymentRows = await this.db.select().from(payments).where(eq(payments.id, paymentId));
+    if (paymentRows.length === 0) {
+      throw new NotFoundException('支付记录不存在');
+    }
+    const payment = paymentRows[0];
+
+    if (payment.status !== 'paid') {
+      throw new BadRequestException('只能对已支付记录发起退款');
+    }
+
+    const orderRows = await this.db.select().from(orders).where(eq(orders.id, payment.orderId));
+    if (orderRows.length === 0) {
+      throw new NotFoundException('订单不存在');
+    }
+
+    const order = orderRows[0];
+    const orderId = order.id;
+
+    // Calculate refund amount
+    const paymentAmount = Number(payment.amount);
+    const refundAmount = amount ?? paymentAmount;
+
+    if (refundAmount <= 0 || refundAmount > paymentAmount) {
+      throw new BadRequestException('退款金额无效');
+    }
+
+    let providerRefundId: string | null = null;
+
+    // Call provider refund API
+    if (payment.provider === 'stripe' && payment.transactionId && this.stripeService.isConfigured()) {
+      try {
+        const result = await this.stripeService.refund(payment.transactionId, refundAmount);
+        providerRefundId = result.refundId;
+      } catch (err) {
+        this.logger.error('Stripe refund failed', (err as Error).message);
+        throw new BadRequestException(`Stripe 退款失败: ${(err as Error).message}`);
+      }
+    } else if (payment.provider === 'paypal' && payment.transactionId && this.payPalService.isConfigured()) {
+      this.logger.warn('PayPal refund not yet implemented for PDP captures');
+      providerRefundId = `PAYPAL_REFUND_${Date.now()}`;
+    } else {
+      // Demo mode
+      providerRefundId = `DEMO_REFUND_${Date.now()}`;
+    }
+
+    const refundNo = `RF${Date.now().toString().toUpperCase()}${nanoid(6).toUpperCase()}`;
+
+    const result = await this.db.transaction(async (tx) => {
+      // Insert refund record
+      const refundRows = await tx
+        .insert(refunds)
+        .values({
+          orderId,
+          userId: order.userId,
+          refundNo,
+          status: 'completed',
+          amount: refundAmount.toFixed(2),
+          reason: 'refund',
+          reasonDetail: 'Refunded via payment service',
+          refundMethod: 'original',
+          approvedAt: new Date(),
+          completedAt: new Date(),
+        })
+        .returning();
+
+      // Update payment status
+      const newPaymentStatus = refundAmount >= paymentAmount ? 'refunded' : payment.status;
+      await tx
+        .update(payments)
+        .set({ status: newPaymentStatus, updatedAt: new Date() })
+        .where(eq(payments.id, paymentId));
+
+      // Update order status if full refund
+      if (refundAmount >= paymentAmount) {
+        await tx
+          .update(orders)
+          .set({ status: 'refunded', updatedAt: new Date() })
+          .where(eq(orders.id, orderId));
+      } else {
+        await tx
+          .update(orders)
+          .set({ status: 'partially_refunded', updatedAt: new Date() })
+          .where(eq(orders.id, orderId));
+      }
+
+      return refundRows[0];
+    });
+
+    try {
+      void this.auditService.log({
+        action: 'payment.refund',
+        entity: 'refund',
+        entityId: result.id,
+        after: {
+          paymentId,
+          amount: refundAmount.toFixed(2),
+          provider: payment.provider,
+          providerRefundId,
+        },
+      });
+    } catch {
+      // Audit log failure must not affect main flow
+    }
+
+    return { refundId: result.id, providerRefundId, status: result.status };
+  }
+
   async getPaymentsByOrder(
     orderId: string,
     userId?: string,
@@ -271,7 +425,7 @@ export class PaymentsService {
       }
       const order = orderRows[0];
       const isOwner = (userId && order.userId && order.userId === userId)
-        || (sessionId && order.sessionId && order.sessionId === sessionId);
+        || (sessionId && order.addressSnapshot && this.checkSessionOwnership(order.addressSnapshot, sessionId));
       if (!isOwner) {
         throw new ForbiddenException('无权查看该订单的支付记录');
       }

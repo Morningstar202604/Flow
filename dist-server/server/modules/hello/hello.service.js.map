@@ -1,1 +1,0 @@
-{"version":3,"file":"hello.service.js","sourceRoot":"","sources":["../../../../server/modules/hello/hello.service.ts"],"names":[],"mappings":";;;;;;;;;AAAA,2CAA4C;AAGrC,IAAM,YAAY,GAAlB,MAAM,YAAY;IACvB,SAAS;QACP,OAAO,EAAE,MAAM,EAAE,IAAI,EAAE,SAAS,EAAE,IAAI,IAAI,EAAE,CAAC,WAAW,EAAE,EAAE,CAAC;IAC/D,CAAC;CACF,CAAA;AAJY,oCAAY;uBAAZ,YAAY;IADxB,IAAA,mBAAU,GAAE;GACA,YAAY,CAIxB"}

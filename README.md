@@ -15,7 +15,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 [![GitHub](https://img.shields.io/badge/GitHub-X33834%2FGlobalEcom--AI-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![Gitee](https://img.shields.io/badge/Gitee-badhope%2FGlobalEcom--AI-C71D23?style=flat-square&logo=gitee&logoColor=white)](https://gitee.com/badhope/GlobalEcom-AI)
 [![GitCode](https://img.shields.io/badge/GitCode-badhope%2FGlobalEcom--AI-2F6BFF?style=flat-square&logo=git&logoColor=white)](https://gitcode.com/badhope/GlobalEcom-AI)
-[![Version](https://img.shields.io/badge/version-v1.0.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.0.0)
+[![Version](https://img.shields.io/badge/version-v1.1.1-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.1.1)
 [![Stars](https://img.shields.io/github/stars/X33834/GlobalEcom-AI?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![CI](https://img.shields.io/github/actions/workflow/status/X33834/GlobalEcom-AI/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/X33834/GlobalEcom-AI/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -33,7 +33,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 - **品牌定位 / Positioning**：AI 原生跨境出货台 · AI-Native Cross-Border Commerce Platform
 - **主传播语 / Tagline**：AI 让跨境生意更简单 · Make Cross-Border Business Simpler with AI
 - **主色 / Brand Colors**：深海军蓝 `#0B1F3A` + 科技青 `#00C2B8`
-- **当前版本 / Version**：v1.0.0（[CHANGELOG.md](CHANGELOG.md)）
+- **当前版本 / Version**：v1.1.1（[CHANGELOG.md](CHANGELOG.md)）
 
 ---
 
@@ -58,23 +58,29 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 
 ### 买家商城（B2C）· Buyer Storefront
 
-- **浏览与搜索**：首页推荐、分类导航、商品列表筛选 / 排序 / 分页、关键词搜索（`pg_trgm` 模糊匹配）
-- **购物车**：增删改、数量调整、价格实时计算；匿名购物车支持**跨设备"迁移码"恢复**
-- **下单与支付**：收货信息校验、Stripe / PayPal 演示接入（未配 key 走演示支付）、**金额后端重算**（不信任前端金额）
-- **订单跟踪**：订单列表、详情、物流时间线（17TRACK 接入点，未配 key 走演示时间线）
-- **评价与收藏**：已购用户可评价、心形收藏、我的收藏页
-- **优惠券**：结算时输入折扣码，**原子核销防超用**
-- **多语言**：界面与商品内容支持 **zh / en / es / pt** 四语言切换
+- **浏览与搜索**：首页推荐、人工运营楼层（Collection）、分类导航、筛选/排序/分页、关键词搜索（`pg_trgm`）
+- **商品详情**：图片画廊、多规格选择（颜色/尺码等 SPU→SKU 变体体系）、加购/立即购买
+- **购物车**：增删改、数量调整、价格实时计算；匿名购物车支持**跨设备迁移码恢复**
+- **下单与支付**：收货地址簿、**运费模板**（按重量/件数/地区/满额包邮）、优惠券核销、Stripe / PayPal / Demo
+- **订单跟踪**：状态时间线、物流轨迹、**退款申请**（卖家审批 → 原路退回）、带图评价
+- **会员体系**：积分赚取 / 消费、等级（bronze / silver / gold）
+- **多语言**：zh / en / es / pt 四语言，商品双语展示
+- **CMS**：自定义页面（About、FAQ 等）
 
 ### 卖家 AI 工作台 · Seller AI Workbench
 
-- **运营看板**：GMV / 订单量 / 访客数，SQL 真实聚合 + ECharts 图表
-- **商品管理**：CRUD、上下架、库存、**CSV 批量导入**（≤10MB）
-- **订单管理**：列表、状态流转、发货、物流录入
-- **咨询管理**：买家咨询会话列表与回复（SupportAgent 自动回复 + 人工兜底）
-- **AI 分析中心**：5 个 Agent 入口 + AI 调用用量统计（token / 耗时 / 成功率）
-- **优惠券管理**：卖家创建折扣码、查看核销记录
-- **操作审计日志**：9 类写操作前后值 diff + IP，可筛选回看
+- **运营看板**：GMV / 订单量 / 访客数，SQL 真实聚合 + ECharts
+- **商品管理**：CRUD、上下架、**SPU/SKU 变体体系**、**CSV 批量导入**（papaparse 解析）
+- **订单管理**：列表、状态流转、**分批发货**（Fulfillment）、物流录入
+- **退款与售后**：审批退款（通过 → 自动触发 Stripe/PayPal 原路退）、拒绝回复
+- **商品集合**：手动精选楼层 / 智能收集（按条件自动聚合）、首页展示
+- **运费模板**：按重量/件数计费、地区加价、满额包邮
+- **优惠券**：百分比 / 固定 / 包邮三种，限定商品/分类/用户，批量生成
+- **客户管理**：地址簿、收货信息、购买历史
+- **CMS 页面**：富文本编辑首页 Banner / About / FAQ
+- **咨询管理**：买家会话列表与回复
+- **AI 分析中心**：5 个 Agent 入口 + 调用用量统计（token / 耗时 / 成功率）
+- **操作审计日志**：操作前后值 diff + IP，筛选回看
 
 ---
 
@@ -125,7 +131,8 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 │  guards: RolesGuard (buyer/seller) · filter: 异常脱敏         │
 │  modules: auth products categories cart orders payments      │
 │           reviews favorites coupons inquiry logistics        │
-│           dashboard audit ai (5 Agent + ai-gateway)          │
+│           dashboard audit ai (5 Agent)                       │
+│           collections shipping refunds addresses cms         │
 └──────────────┬──────────────────────────┬────────────────────┘
                │                          │
                ▼                          ▼

@@ -1,8 +1,17 @@
-import { Injectable, Inject, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+  ConflictException,
+} from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { eq, and, desc, or, isNull, sql } from 'drizzle-orm';
+import { eq, and, desc, count, gte, lt, sql, inArray } from 'drizzle-orm';
+import { Decimal } from 'decimal.js';
 
-import { cartItems, products, cartRecoveryCodes } from '@server/database/schema';
+import { cartItems, products, productVariants, cartRecoveryCodes } from '@server/database/schema';
 import type { CartResponse, CartItem } from '@shared/api.interface';
 
 @Injectable()
@@ -10,6 +19,12 @@ export class CartService {
   private readonly logger = new Logger(CartService.name);
 
   constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
+
+  /** Find the first active variant for a product (fallback to first variant) */
+  private findDefaultVariant(variants: Array<typeof productVariants.$inferSelect>): typeof productVariants.$inferSelect | null {
+    const active = variants.find((v) => v.status === 'active');
+    return active ?? variants[0] ?? null;
+  }
 
   async getCart(userId: string | undefined, sessionId: string | undefined): Promise<CartResponse> {
     let whereCondition;
@@ -25,47 +40,106 @@ export class CartService {
       .select({
         id: cartItems.id,
         productId: cartItems.productId,
+        variantId: cartItems.variantId,
         quantity: cartItems.quantity,
         productTitleEn: products.titleEn,
         productTitleZh: products.titleZh,
-        productPrice: products.price,
         productCoverImage: products.coverImage,
         productStatus: products.status,
-        productStock: products.stock,
         productImages: products.images,
+        productTotalStock: products.totalStock,
+        productTotalSold: products.totalSold,
+        productWeight: products.weight,
+        productBulletPointsZh: products.bulletPointsZh,
+        bulletPointsEn: products.bulletPointsEn,
+        productSeoKeywordsZh: products.seoKeywordsZh,
+        productSeoKeywordsEn: products.seoKeywordsEn,
+        productLongDescZh: products.longDescZh,
+        productLongDescEn: products.longDescEn,
+        productDescZh: products.descZh,
+        productDescEn: products.descEn,
       })
       .from(cartItems)
       .innerJoin(products, eq(cartItems.productId, products.id))
       .where(whereCondition)
       .orderBy(desc(cartItems.createdAt));
 
-    const items: CartItem[] = rows.map((row) => ({
-      id: row.id,
-      productId: row.productId,
-      quantity: row.quantity,
-      product: {
-        id: row.productId,
-        titleZh: row.productTitleZh,
-        titleEn: row.productTitleEn,
-        descZh: '',
-        descEn: '',
-        longDescZh: '',
-        longDescEn: '',
-        price: row.productPrice as string,
-        stock: row.productStock,
-        sold: 0,
-        status: row.productStatus as 'draft' | 'active' | 'inactive',
-        coverImage: row.productCoverImage ?? undefined,
-        images: (row.productImages as string[] | null) ?? [],
-        specs: {},
-        seoKeywordsZh: '',
-        seoKeywordsEn: '',
-        bulletPointsZh: [],
-        bulletPointsEn: [],
-        createdAt: '',
-        updatedAt: '',
-      },
-    }));
+    if (rows.length === 0) {
+      return { items: [], subtotal: '0.00', total: '0.00', itemCount: 0 };
+    }
+
+    // Collect all product IDs to batch-load variants
+    const productIds = [...new Set(rows.map((r) => r.productId))];
+    const variantRows = await this.db
+      .select()
+      .from(productVariants)
+      .where(and(
+        inArray(productVariants.productId, productIds),
+        eq(productVariants.status, 'active'),
+      ));
+
+    const variantsByProduct = new Map<string, Array<typeof productVariants.$inferSelect>>();
+    for (const v of variantRows) {
+      const arr = variantsByProduct.get(v.productId) ?? [];
+      arr.push(v);
+      variantsByProduct.set(v.productId, arr);
+    }
+
+    const items: CartItem[] = rows.map((row) => {
+      // Determine which variant to use
+      const productVariants2 = variantsByProduct.get(row.productId) ?? [];
+      let variant = row.variantId
+        ? productVariants2.find((v) => v.id === row.variantId) ?? null
+        : null;
+      if (!variant) {
+        variant = this.findDefaultVariant(productVariants2);
+      }
+
+      const price = variant ? (variant.price as string) : '0';
+      const originalPrice = variant ? (variant.originalPrice as string | undefined) : undefined;
+      const stock = variant ? variant.stock : Number(row.productTotalStock ?? 0);
+      const sold = variant ? variant.sold : Number(row.productTotalSold ?? 0);
+      const sku = variant?.sku ?? undefined;
+      const variantImage = variant?.image ?? undefined;
+      const variantInfo = variant?.optionValues && Array.isArray(variant.optionValues) && variant.optionValues.length > 0
+        ? variant.optionValues.join(' / ')
+        : undefined;
+
+      return {
+        id: row.id,
+        productId: row.productId,
+        variantId: variant?.id,
+        quantity: row.quantity,
+        variantInfo,
+        variantImage,
+        product: {
+          id: row.productId,
+          sku,
+          titleZh: row.productTitleZh,
+          titleEn: row.productTitleEn,
+          descZh: row.productDescZh ?? '',
+          descEn: row.productDescEn ?? '',
+          longDescZh: row.productLongDescZh ?? '',
+          longDescEn: row.productLongDescEn ?? '',
+          categoryId: undefined,
+          price,
+          originalPrice,
+          stock,
+          sold,
+          status: row.productStatus as 'draft' | 'active' | 'inactive',
+          coverImage: variantImage ?? row.productCoverImage ?? undefined,
+          images: (row.productImages as string[] | null) ?? [],
+          specs: {},
+          seoKeywordsZh: row.productSeoKeywordsZh ?? '',
+          seoKeywordsEn: row.productSeoKeywordsEn ?? '',
+          bulletPointsZh: (row.productBulletPointsZh as string[]) ?? [],
+          bulletPointsEn: (row.bulletPointsEn as string[]) ?? [],
+          weight: row.productWeight?.toString(),
+          createdAt: '',
+          updatedAt: '',
+        },
+      };
+    });
 
     let subtotalNum = 0;
     let itemCount = 0;
@@ -89,6 +163,7 @@ export class CartService {
     sessionId: string | undefined,
     productId: string,
     quantity: number,
+    variantId?: string,
   ): Promise<CartResponse> {
     if (!productId) {
       throw new BadRequestException('productId 不能为空');
@@ -98,7 +173,7 @@ export class CartService {
     }
 
     const productRows = await this.db
-      .select({ id: products.id, stock: products.stock, status: products.status })
+      .select({ id: products.id, status: products.status })
       .from(products)
       .where(eq(products.id, productId));
 
@@ -114,17 +189,42 @@ export class CartService {
       throw new BadRequestException('无法识别购物车');
     }
 
+    // Resolve variant
+    let resolvedVariantId = variantId;
+    if (!resolvedVariantId) {
+      const variants = await this.db
+        .select()
+        .from(productVariants)
+        .where(and(
+          eq(productVariants.productId, productId),
+          eq(productVariants.status, 'active'),
+        ))
+        .limit(1);
+      if (variants.length > 0) {
+        resolvedVariantId = variants[0].id;
+      }
+    }
+
     const sessionVal = userId ? userId : (sessionId as string);
     const userIdVal = userId ?? null;
 
-    const existingCondition = userId
-      ? and(eq(cartItems.userId, userId), eq(cartItems.productId, productId))
-      : and(eq(cartItems.sessionId, sessionVal), eq(cartItems.productId, productId));
+    // Build existing query conditions
+    const conditions = [eq(cartItems.productId, productId)];
+    if (userId) {
+      conditions.push(eq(cartItems.userId, userId));
+    } else {
+      conditions.push(eq(cartItems.sessionId, sessionVal));
+    }
+    if (resolvedVariantId) {
+      conditions.push(eq(cartItems.variantId, resolvedVariantId));
+    } else {
+      conditions.push(sql`${cartItems.variantId} IS NULL`);
+    }
 
     const existingRows = await this.db
       .select({ id: cartItems.id, quantity: cartItems.quantity })
       .from(cartItems)
-      .where(existingCondition);
+      .where(and(...conditions));
 
     let newQty: number;
     let itemId: string;
@@ -142,6 +242,7 @@ export class CartService {
         .insert(cartItems)
         .values({
           productId,
+          variantId: resolvedVariantId ?? null,
           quantity,
           sessionId: sessionVal,
           userId: userIdVal,
@@ -150,12 +251,19 @@ export class CartService {
       itemId = inserted[0].id;
     }
 
-    if (newQty > product.stock) {
-      await this.db
-        .update(cartItems)
-        .set({ quantity: product.stock })
-        .where(eq(cartItems.id, itemId));
-      throw new BadRequestException('库存不足');
+    // Check stock against variant
+    if (resolvedVariantId) {
+      const variantRows = await this.db
+        .select({ stock: productVariants.stock })
+        .from(productVariants)
+        .where(eq(productVariants.id, resolvedVariantId));
+      if (variantRows.length > 0 && newQty > variantRows[0].stock) {
+        await this.db
+          .update(cartItems)
+          .set({ quantity: variantRows[0].stock })
+          .where(eq(cartItems.id, itemId));
+        throw new BadRequestException('库存不足');
+      }
     }
 
     return this.getCart(userId, sessionId);
@@ -181,7 +289,7 @@ export class CartService {
     }
 
     const existingRows = await this.db
-      .select({ id: cartItems.id, productId: cartItems.productId })
+      .select({ id: cartItems.id, productId: cartItems.productId, variantId: cartItems.variantId })
       .from(cartItems)
       .where(whereCondition);
 
@@ -189,13 +297,27 @@ export class CartService {
       throw new NotFoundException('购物车商品不存在');
     }
 
-    const productRows = await this.db
-      .select({ stock: products.stock })
-      .from(products)
-      .where(eq(products.id, existingRows[0].productId));
+    // Check stock against variant
+    const cartItem2 = existingRows[0];
+    if (cartItem2.variantId) {
+      const variantRows = await this.db
+        .select({ stock: productVariants.stock })
+        .from(productVariants)
+        .where(eq(productVariants.id, cartItem2.variantId));
 
-    if (productRows.length === 0 || productRows[0].stock < quantity) {
-      throw new BadRequestException('库存不足');
+      if (variantRows.length === 0 || variantRows[0].stock < quantity) {
+        throw new BadRequestException('库存不足');
+      }
+    } else {
+      // Fallback to product-level stock
+      const productRows = await this.db
+        .select({ totalStock: products.totalStock })
+        .from(products)
+        .where(eq(products.id, cartItem2.productId));
+
+      if (productRows.length === 0 || Number(productRows[0].totalStock) < quantity) {
+        throw new BadRequestException('库存不足');
+      }
     }
 
     await this.db
@@ -305,6 +427,7 @@ export class CartService {
     const sourceItems = await this.db
       .select({
         productId: cartItems.productId,
+        variantId: cartItems.variantId,
         quantity: cartItems.quantity,
       })
       .from(cartItems)
@@ -330,10 +453,11 @@ export class CartService {
           .values({
             sessionId: currentSessionId,
             productId: item.productId,
+            variantId: item.variantId,
             quantity: item.quantity,
           })
           .onConflictDoUpdate({
-            target: [cartItems.sessionId, cartItems.productId],
+            target: [cartItems.sessionId, cartItems.productId, cartItems.variantId],
             set: {
               quantity: sql<number>`${cartItems.quantity} + ${item.quantity}`,
             },

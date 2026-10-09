@@ -164,6 +164,9 @@ export interface UpdateProductRequest {
 export interface CartItem {
   id: string;
   productId: string;
+  variantId?: string;
+  variantInfo?: string;
+  variantImage?: string;
   product: Product;
   quantity: number;
 }
@@ -177,6 +180,7 @@ export interface CartResponse {
 
 export interface AddCartRequest {
   productId: string;
+  variantId?: string;
   quantity: number;
 }
 
@@ -197,11 +201,19 @@ export type OrderStatus = 'pending_payment' | 'paid' | 'shipped' | 'delivered' |
 export interface OrderItem {
   id: string;
   productId?: string;
+  variantId?: string;
   productTitle: string;
+  variantInfo?: string;
+  productSku?: string;
   productImage?: string;
-  price: string;
+  unitPrice: string;
   quantity: number;
   subtotal: string;
+}
+
+export interface OrderFulfillment {
+  carrier?: string;
+  trackingNumber?: string;
 }
 
 export interface Order {
@@ -215,17 +227,22 @@ export interface Order {
   shippingCity: string;
   shippingZip?: string;
   shippingCountry: string;
+  subtotal?: string;
+  shippingFee?: string;
+  discountAmount?: string;
+  taxAmount?: string;
   totalAmount: string;
   status: OrderStatus;
   paymentMethod: string;
   couponId?: string;
-  discountAmount?: string;
+  couponCode?: string;
   paidAt?: string;
   shippedAt?: string;
   deliveredAt?: string;
-  trackingNo?: string;
-  remark?: string;
+  trackingNumber?: string;
+  customerNote?: string;
   items: OrderItem[];
+  fulfillments: OrderFulfillment[];
   createdAt: string;
   updatedAt: string;
 }
@@ -239,9 +256,10 @@ export interface CreateOrderRequest {
   shippingZip?: string;
   shippingCountry: string;
   paymentMethod: PaymentProvider;
-  remark?: string;
+  customerNote?: string;
+  remark?: string; // @deprecated use customerNote
   couponCode?: string;
-  items: { productId: string; quantity: number }[];
+  items: { productId: string; variantId?: string; quantity: number }[];
 }
 
 export interface OrderListParams {
@@ -260,7 +278,8 @@ export interface OrderListResponse {
 
 export interface OrderStatusUpdateRequest {
   status: OrderStatus;
-  trackingNo?: string;
+  trackingNumber?: string;
+  carrier?: string;
 }
 
 export interface InquiryMessage {
@@ -450,7 +469,7 @@ export interface FavoriteProduct {
   createdAt: string;
 }
 
-export type CouponType = 'percent' | 'fixed';
+export type CouponType = 'percent' | 'fixed' | 'free_shipping';
 
 export interface Coupon {
   id: string;
@@ -458,8 +477,13 @@ export interface Coupon {
   type: CouponType;
   value: string;
   minOrderAmount: string;
+  appliesTo?: string;
+  appliesToIds?: string[];
+  freeShipping?: boolean;
+  perUserLimit?: number;
   totalQuantity: number;
   usedCount: number;
+  startsAt?: string;
   expiresAt?: string;
   active: boolean;
   createdAt: string;
@@ -468,9 +492,14 @@ export interface Coupon {
 export interface CreateCouponRequest {
   code: string;
   type: CouponType;
-  value: number;
+  value?: number;
   minOrderAmount?: number;
+  appliesTo?: 'all' | 'category' | 'product';
+  appliesToIds?: string[];
+  freeShipping?: boolean;
+  perUserLimit?: number;
   totalQuantity?: number;
+  startsAt?: string;
   expiresAt?: string;
   active?: boolean;
 }
@@ -480,7 +509,12 @@ export interface UpdateCouponRequest {
   type?: CouponType;
   value?: number;
   minOrderAmount?: number;
+  appliesTo?: 'all' | 'category' | 'product';
+  appliesToIds?: string[];
+  freeShipping?: boolean;
+  perUserLimit?: number;
   totalQuantity?: number;
+  startsAt?: string;
   expiresAt?: string;
   active?: boolean;
 }
