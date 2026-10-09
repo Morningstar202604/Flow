@@ -10,7 +10,9 @@ import {
   Eye,
   Circle,
   Info,
+  RotateCcw,
 } from 'lucide-react';
+import RefundRequestModal from '@/components/RefundRequestModal';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -51,6 +53,7 @@ const OrdersPage: React.FC = () => {
   const [logisticsData, setLogisticsData] = useState<LogisticsTracking | null>(null);
   const [logisticsLoading, setLogisticsLoading] = useState<boolean>(false);
   const { language, t } = useLanguage();
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
 
   const initialOrderId: string = searchParams.get('order') || '';
 
@@ -535,6 +538,19 @@ const OrdersPage: React.FC = () => {
                     </span>
                   </div>
                 </Card>
+
+                {/* Refund Button */}
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRefundModalOpen(true)}
+                    className="border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                  >
+                    <RotateCcw className="mr-1 h-3 w-3" />
+                    申请退款
+                  </Button>
+                </div>
               </>
             ) : (
               <Card className="rounded-xl bg-white p-12 text-center text-slate-500">
@@ -544,6 +560,18 @@ const OrdersPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Refund Request Modal */}
+      {selectedOrder && (
+        <RefundRequestModal
+          order={selectedOrder}
+          open={refundModalOpen}
+          onClose={() => setRefundModalOpen(false)}
+          onSuccess={() => {
+            void fetchOrders();
+          }}
+        />
+      )}
     </div>
   );
 };

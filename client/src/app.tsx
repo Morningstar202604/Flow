@@ -11,6 +11,7 @@ import CartPage from './pages/Cart/CartPage';
 import CheckoutPage from './pages/Checkout/CheckoutPage';
 import OrdersPage from './pages/Orders/OrdersPage';
 import FavoritesPage from './pages/Favorites/FavoritesPage';
+import AddressesPage from './pages/AddressesPage';
 import LoginPage from './pages/Login/LoginPage';
 import RegisterPage from './pages/Register/RegisterPage';
 import SellerLayout from './components/SellerLayout';
@@ -21,7 +22,12 @@ import OrderManagePage from './pages/seller/OrderManagePage';
 import InquiryManagePage from './pages/seller/InquiryManagePage';
 import AICenterPage from './pages/seller/AICenterPage';
 import CouponsPage from './pages/seller/CouponsPage/CouponsPage';
+import RefundsManagePage from './pages/seller/RefundsManagePage';
+import ShippingTemplatesPage from './pages/seller/ShippingTemplatesPage';
+import CollectionsPage from './pages/seller/CollectionsPage';
+import CmsPagesPage from './pages/seller/CmsPagesPage';
 import AuditLogPage from './pages/seller/AuditLogPage';
+import CmsPageView from './pages/CmsPageView';
 import NotFound from './pages/NotFound/NotFound';
 import ChatWidget from './components/ChatWidget';
 
@@ -32,6 +38,8 @@ const RoutesComponent = () => {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          {/* Public CMS pages */}
+          <Route path="/page/:slug" element={<CmsPageView />} />
           <Route element={<BuyerLayout />}>
             <Route index element={<HomePage />} />
             <Route path="products" element={<ProductListPage />} />
@@ -40,6 +48,7 @@ const RoutesComponent = () => {
             <Route path="checkout" element={<CheckoutPage />} />
             <Route path="orders" element={<OrdersPage />} />
             <Route path="favorites" element={<FavoritesPage />} />
+            <Route path="addresses" element={<AddressesPage />} />
           </Route>
           <Route
             path="seller"
@@ -56,6 +65,10 @@ const RoutesComponent = () => {
             <Route path="inquiries" element={<InquiryManagePage />} />
             <Route path="ai-center" element={<AICenterPage />} />
             <Route path="coupons" element={<CouponsPage />} />
+            <Route path="refunds" element={<RefundsManagePage />} />
+            <Route path="shipping-templates" element={<ShippingTemplatesPage />} />
+            <Route path="collections" element={<CollectionsPage />} />
+            <Route path="cms-pages" element={<CmsPagesPage />} />
             <Route path="audit-logs" element={<AuditLogPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />

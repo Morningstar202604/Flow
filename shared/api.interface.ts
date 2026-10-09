@@ -625,3 +625,270 @@ export interface AuditLogQuery {
   startDate?: string;
   endDate?: string;
 }
+
+// ========== Refund ==========
+
+export interface Refund {
+  id: string;
+  orderId: string;
+  userId: string;
+  refundNo: string;
+  status: 'requested' | 'approved' | 'rejected' | 'completed';
+  amount: string;
+  reason: string;
+  reasonDetail?: string;
+  items?: string;
+  sellerReply?: string;
+  refundMethod: string;
+  approvedAt?: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RefundListParams {
+  page?: number;
+  pageSize?: number;
+  status?: Refund['status'];
+}
+
+export interface RefundListResponse {
+  items: Refund[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CreateRefundRequest {
+  orderId: string;
+  amount: number;
+  reason: string;
+  reasonDetail?: string;
+  items?: string[];
+  refundMethod?: string;
+}
+
+export interface RefundActionRequest {
+  reply?: string;
+}
+
+// ========== Shipping Template ==========
+
+export interface ShippingRule {
+  countries: string[];
+  firstWeight: string;
+  firstWeightFee: string;
+  additionalWeight: string;
+  additionalWeightFee: string;
+}
+
+export interface ShippingTemplate {
+  id: string;
+  sellerId: string;
+  name: string;
+  rules: ShippingRule[];
+  defaultRule?: ShippingRule;
+  freeShippingThreshold?: string;
+  status: 'active' | 'inactive';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateShippingTemplateRequest {
+  name: string;
+  rules: ShippingRule[];
+  defaultRule?: ShippingRule;
+  freeShippingThreshold?: number;
+  status?: 'active' | 'inactive';
+}
+
+export interface UpdateShippingTemplateRequest {
+  name?: string;
+  rules?: ShippingRule[];
+  defaultRule?: ShippingRule;
+  freeShippingThreshold?: number;
+  status?: 'active' | 'inactive';
+}
+
+export interface ShippingCalculateRequest {
+  sellerId?: string;
+  templateId?: string;
+  country?: string;
+  weightTotal?: number;
+  qtyTotal?: number;
+  subtotal?: number;
+}
+
+export interface ShippingCalculateResponse {
+  fee: string;
+  isFree: boolean;
+  templateName?: string;
+  currency: string;
+}
+
+// ========== Collection ==========
+
+export interface Collection {
+  id: string;
+  sellerId: string;
+  name: string;
+  slug: string;
+  description?: string;
+  image?: string;
+  productIds: string[];
+  productCount: number;
+  sortOrder: number;
+  isFeatured: boolean;
+  status: 'active' | 'inactive';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCollectionRequest {
+  name: string;
+  slug: string;
+  description?: string;
+  image?: string;
+  productIds?: string[];
+  sortOrder?: number;
+  isFeatured?: boolean;
+  status?: 'active' | 'inactive';
+}
+
+export interface UpdateCollectionRequest {
+  name?: string;
+  slug?: string;
+  description?: string;
+  image?: string;
+  productIds?: string[];
+  sortOrder?: number;
+  isFeatured?: boolean;
+  status?: 'active' | 'inactive';
+}
+
+export interface CollectionProductRequest {
+  productId: string;
+}
+
+export interface CollectionReorderRequest {
+  productIds: string[];
+}
+
+export interface CollectionListResponse {
+  items: Collection[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// ========== CMS Page ==========
+
+export interface CmsPage {
+  id: string;
+  slug: string;
+  title: string;
+  content: string;
+  excerpt?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  coverImage?: string;
+  status: 'draft' | 'published' | 'archived';
+  isPublic: boolean;
+  sortOrder: number;
+  viewCount: number;
+  createdBy?: string;
+  updatedBy?: string;
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCmsPageRequest {
+  slug: string;
+  title: string;
+  content: string;
+  excerpt?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  coverImage?: string;
+  status?: 'draft' | 'published' | 'archived';
+  isPublic?: boolean;
+  sortOrder?: number;
+}
+
+export interface UpdateCmsPageRequest {
+  slug?: string;
+  title?: string;
+  content?: string;
+  excerpt?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  coverImage?: string;
+  status?: 'draft' | 'published' | 'archived';
+  isPublic?: boolean;
+  sortOrder?: number;
+}
+
+export interface CmsPageListParams {
+  page?: number;
+  pageSize?: number;
+  status?: CmsPage['status'];
+  keyword?: string;
+}
+
+export interface CmsPageListResponse {
+  items: CmsPage[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// ========== Address ==========
+
+export interface Address {
+  id: string;
+  userId: string;
+  label?: string;
+  receiverName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state?: string;
+  zipCode?: string;
+  country: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAddressRequest {
+  label?: string;
+  receiverName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state?: string;
+  zipCode?: string;
+  country: string;
+  isDefault?: boolean;
+}
+
+export interface UpdateAddressRequest {
+  label?: string;
+  receiverName?: string;
+  phone?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+  isDefault?: boolean;
+}
+
+export interface AddressListResponse {
+  items: Address[];
+  total: number;
+}

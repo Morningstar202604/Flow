@@ -11,6 +11,9 @@ import {
   LogOut,
   Tag,
   FileText,
+  RotateCcw,
+  Truck,
+  Layers,
 } from 'lucide-react';
 import logoWhite from '@/assets/branding/logo-white.png';
 import { Button } from '@/components/ui/button';
@@ -73,6 +76,26 @@ const SellerLayout: React.FC = () => {
       to: '/seller/coupons',
       label: '优惠券管理',
       icon: Tag,
+    },
+    {
+      to: '/seller/refunds',
+      label: '退款管理',
+      icon: RotateCcw,
+    },
+    {
+      to: '/seller/shipping-templates',
+      label: '运费模板',
+      icon: Truck,
+    },
+    {
+      to: '/seller/collections',
+      label: '集合管理',
+      icon: Layers,
+    },
+    {
+      to: '/seller/cms-pages',
+      label: '页面管理',
+      icon: FileText,
     },
     {
       to: '/seller/audit-logs',

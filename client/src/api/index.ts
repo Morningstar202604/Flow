@@ -12,3 +12,8 @@ export * as favoritesApi from './favorites';
 export * as couponsApi from './coupons';
 export * as logisticsApi from './logistics';
 export * as auditApi from './audit';
+export * as refundsApi from './refunds';
+export * as shippingApi from './shipping';
+export * as collectionsApi from './collections';
+export * as cmsApi from './cms';
+export * as addressesApi from './addresses';
