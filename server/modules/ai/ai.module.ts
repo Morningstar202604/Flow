@@ -7,10 +7,9 @@ import { SupportService } from './support.service';
 import { TrendService } from './trend.service';
 import { SelectService } from './select.service';
 import { TranslationService } from './translation.service';
-import { EmbeddingModule } from '../embedding/embedding.module';
 
 @Module({
-  imports: [HttpModule, EmbeddingModule],
+  imports: [HttpModule],
   controllers: [AiController],
   providers: [
     AiGatewayService,

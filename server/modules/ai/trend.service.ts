@@ -14,7 +14,7 @@ export class TrendService {
     private readonly aiGateway: AiGatewayService,
   ) {}
 
-  async generateTrendReport(userId: string, appUserId?: string): Promise<AITrendReport> {
+  async generateTrendReport(userId: string): Promise<AITrendReport> {
     const salesData = await this.getSalesData();
     const categorySales = await this.getCategorySales();
     const topProducts = await this.getTopProducts();
@@ -55,7 +55,7 @@ ${dataContext}
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.7, maxTokens: 3000, agent: 'trend', userId: appUserId },
+      { temperature: 0.7, maxTokens: 3000, agent: 'trend', userId },
     );
 
     return {

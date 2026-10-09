@@ -5,7 +5,6 @@ import React, {
   useEffect,
   useCallback,
 } from 'react';
-// logger removed (was lark-specific)
 
 import {
   getStoredUser,

@@ -85,7 +85,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 | Agent | 职责 · Responsibility | 模型 · Model | 关键实现 |
 |---|---|---|---|
 | **CopywriterAgent** | 商品文案生成（标题 / 卖点 / 长描述 / SEO 关键词） | DeepSeek-chat | 强制 JSON 输出，写回商品多语言字段 |
-| **SupportAgent** | RAG 智能客服 | DeepSeek-chat | 三层检索：pgvector 向量召回 → 关键词回退 → FAQ + 订单摘要 |
+| **SupportAgent** | 智能客服 | DeepSeek-chat | 关键词匹配 + FAQ 政策匹配 + 订单状态摘要，全部真实查询不编造 |
 | **TrendAgent** | 趋势分析报告 | DeepSeek-reasoner | SQL 聚合近 30 天销售数据 + LLM 解读，落库可回看 |
 | **SelectAgent** | 选品建议 | DeepSeek-chat | 类目 + Top 20 热销 + 趋势摘要 → JSON 推荐 |
 | **TranslationAgent** | 多语言翻译 | DeepSeek-chat | 支持 **12 种语言**（zh/en/es/pt/fr/de/it/ja/ko/ru/ar/th） |
@@ -100,7 +100,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 |---|---|
 | 前端 Frontend | React 19 · TypeScript · Vite · Tailwind CSS · shadcn/ui · React Router v6 · ECharts |
 | 后端 Backend | NestJS 10 · TypeScript · Drizzle ORM |
-| 数据库 Database | PostgreSQL 16（`pgvector` 向量检索 + `pg_trgm` 模糊搜索扩展） |
+| 数据库 Database | PostgreSQL 16（`pg_trgm` 模糊搜索扩展） |
 | AI 调用 AI | OpenAI 兼容协议（DeepSeek / 火山方舟 / OpenAI / 通义 / 智谱等） |
 | 认证 Auth | JWT（HttpOnly Cookie）+ bcrypt + Google OAuth + CSRF 头校验 |
 | 支付 Payments | Stripe / PayPal（演示模式，配 key 即真实收款） |
@@ -131,9 +131,8 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
                ▼                          ▼
    ┌────────────────────┐    ┌──────────────────────────────┐
    │  PostgreSQL 16     │    │  OpenAI 兼容 LLM 端点          │
-   │  + pgvector        │◄──►│  DeepSeek / 火山方舟 / ...    │
    │  + pg_trgm         │    │  /v1/chat/completions         │
-   │  Drizzle ORM       │    │  /v1/embeddings               │
+   │  Drizzle ORM       │    │                               │
    └────────────────────┘    └──────────────────────────────┘
               ▲
               │
@@ -158,7 +157,7 @@ cd GlobalEcom-AI
 # 2. 复制环境变量模板并填入密钥
 cp .env.example .env        # 至少设置 JWT_SECRET；其余未配自动进入演示模式
 
-# 3. 启动全部服务（postgres 自动建库 + pgvector/pg_trgm 扩展）
+# 3. 启动全部服务（postgres 自动建库 + pg_trgm 扩展）
 docker compose up -d --build
 
 # 4. 访问
@@ -195,6 +194,7 @@ npm run type:check   # 前后端 TypeScript 类型检查
 | [docs/DEPLOY.md](docs/DEPLOY.md) | 部署指南：环境要求、密钥清单、一键启动、备份与升级、常见问题 |
 | [docs/audit-summary.md](docs/audit-summary.md) | 历史检查与修复摘要（v0.1.0 → v1.0.0） |
 | [CHANGELOG.md](CHANGELOG.md) | 版本变更历史（Keep a Changelog 格式） |
+| [docs/cleanup-v1.1.md](docs/cleanup-v1.1.md) | v1.1.0 死代码清理与飞书依赖剥离记录 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献指南：环境、规范、提交与 PR 流程 |
 | [SECURITY.md](SECURITY.md) | 安全策略：漏洞报告与处理流程 |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | 社区行为准则 |

@@ -8,7 +8,6 @@ import type {
 export async function getProductReviews(
   productId: string,
 ): Promise<ProductReviewsResponse> {
-  console.info('[reviews] list', productId);
   const { data } = await http.get<ProductReviewsResponse>(
     `/api/products/${productId}/reviews`,
   );
@@ -18,7 +17,6 @@ export async function getProductReviews(
 export async function getMyReview(
   productId: string,
 ): Promise<{ review: ProductReview | null; hasPurchased: boolean }> {
-  console.info('[reviews] my', productId);
   const { data } = await http.get<{
     review: ProductReview | null;
     hasPurchased: boolean;
@@ -30,7 +28,6 @@ export async function createReview(
   productId: string,
   body: CreateReviewRequest,
 ): Promise<ProductReview> {
-  console.info('[reviews] create', productId);
   const { data } = await http.post<ProductReview>(
     `/api/products/${productId}/reviews`,
     body,

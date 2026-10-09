@@ -1,10 +1,9 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
-import { eq, desc, ilike, or, and, inArray } from 'drizzle-orm';
+import { Inject, Injectable } from '@nestjs/common';
+import { eq, desc, ilike, or, and } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService, type ChatMessage } from './ai-gateway.service';
 import { products, inquiryMessages, orders } from '@server/database/schema';
 import type { SupportChatRequest, SupportChatResponse } from '@shared/api.interface';
-import { EmbeddingService } from '../embedding/embedding.service';
 
 interface FAQEntry {
   keywords: string[];
@@ -45,7 +44,6 @@ export class SupportService {
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly aiGateway: AiGatewayService,
-    @Optional() private readonly embeddingService?: EmbeddingService,
   ) {}
 
   async chat(dto: SupportChatRequest, userId?: string): Promise<SupportChatResponse> {
@@ -122,51 +120,9 @@ export class SupportService {
     query: string,
     language?: string,
   ): Promise<Array<{ id: string; titleEn: string; descEn: string | null; price: string }>> {
-    const lang = language === 'zh' ? 'zh' : 'en';
+    void language;
 
-    // 优先尝试向量检索
-    if (this.embeddingService && this.embeddingService.isReady()) {
-      try {
-        const similar = await this.embeddingService.searchSimilarProducts(query, lang, 5);
-        if (similar.length > 0) {
-          const productIds = similar.map((s) => s.productId);
-          const rows = await this.db
-            .select({
-              id: products.id,
-              titleEn: products.titleEn,
-              descEn: products.descEn,
-              price: products.price,
-            })
-            .from(products)
-            .where(and(
-              eq(products.status, 'active'),
-              inArray(products.id, productIds),
-            ));
-
-          if (rows.length > 0) {
-            // 按相似度排序
-            const rowMap = new Map(rows.map((r) => [r.id, r]));
-            const result: Array<{ id: string; titleEn: string; descEn: string | null; price: string }> = [];
-            for (const s of similar) {
-              const row = rowMap.get(s.productId);
-              if (row) {
-                result.push({
-                  id: row.id,
-                  titleEn: row.titleEn,
-                  descEn: row.descEn,
-                  price: String(row.price),
-                });
-              }
-            }
-            return result;
-          }
-        }
-      } catch (error) {
-        // 向量检索失败，静默回退到关键词匹配
-      }
-    }
-
-    // 回退：关键词匹配
+    // 关键词匹配检索
     // 判断是否包含商品相关词汇
     const productKeywords = ['product', '商品', '产品', 'item', '商品详情', '规格', 'spec', '多少钱', 'price', '价格'];
     const lowerQuery = query.toLowerCase();

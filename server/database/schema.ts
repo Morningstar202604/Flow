@@ -58,17 +58,6 @@ export const products = pgTable('products', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const productEmbeddings = pgTable('product_embeddings', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  productId: uuid('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
-  contentHash: varchar('content_hash', { length: 64 }).notNull(),
-  embedding: text('embedding').notNull(),
-  textContent: text('text_content').notNull(),
-  model: varchar('model', { length: 64 }).notNull().default('local-hash-embedding'),
-  dimension: integer('dimension').notNull().default(384),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
 export const cartItems = pgTable('cart_items', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
@@ -172,19 +161,6 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const inquiries = pgTable('inquiries', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: varchar('name', { length: 100 }).notNull(),
-  email: varchar('email', { length: 255 }).notNull(),
-  phone: varchar('phone', { length: 20 }),
-  subject: varchar('subject', { length: 200 }).notNull(),
-  message: text('message').notNull(),
-  status: varchar('status', { length: 20 }).notNull().default('pending'),
-  reply: text('reply'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  repliedAt: timestamp('replied_at', { withTimezone: true }),
-});
-
 export const inquiryMessages = pgTable('inquiry_messages', {
   id: uuid('id').primaryKey().defaultRandom(),
   sessionId: varchar('session_id', { length: 64 }).notNull(),
@@ -206,9 +182,8 @@ export const aiUsageLog = pgTable('ai_usage_log', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const productRelations = relations(products, ({ one, many }) => ({
+export const productRelations = relations(products, ({ one }) => ({
   category: one(categories, { fields: [products.categoryId], references: [categories.id] }),
-  embeddings: many(productEmbeddings),
 }));
 
 export const categoryRelations = relations(categories, ({ many }) => ({

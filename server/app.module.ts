@@ -16,10 +16,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { InquiryModule } from './modules/inquiry/inquiry.module';
 import { LogisticsModule } from './modules/logistics/logistics.module';
-import { EmbeddingModule } from './modules/embedding/embedding.module';
-import { HelloModule } from './modules/hello/hello.module';
 import { JwtAuthMiddleware } from './common/middleware/jwt-auth.middleware';
-import { ViewModule } from './modules/view/view.module';
 
 const businessModules = [
   AuthModule,
@@ -29,16 +26,13 @@ const businessModules = [
   CategoriesModule,
   CouponsModule,
   DashboardModule,
-  EmbeddingModule,
   FavoritesModule,
-  HelloModule,
   InquiryModule,
   LogisticsModule,
   OrdersModule,
   PaymentsModule,
   ProductsModule,
   ReviewsModule,
-  ViewModule,
 ];
 
 @Module({

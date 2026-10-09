@@ -388,11 +388,6 @@ export interface AIUsageStatsQuery {
   endDate?: string;
 }
 
-export interface ShopFAQ {
-  question: string;
-  answer: string;
-}
-
 export type PaymentProvider = 'stripe' | 'paypal' | 'demo';
 export type PaymentStatus = 'pending' | 'paid' | 'refunded' | 'failed';
 

@@ -1,10 +1,8 @@
 import { http } from '../lib/http';
-// logger removed (was lark-specific)
 import type {
   RegisterRequest,
   LoginRequest,
   User,
-  GoogleAuthStatus,
 } from '@shared/api.interface';
 
 // Global CSRF protection: add X-Requested-With header to all non-GET requests
@@ -51,33 +49,24 @@ export function removeStoredUser(): void {
 }
 
 export async function register(dto: RegisterRequest): Promise<{ user: User }> {
-  console.info('[auth] register', dto.email);
   const { data } = await http.post<{ user: User }>('/api/auth/register', dto);
   setStoredUser(data.user);
   return data;
 }
 
 export async function login(dto: LoginRequest): Promise<{ user: User }> {
-  console.info('[auth] login', dto.email);
   const { data } = await http.post<{ user: User }>('/api/auth/login', dto);
   setStoredUser(data.user);
   return data;
 }
 
 export async function getMe(): Promise<User | null> {
-  console.info('[auth] me');
   try {
     const { data } = await http.get<User | null>('/api/auth/me');
     return data;
-  } catch (err) {
-    console.warn('[auth] me failed', err);
+  } catch {
     return null;
   }
-}
-
-export async function getGoogleStatus(): Promise<GoogleAuthStatus> {
-  const { data } = await http.get<GoogleAuthStatus>('/api/auth/google/status');
-  return data;
 }
 
 export async function mergeCart(sessionId: string): Promise<{ success: boolean }> {
@@ -88,18 +77,11 @@ export async function mergeCart(sessionId: string): Promise<{ success: boolean }
   return data;
 }
 
-export async function refreshToken(): Promise<User> {
-  console.info('[auth] refresh token');
-  const { data } = await http.post<{ user: User }>('/api/auth/refresh');
-  setStoredUser(data.user);
-  return data.user;
-}
-
 export async function logout(): Promise<void> {
   try {
     await http.post('/api/auth/logout', {});
-  } catch (err) {
-    console.warn('[auth] logout api failed', err);
+  } catch {
+    // ignore network errors during logout
   }
   removeStoredUser();
 }

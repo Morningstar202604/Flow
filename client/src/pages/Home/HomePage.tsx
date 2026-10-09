@@ -10,7 +10,6 @@ import { getFeaturedProducts, listProducts } from '@/api/products';
 import { listCategories } from '@/api/categories';
 import { checkFavoriteBatch } from '@/api/favorites';
 import { useAuth } from '@/contexts/AuthContext';
-// logger removed (was lark-specific)
 import type { Product, Category } from '@shared/api.interface';
 
 const HomePage: React.FC = () => {

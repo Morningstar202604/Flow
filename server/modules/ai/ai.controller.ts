@@ -87,7 +87,7 @@ export class AiController {
   async generateTrend(@Req() req: Request): Promise<AITrendReport> {
     const userId = req.user?.id;
     if (!userId) throw new BadRequestException('用户未登录');
-    return this.trendService.generateTrendReport(userId, userId);
+    return this.trendService.generateTrendReport(userId);
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))

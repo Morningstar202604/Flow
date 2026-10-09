@@ -5,6 +5,34 @@
 
 ---
 
+## [1.1.1] — 2026-10-09
+
+死代码全量剥离 & 飞书依赖清除 — 每行代码经前向追踪，零无用声明残留。
+
+### Changed
+- README 架构图与技术栈：移除 `pgvector` 向量检索相关描述（已确认 `EmbeddingService` 全无用）
+- `docker-compose.yml`：Postgres 镜像 `pgvector/pgvector:pg16` → `postgres:16-alpine`
+- `docker/postgres/init.sql`：移除 `CREATE EXTENSION vector`
+- `server/database/database.provider.ts`：注入 `ConfigService` 读 `DATABASE_URL`，修复 env 顺序启动崩溃
+
+### Removed（经 grep 全项目前向追踪确认无引用）
+- `server/modules/embedding/` — `EmbeddingService` 空壳（`isReady()` 永返 false，向量检索永返 `[]`）
+- `server/modules/hello/` — 占位示例模块
+- `server/modules/view/` — 脚手架 catch-all 路由
+- `client/src/pages/ExamplePage/` — 全部注释掉的死文件
+- `shared/api.interface.ts` 中 `ShopFAQ` 类型 — 从未引用
+- 数据库死表：`productEmbeddings`、`inquiries`（已被 `inquirySessions`+`inquiryMessages` 取代）
+- 前端 8 个从未被调用的 API 函数：买家侧 inquiry 会话、分类管理 CRUD、Google OAuth 状态、支付记录查询
+- `client/src/index.tsx` 重复 `<Toaster>`
+- 58 处前端 `console.info` 噪音日志
+
+### Verification
+- `tsc -p tsconfig.json` → 0 errors
+- `tsc -p tsconfig.app.json` → 0 errors
+- `vite build` → ✓ built in 1.73s (3019 modules)
+
+---
+
 ## [1.1.0] — 2026-10-01
 
 开源发布准备：文档体系全面对标成熟开源项目，项目转为 **MIT License** 开源。

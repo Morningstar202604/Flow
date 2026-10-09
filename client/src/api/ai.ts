@@ -16,7 +16,6 @@ import type {
 export async function supportChat(
   payload: SupportChatRequest,
 ): Promise<SupportChatResponse> {
-  console.info('[ai] support chat');
   const { data } = await http.post<SupportChatResponse>(
     '/api/ai/support/chat',
     payload,
@@ -25,7 +24,6 @@ export async function supportChat(
 }
 
 export async function getAIStatus(): Promise<AIStatusResponse> {
-  console.info('[ai] status');
   const { data } =
     await http.get<AIStatusResponse>('/api/ai/status');
   return data;
@@ -34,7 +32,6 @@ export async function getAIStatus(): Promise<AIStatusResponse> {
 export async function generateCopywriter(
   payload: AICopywriterRequest,
 ): Promise<AICopywriterResponse> {
-  console.info('[ai] copywriter', payload.productNameZh);
   const { data } = await http.post<AICopywriterResponse>(
     '/api/ai/copywriter',
     payload,
@@ -45,7 +42,6 @@ export async function generateCopywriter(
 export async function translateText(
   payload: AITranslationRequest,
 ): Promise<AITranslationResponse> {
-  console.info('[ai] translate');
   const { data } = await http.post<AITranslationResponse>(
     '/api/ai/translate',
     payload,
@@ -54,7 +50,6 @@ export async function translateText(
 }
 
 export async function generateTrendReport(): Promise<AITrendReport> {
-  console.info('[ai] trend report');
   const { data } = await http.post<AITrendReport>(
     '/api/ai/trend/generate',
     {},
@@ -63,7 +58,6 @@ export async function generateTrendReport(): Promise<AITrendReport> {
 }
 
 export async function generateSelectSuggestion(): Promise<AISelectResponse> {
-  console.info('[ai] select suggestion');
   const { data } = await http.post<AISelectResponse>(
     '/api/ai/select/generate',
     {},
@@ -74,7 +68,6 @@ export async function generateSelectSuggestion(): Promise<AISelectResponse> {
 export async function getUsageStats(
   params?: AIUsageStatsQuery,
 ): Promise<AIUsageStats> {
-  console.info('[ai] usage stats');
   const query = new URLSearchParams();
   if (params?.agent) query.set('agent', params.agent);
   if (params?.startDate) query.set('startDate', params.startDate);

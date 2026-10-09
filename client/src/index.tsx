@@ -2,7 +2,6 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ErrorBoundary } from 'react-error-boundary';
-import { Toaster } from 'sonner';
 import RoutesComponent from './app';
 import './index.css';
 
@@ -26,7 +25,6 @@ const MainApp = () => {
         )}
       >
         <RoutesComponent />
-        <Toaster position="top-right" />
       </ErrorBoundary>
     </BrowserRouter>
   );
