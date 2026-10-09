@@ -22,8 +22,9 @@ export async function getCart(): Promise<CartResponse> {
 export async function addToCart(
   productId: string,
   quantity: number,
+  variantId?: string,
 ): Promise<CartResponse> {
-  const body: AddCartRequest = { productId, quantity };
+  const body: AddCartRequest = { productId, quantity, variantId };
   const { data } = await http.post<CartResponse>(
     '/api/cart/items',
     body,

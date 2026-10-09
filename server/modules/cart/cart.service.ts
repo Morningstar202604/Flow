@@ -113,8 +113,7 @@ export class CartService {
         variantInfo,
         variantImage,
         product: {
-          id: row.productId,
-          sku,
+          id: row.productId, sellerId: "",
           titleZh: row.productTitleZh,
           titleEn: row.productTitleEn,
           descZh: row.productDescZh ?? '',
@@ -122,19 +121,22 @@ export class CartService {
           longDescZh: row.productLongDescZh ?? '',
           longDescEn: row.productLongDescEn ?? '',
           categoryId: undefined,
-          price,
-          originalPrice,
-          stock,
-          sold,
-          status: row.productStatus as 'draft' | 'active' | 'inactive',
+          minPrice: price,
+          maxPrice: originalPrice ?? price,
+          totalStock: stock,
+          totalSold: 0,
+          status: row.productStatus as any,
           coverImage: variantImage ?? row.productCoverImage ?? undefined,
           images: (row.productImages as string[] | null) ?? [],
-          specs: {},
+          optionNames: [],
+          variants: [],
           seoKeywordsZh: row.productSeoKeywordsZh ?? '',
           seoKeywordsEn: row.productSeoKeywordsEn ?? '',
           bulletPointsZh: (row.productBulletPointsZh as string[]) ?? [],
-          bulletPointsEn: (row.bulletPointsEn as string[]) ?? [],
+          bulletPointsEn: (row.productBulletPointsZh as string[]) ?? [],
           weight: row.productWeight?.toString(),
+          avgRating: undefined,
+          reviewCount: undefined,
           createdAt: '',
           updatedAt: '',
         },
@@ -144,7 +146,7 @@ export class CartService {
     let subtotalNum = 0;
     let itemCount = 0;
     for (const item of items) {
-      subtotalNum += Number(item.product.price) * item.quantity;
+      subtotalNum += Number(item.product.minPrice ?? 0) * item.quantity;
       itemCount += item.quantity;
     }
 

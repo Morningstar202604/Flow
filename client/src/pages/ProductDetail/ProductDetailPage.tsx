@@ -37,9 +37,11 @@ import { toggleFavorite, checkFavorite } from '@/api/favorites';
 import { toast } from 'sonner';
 import {
   Product,
+  ProductVariant,
   ProductReview,
   ProductReviewsResponse,
 } from '@shared/api.interface';
+import VariantSelector from '@/components/VariantSelector';
 import {
   getProductTitle,
   getProductDesc,
@@ -57,6 +59,7 @@ const ProductDetailPage: React.FC = () => {
   const [quantity, setQuantity] = useState<number>(1);
   const [activeImage, setActiveImage] = useState<number>(0);
   const [addingToCart, setAddingToCart] = useState<boolean>(false);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
 
   // Favorite state
   const [isFavorited, setIsFavorited] = useState<boolean>(false);
@@ -72,6 +75,23 @@ const ProductDetailPage: React.FC = () => {
   const [reviewComment, setReviewComment] = useState<string>('');
   const [submittingReview, setSubmittingReview] = useState<boolean>(false);
 
+  // Derived: selected variant
+  const selectedVariant: ProductVariant | undefined = selectedVariantId
+    ? product?.variants.find((v: ProductVariant) => v.id === selectedVariantId)
+    : product?.variants[0];
+
+  // Derived: display price (string) — from selected variant or product min/max
+  const displayPrice: string = selectedVariant?.price ?? product?.minPrice ?? '0';
+  const displayOriginalPrice: string =
+    selectedVariant?.originalPrice ??
+    product?.variants[0]?.originalPrice ??
+    product?.minPrice ??
+    '0';
+  const isOnSale: boolean = Number(displayOriginalPrice) > Number(displayPrice);
+
+  // Derived: stock
+  const stockForSelected: number = selectedVariant?.stock ?? product?.totalStock ?? 0;
+
   useEffect(() => {
     const load = async (): Promise<void> => {
       if (!id) return;
@@ -79,6 +99,10 @@ const ProductDetailPage: React.FC = () => {
         setLoading(true);
         const data = await getProduct(id);
         setProduct(data);
+        // Auto-select first variant if available
+        if (data.variants.length > 0) {
+          setSelectedVariantId(data.variants[0].id);
+        }
       } catch (error: unknown) {
         console.error('[productDetail] load error', error);
       } finally {
@@ -125,6 +149,12 @@ const ProductDetailPage: React.FC = () => {
     void loadUserSpecific();
   }, [id, user]);
 
+  const handleVariantSelect = (variant: ProductVariant): void => {
+    setSelectedVariantId(variant.id);
+    // Reset quantity if it exceeds new variant stock
+    setQuantity((prev: number) => Math.min(prev, variant.stock || 1));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500">
@@ -150,14 +180,11 @@ const ProductDetailPage: React.FC = () => {
     : product.coverImage
       ? [product.coverImage]
       : [];
-  const isOnSale: boolean =
-    !!product.originalPrice &&
-    Number(product.originalPrice) > Number(product.price);
 
   const handleQuantityChange = (delta: number): void => {
     setQuantity((prev: number) => {
       const next: number = prev + delta;
-      return Math.max(1, Math.min(product.stock, next));
+      return Math.max(1, Math.min(stockForSelected, next));
     });
   };
 
@@ -165,7 +192,7 @@ const ProductDetailPage: React.FC = () => {
     if (!id) return;
     try {
       setAddingToCart(true);
-      await addToCart(id, quantity);
+      await addToCart(id, quantity, selectedVariantId ?? undefined);
       toast.success(t.product.addToCart);
     } catch (error: unknown) {
       console.error('[productDetail] add to cart error', error);
@@ -179,7 +206,7 @@ const ProductDetailPage: React.FC = () => {
     if (!id) return;
     try {
       setAddingToCart(true);
-      await addToCart(id, quantity);
+      await addToCart(id, quantity, selectedVariantId ?? undefined);
       navigate('/checkout');
     } catch (error: unknown) {
       console.error('[productDetail] buy now error', error);
@@ -255,8 +282,6 @@ const ProductDetailPage: React.FC = () => {
     );
   };
 
-  const specEntries: [string, string][] = Object.entries(product.specs || {});
-
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="container mx-auto px-6 py-6">
@@ -284,8 +309,8 @@ const ProductDetailPage: React.FC = () => {
                   <Badge className="absolute top-4 left-4 bg-orange-500 hover:bg-orange-500 text-sm px-3 py-1">
                     -
                     {Math.round(
-                      ((Number(product.originalPrice) - Number(product.price)) /
-                        Number(product.originalPrice)) *
+                      ((Number(displayOriginalPrice) - Number(displayPrice)) /
+                        Number(displayOriginalPrice)) *
                         100,
                     )}
                     %
@@ -343,11 +368,11 @@ const ProductDetailPage: React.FC = () => {
             {/* Price */}
             <div className="flex items-baseline gap-3">
               <span className="text-3xl font-bold text-orange-500">
-                ${Number(product.price).toFixed(2)}
+                ${Number(displayPrice).toFixed(2)}
               </span>
-              {isOnSale && product.originalPrice && (
+              {isOnSale && (
                 <span className="text-lg text-slate-400 line-through">
-                  ${Number(product.originalPrice).toFixed(2)}
+                  ${Number(displayOriginalPrice).toFixed(2)}
                 </span>
               )}
               {isOnSale && (
@@ -357,6 +382,15 @@ const ProductDetailPage: React.FC = () => {
               )}
             </div>
 
+            {/* Variant Selector */}
+            {product.variants.length > 0 && (
+              <VariantSelector
+                product={product}
+                selectedId={selectedVariantId}
+                onSelect={handleVariantSelect}
+              />
+            )}
+
             {/* Stock & Sold */}
             <div className="flex gap-6 text-sm text-slate-500">
               <div className="flex items-center gap-1">
@@ -364,17 +398,17 @@ const ProductDetailPage: React.FC = () => {
                 {t.product.stock}:{' '}
                 <span
                   className={
-                    product.stock > 0 ? 'text-emerald-500 font-medium' : 'text-red-500'
+                    stockForSelected > 0 ? 'text-emerald-500 font-medium' : 'text-red-500'
                   }
                 >
-                  {product.stock > 0
-                    ? `${product.stock} ${t.product.inStock}`
+                  {stockForSelected > 0
+                    ? `${stockForSelected} ${t.product.inStock}`
                     : t.product.outOfStock}
                 </span>
               </div>
               <div className="flex items-center gap-1">
                 <Tag className="size-4" />
-                {t.product.sold}: {product.sold}
+                {t.product.sold}: {product.totalSold}
               </div>
             </div>
 
@@ -401,7 +435,7 @@ const ProductDetailPage: React.FC = () => {
                   size="icon"
                   className="size-9 rounded-none border-l border-slate-200"
                   onClick={() => handleQuantityChange(1)}
-                  disabled={quantity >= product.stock}
+                  disabled={quantity >= stockForSelected}
                 >
                   <Plus className="size-4" />
                 </Button>
@@ -415,7 +449,7 @@ const ProductDetailPage: React.FC = () => {
                 size="lg"
                 className="flex-1"
                 onClick={() => void handleAddToCart()}
-                disabled={product.stock === 0 || addingToCart}
+                disabled={stockForSelected === 0 || addingToCart}
               >
                 <ShoppingCart className="size-5" />
                 {t.product.addToCart}
@@ -424,7 +458,7 @@ const ProductDetailPage: React.FC = () => {
                 size="lg"
                 className="flex-1 bg-orange-500 hover:bg-orange-600"
                 onClick={() => void handleBuyNow()}
-                disabled={product.stock === 0 || addingToCart}
+                disabled={stockForSelected === 0 || addingToCart}
               >
                 <Zap className="size-5" />
                 {t.product.buyNow}
@@ -467,15 +501,20 @@ const ProductDetailPage: React.FC = () => {
               <div className="whitespace-pre-wrap">{longDesc}</div>
             </TabsContent>
             <TabsContent value="specs">
-              {specEntries.length > 0 ? (
+              {product.optionNames.length > 0 ? (
                 <div className="divide-y divide-slate-100">
-                  {specEntries.map(([key, value]: [string, string]) => (
+                  {product.optionNames.map((name: string, idx: number) => (
                     <div
-                      key={key}
+                      key={idx}
                       className="grid grid-cols-3 py-3 text-sm"
                     >
-                      <div className="text-slate-500 col-span-1">{key}</div>
-                      <div className="text-slate-800 col-span-2">{value}</div>
+                      <div className="text-slate-500 col-span-1">{name}</div>
+                      <div className="text-slate-800 col-span-2">
+                        {product.variants
+                          .map((v: ProductVariant) => v.optionValues[idx])
+                          .filter(Boolean)
+                          .join(', ')}
+                      </div>
                     </div>
                   ))}
                 </div>

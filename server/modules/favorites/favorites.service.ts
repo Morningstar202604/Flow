@@ -65,7 +65,7 @@ export class FavoritesService {
         createdAt: row.createdAt.toISOString(),
         product: {
           id: row.product.id,
-          sku: v ? String(v.sampleSku) : undefined,
+          sellerId: row.product.sellerId,
           titleZh: row.product.titleZh,
           titleEn: row.product.titleEn,
           descZh: row.product.descZh ?? '',
@@ -73,64 +73,27 @@ export class FavoritesService {
           longDescZh: row.product.longDescZh ?? '',
           longDescEn: row.product.longDescEn ?? '',
           categoryId: row.product.categoryId ?? undefined,
-          price: v ? String(v.minPrice) : '0',
-          originalPrice: v ? String(v.minOriginalPrice) : undefined,
-          stock: v ? Number(v.totalStock) : Number(row.product.totalStock ?? 0),
-          sold: v ? Number(v.totalSold) : Number(row.product.totalSold ?? 0),
+          coverImage: row.product.coverImage,
+          images: row.product.images ?? [],
+          bulletPointsZh: row.product.bulletPointsZh ?? [],
+          bulletPointsEn: row.product.bulletPointsEn ?? [],
+          optionNames: row.product.optionNames ?? [],
+          variants: [],
+          minPrice: v ? String(v.minPrice) : undefined,
+          maxPrice: v ? String(v.maxPrice) : undefined,
+          totalStock: v ? Number(v.totalStock) : Number(row.product.totalStock ?? 0),
+          totalSold: v ? Number(v.totalSold) : Number(row.product.totalSold ?? 0),
           status: row.product.status as any,
-          coverImage: row.product.coverImage ?? undefined,
-          images: (row.product.images as string[]) ?? [],
-          specs: {},
+          weight: row.product.weight ?? undefined,
+          avgRating: row.product.avgRating != null ? Number(row.product.avgRating) : undefined,
+          reviewCount: row.product.reviewCount ?? undefined,
           seoKeywordsZh: row.product.seoKeywordsZh ?? '',
           seoKeywordsEn: row.product.seoKeywordsEn ?? '',
-          bulletPointsZh: (row.product.bulletPointsZh as string[]) ?? [],
-          bulletPointsEn: (row.product.bulletPointsEn as string[]) ?? [],
-          weight: row.product.weight?.toString(),
-          avgRating: Number(row.product.avgRating ?? 0),
-          reviewCount: Number(row.product.reviewCount ?? 0),
           createdAt: row.product.createdAt.toISOString(),
           updatedAt: row.product.updatedAt.toISOString(),
         },
       };
     });
-  }
-
-  async toggle(productId: string, userId: string | undefined): Promise<{
-    favorited: boolean;
-    id?: string;
-  }> {
-    if (!userId) {
-      throw new ForbiddenException('请先登录');
-    }
-
-    const productRows = await this.db
-      .select({ id: products.id })
-      .from(products)
-      .where(eq(products.id, productId));
-    if (productRows.length === 0) {
-      throw new NotFoundException('商品不存在');
-    }
-
-    const existing = await this.db
-      .select({ id: favorites.id })
-      .from(favorites)
-      .where(
-        and(eq(favorites.userId, userId), eq(favorites.productId, productId)),
-      );
-
-    if (existing.length > 0) {
-      await this.db
-        .delete(favorites)
-        .where(eq(favorites.id, existing[0].id));
-      return { favorited: false };
-    }
-
-    const inserted = await this.db
-      .insert(favorites)
-      .values({ userId, productId })
-      .returning({ id: favorites.id });
-
-    return { favorited: true, id: inserted[0].id };
   }
 
   async isFavoritedBatch(
@@ -161,4 +124,20 @@ export class FavoritesService {
       .limit(1);
     return rows.length > 0;
   }
+
+  async toggle(productId: string, userId: string | undefined): Promise<{ favorited: boolean; id?: string }> {
+    if (!userId) throw new ForbiddenException('请先登录');
+    const existing = await this.db
+      .select({ id: favorites.id })
+      .from(favorites)
+      .where(and(eq(favorites.userId, userId), eq(favorites.productId, productId)))
+      .limit(1);
+    if (existing.length > 0) {
+      await this.db.delete(favorites).where(eq(favorites.id, existing[0].id));
+      return { favorited: false };
+    }
+    const inserted = await this.db.insert(favorites).values({ userId, productId }).returning({ id: favorites.id });
+    return { favorited: true, id: inserted[0].id };
+  }
+
 }

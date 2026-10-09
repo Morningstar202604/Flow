@@ -64,7 +64,6 @@ import type {
 import { toast } from 'sonner';
 
 const productSchema = z.object({
-  sku: z.string().optional(),
   titleZh: z.string().min(1, '中文标题必填'),
   titleEn: z.string().min(1, '英文标题必填'),
   categoryId: z.string().optional(),
@@ -91,7 +90,6 @@ const productSchema = z.object({
   descEn: z.string().optional(),
   longDescZh: z.string().optional(),
   longDescEn: z.string().optional(),
-  specsJson: z.string().optional(),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -141,7 +139,6 @@ const ProductManagePage: React.FC = () => {
   const productForm = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      sku: '',
       titleZh: '',
       titleEn: '',
       categoryId: '',
@@ -154,7 +151,6 @@ const ProductManagePage: React.FC = () => {
       descEn: '',
       longDescZh: '',
       longDescEn: '',
-      specsJson: '{}',
     },
   });
 
@@ -215,7 +211,6 @@ const ProductManagePage: React.FC = () => {
   const handleAdd = () => {
     setEditingProduct(null);
     productForm.reset({
-      sku: '',
       titleZh: '',
       titleEn: '',
       categoryId: '',
@@ -228,30 +223,26 @@ const ProductManagePage: React.FC = () => {
       descEn: '',
       longDescZh: '',
       longDescEn: '',
-      specsJson: '{}',
     });
     setDialogOpen(true);
   };
 
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
+    const firstVariant = product.variants[0];
     productForm.reset({
-      sku: product.sku ?? '',
       titleZh: product.titleZh,
       titleEn: product.titleEn,
       categoryId: product.categoryId ?? '',
-      price: String(product.price),
-      originalPrice: product.originalPrice
-        ? String(product.originalPrice)
-        : '',
-      stock: String(product.stock),
+      price: firstVariant ? firstVariant.price : (product.minPrice ?? '0'),
+      originalPrice: firstVariant?.originalPrice ?? '',
+      stock: String(product.totalStock),
       status: product.status,
       coverImage: product.coverImage ?? '',
       descZh: product.descZh ?? '',
       descEn: product.descEn ?? '',
       longDescZh: product.longDescZh ?? '',
       longDescEn: product.longDescEn ?? '',
-      specsJson: JSON.stringify(product.specs ?? {}, null, 2),
     });
     setDialogOpen(true);
   };
@@ -281,16 +272,20 @@ const ProductManagePage: React.FC = () => {
 
   const handleSubmit = async (values: ProductFormValues) => {
     try {
-      const specs = (() => {
-        try {
-          return JSON.parse(values.specsJson || '{}');
-        } catch {
-          return {};
-        }
-      })();
-
-      const payload = {
-        sku: values.sku || undefined,
+      const payload: {
+        titleZh: string;
+        titleEn: string;
+        categoryId?: string;
+        price: number;
+        originalPrice?: number;
+        stock: number;
+        status: 'draft' | 'active' | 'inactive';
+        coverImage?: string;
+        descZh?: string;
+        descEn?: string;
+        longDescZh?: string;
+        longDescEn?: string;
+      } = {
         titleZh: values.titleZh,
         titleEn: values.titleEn,
         categoryId: values.categoryId || undefined,
@@ -305,7 +300,6 @@ const ProductManagePage: React.FC = () => {
         descEn: values.descEn,
         longDescZh: values.longDescZh,
         longDescEn: values.longDescEn,
-        specs,
       };
 
       if (editingProduct) {
@@ -528,17 +522,17 @@ const ProductManagePage: React.FC = () => {
                       )}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {product.sku || '-'}
+                      {product.variants[0]?.sku || '-'}
                     </TableCell>
                     <TableCell className="max-w-[200px] truncate font-medium">
                       {product.titleZh}
                     </TableCell>
                     <TableCell>{product.categoryNameZh || '-'}</TableCell>
                     <TableCell className="font-semibold">
-                      ${product.price}
+                      ${Number(product.minPrice ?? 0).toFixed(2)}
                     </TableCell>
-                    <TableCell>{product.stock}</TableCell>
-                    <TableCell>{product.sold}</TableCell>
+                    <TableCell>{product.totalStock}</TableCell>
+                    <TableCell>{product.totalSold}</TableCell>
                     <TableCell>
                       <Badge
                         variant={
@@ -623,20 +617,6 @@ const ProductManagePage: React.FC = () => {
               className="space-y-4"
             >
               <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={productForm.control}
-                  name="sku"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>SKU</FormLabel>
-                      <FormControl>
-                        <Input placeholder="商品SKU编码" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
                 <FormField
                   control={productForm.control}
                   name="categoryId"
@@ -879,25 +859,6 @@ const ProductManagePage: React.FC = () => {
                       <Textarea
                         placeholder="Detailed English Description"
                         rows={3}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={productForm.control}
-                name="specsJson"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>规格 (JSON格式)</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder='{"颜色": "红色", "尺寸": "M"}'
-                        rows={3}
-                        className="font-mono text-xs"
                         {...field}
                       />
                     </FormControl>

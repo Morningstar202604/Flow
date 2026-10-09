@@ -25,9 +25,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, favorited = false })
   const [favLoading, setFavLoading] = useState<boolean>(false);
 
   const title: string = getProductTitle(product, language);
+
+  const minPrice: string = product.minPrice ?? '0';
+  const displayOriginalPrice: string =
+    product.variants[0]?.originalPrice ?? minPrice;
   const isOnSale: boolean =
-    !!product.originalPrice &&
-    Number(product.originalPrice) > Number(product.price);
+    !!displayOriginalPrice && Number(displayOriginalPrice) > Number(minPrice);
 
   const handleToggleFavorite = async (e: React.MouseEvent): Promise<void> => {
     e.preventDefault();
@@ -62,8 +65,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, favorited = false })
             <Badge className="absolute top-2 left-2 bg-orange-500 hover:bg-orange-500">
               -
               {Math.round(
-                ((Number(product.originalPrice) - Number(product.price)) /
-                  Number(product.originalPrice)) *
+                ((Number(displayOriginalPrice) - Number(minPrice)) /
+                  Number(displayOriginalPrice)) *
                   100,
               )}
               %
@@ -86,18 +89,18 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, favorited = false })
           </h3>
           <div className="flex items-baseline gap-2">
             <span className="text-lg font-bold text-orange-500">
-              ${Number(product.price).toFixed(2)}
+              ${Number(minPrice).toFixed(2)}
             </span>
-            {isOnSale && product.originalPrice && (
+            {isOnSale && displayOriginalPrice && (
               <span className="text-xs text-slate-400 line-through">
-                ${Number(product.originalPrice).toFixed(2)}
+                ${Number(displayOriginalPrice).toFixed(2)}
               </span>
             )}
           </div>
           <div className="text-xs text-slate-500">
-            {productText.sold}: {product.sold}
+            {productText.sold}: {product.totalSold}
           </div>
-          {product.stock === 0 && (
+          {product.totalStock === 0 && (
             <div className="text-xs text-slate-400">
               {productText.outOfStock}
             </div>

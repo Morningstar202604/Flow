@@ -19,7 +19,7 @@ interface ParsedCsvRow {
   stock: string; descriptionZh: string; descriptionEn: string; images: string;
 }
 
-export interface ProductVariantDto {
+export interface ProductVariant {
   id: string; productId: string; sku: string; optionValues: string[];
   price: string; originalPrice?: string; stock: number; sold: number;
   image?: string; status: string;
@@ -56,7 +56,7 @@ export class ProductsService {
 
   // ── DTO helpers ──────────────────────────────
 
-  private variantToDto(v: typeof productVariants.$inferSelect): ProductVariantDto {
+  private variantToDto(v: typeof productVariants.$inferSelect): ProductVariant {
     return {
       id: v.id, productId: v.productId, sku: v.sku,
       optionValues: v.optionValues ?? [],
@@ -66,23 +66,23 @@ export class ProductsService {
     };
   }
 
-  private async toDto(row: ProductWithCategory): Promise<Product & { variants: ProductVariantDto[] }> {
+  private async toDto(row: ProductWithCategory): Promise<Product> {
     const variants = await this.listVariants(row.id);
     const activeVariants = variants.filter((v) => v.status === 'active');
     const prices = activeVariants.map((v) => Number(v.price));
     const minPrice = prices.length > 0 ? Math.min(...prices).toString() : '0';
     return {
-      id: row.id, sku: activeVariants[0]?.sku ?? undefined,
+      id: row.id,
       titleZh: row.titleZh, titleEn: row.titleEn,
       descZh: row.descZh ?? '', descEn: row.descEn ?? '',
       longDescZh: row.longDescZh ?? '', longDescEn: row.longDescEn ?? '',
       categoryId: row.categoryId ?? undefined,
       categoryNameZh: row.categoryNameZh ?? undefined, categoryNameEn: row.categoryNameEn ?? undefined,
-      price: minPrice, originalPrice: activeVariants[0]?.originalPrice,
-      stock: row.totalStock, sold: row.totalSold,
+      sellerId: row.sellerId, minPrice, maxPrice: activeVariants[0]?.originalPrice ?? minPrice,
+      totalStock: row.totalStock, totalSold: row.totalSold,
       status: row.status as 'draft' | 'active' | 'inactive',
       coverImage: row.coverImage ?? undefined, images: row.images ?? [],
-      specs: {}, seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
+      optionNames: row.optionNames ?? [], seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
       bulletPointsZh: row.bulletPointsZh ?? [], bulletPointsEn: row.bulletPointsEn ?? [],
       weight: row.weight ? String(row.weight) : undefined,
       avgRating: row.avgRating != null ? Number(row.avgRating) : undefined,
@@ -118,12 +118,12 @@ export class ProductsService {
 
   // ── Variant query ────────────────────────────
 
-  private async fetchVariantsForProducts(productIds: string[]): Promise<Map<string, ProductVariantDto[]>> {
+  private async fetchVariantsForProducts(productIds: string[]): Promise<Map<string, ProductVariant[]>> {
     if (productIds.length === 0) return new Map();
     const rows = await this.db.select().from(productVariants)
       .where(inArray(productVariants.productId, productIds))
       .orderBy(asc(productVariants.createdAt));
-    const map = new Map<string, ProductVariantDto[]>();
+    const map = new Map<string, ProductVariant[]>();
     for (const v of rows) {
       const list = map.get(v.productId) ?? [];
       list.push(this.variantToDto(v));
@@ -166,17 +166,17 @@ export class ProductsService {
       const prices = activeVariants.map((v) => Number(v.price));
       const minPrice = prices.length > 0 ? Math.min(...prices).toString() : '0';
       return {
-        id: row.id, sku: activeVariants[0]?.sku ?? undefined,
+        id: row.id,
         titleZh: row.titleZh, titleEn: row.titleEn,
         descZh: row.descZh ?? '', descEn: row.descEn ?? '',
         longDescZh: row.longDescZh ?? '', longDescEn: row.longDescEn ?? '',
         categoryId: row.categoryId ?? undefined,
         categoryNameZh: row.categoryNameZh ?? undefined, categoryNameEn: row.categoryNameEn ?? undefined,
-        price: minPrice, originalPrice: activeVariants[0]?.originalPrice,
-        stock: row.totalStock, sold: row.totalSold,
+        sellerId: row.sellerId, minPrice, maxPrice: activeVariants[0]?.originalPrice ?? minPrice,
+        totalStock: row.totalStock, totalSold: row.totalSold,
         status: row.status as 'draft' | 'active' | 'inactive',
         coverImage: row.coverImage ?? undefined, images: row.images ?? [],
-        specs: {}, seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
+        optionNames: row.optionNames ?? [], seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
         bulletPointsZh: row.bulletPointsZh ?? [], bulletPointsEn: row.bulletPointsEn ?? [],
         weight: row.weight ? String(row.weight) : undefined,
         avgRating: row.avgRating != null ? Number(row.avgRating) : undefined,
@@ -189,7 +189,7 @@ export class ProductsService {
     return { items, total, page, pageSize };
   }
 
-  async findOne(id: string): Promise<Product & { variants: ProductVariantDto[] }> {
+  async findOne(id: string): Promise<Product> {
     const rows = await this.db.select({
       ...(products as any),
       categoryNameZh: categories.nameZh,
@@ -217,7 +217,7 @@ export class ProductsService {
     return result;
   }
 
-  async getFeatured(): Promise<Array<Product & { variants: ProductVariantDto[] }>> {
+  async getFeatured(): Promise<Array<Product>> {
     const rows = await this.db.select({
       ...(products as any),
       categoryNameZh: categories.nameZh,
@@ -236,17 +236,17 @@ export class ProductsService {
       const prices = activeVariants.map((v) => Number(v.price));
       const minPrice = prices.length > 0 ? Math.min(...prices).toString() : '0';
       return {
-        id: row.id, sku: activeVariants[0]?.sku ?? undefined,
+        id: row.id,
         titleZh: row.titleZh, titleEn: row.titleEn,
         descZh: row.descZh ?? '', descEn: row.descEn ?? '',
         longDescZh: row.longDescZh ?? '', longDescEn: row.longDescEn ?? '',
         categoryId: row.categoryId ?? undefined,
         categoryNameZh: row.categoryNameZh ?? undefined, categoryNameEn: row.categoryNameEn ?? undefined,
-        price: minPrice, originalPrice: activeVariants[0]?.originalPrice,
-        stock: row.totalStock, sold: row.totalSold,
+        sellerId: row.sellerId, minPrice, maxPrice: activeVariants[0]?.originalPrice ?? minPrice,
+        totalStock: row.totalStock, totalSold: row.totalSold,
         status: row.status as 'draft' | 'active' | 'inactive',
         coverImage: row.coverImage ?? undefined, images: row.images ?? [],
-        specs: {}, seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
+        optionNames: row.optionNames ?? [], seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
         bulletPointsZh: row.bulletPointsZh ?? [], bulletPointsEn: row.bulletPointsEn ?? [],
         weight: row.weight ? String(row.weight) : undefined,
         avgRating: row.avgRating != null ? Number(row.avgRating) : 0,
@@ -262,7 +262,7 @@ export class ProductsService {
   async create(
     input: CreateProductRequest & { variants?: CreateVariantDto[] },
     userId: string,
-  ): Promise<Product & { variants: ProductVariantDto[] }> {
+  ): Promise<Product> {
     try {
       this.validateProductImages(input.coverImage, input.images);
       const result = await this.db.transaction(async (tx) => {
@@ -332,7 +332,7 @@ export class ProductsService {
     input: UpdateProductRequest,
     userId: string,
     auditMeta?: { role?: string; ip?: string },
-  ): Promise<Product & { variants: ProductVariantDto[] }> {
+  ): Promise<Product> {
     const existingRows = await this.db.select({ status: products.status }).from(products).where(eq(products.id, id));
     if (existingRows.length === 0) throw new NotFoundException('商品不存在');
     const oldStatus = existingRows[0].status as string;
@@ -390,7 +390,7 @@ export class ProductsService {
 
   // ── Variant CRUD ─────────────────────────────
 
-  async createVariant(productId: string, dto: CreateVariantDto): Promise<ProductVariantDto> {
+  async createVariant(productId: string, dto: CreateVariantDto): Promise<ProductVariant> {
     const productRows = await this.db.select({ id: products.id }).from(products).where(eq(products.id, productId)).limit(1);
     if (productRows.length === 0) throw new NotFoundException('商品不存在');
 
@@ -416,7 +416,7 @@ export class ProductsService {
     return this.variantToDto(result);
   }
 
-  async updateVariant(variantId: string, dto: UpdateVariantDto): Promise<ProductVariantDto> {
+  async updateVariant(variantId: string, dto: UpdateVariantDto): Promise<ProductVariant> {
     const existingRows = await this.db.select().from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
     if (existingRows.length === 0) throw new NotFoundException('变体不存在');
     const existing = existingRows[0];
@@ -466,14 +466,14 @@ export class ProductsService {
     return { id: variantId };
   }
 
-  async listVariants(productId: string): Promise<ProductVariantDto[]> {
+  async listVariants(productId: string): Promise<ProductVariant[]> {
     const variantRows = await this.db.select().from(productVariants)
       .where(eq(productVariants.productId, productId))
       .orderBy(asc(productVariants.createdAt));
     return variantRows.map((v) => this.variantToDto(v));
   }
 
-  async getVariant(variantId: string): Promise<ProductVariantDto & { product?: Product }> {
+  async getVariant(variantId: string): Promise<ProductVariant & { product?: Product }> {
     const rows = await this.db.select({
       ...(productVariants as any),
       productTitleZh: products.titleZh,
@@ -496,7 +496,7 @@ export class ProductsService {
 
   // ── Stock management ─────────────────────────
 
-  async changeStock(params: StockChangeParams): Promise<ProductVariantDto> {
+  async changeStock(params: StockChangeParams): Promise<ProductVariant> {
     const { variantId, delta, reason, referenceId, note, createdBy } = params;
 
     const existingRows = await this.db.select().from(productVariants).where(eq(productVariants.id, variantId)).limit(1);

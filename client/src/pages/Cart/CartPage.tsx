@@ -185,8 +185,14 @@ const CartPage: React.FC = () => {
             <div className="lg:col-span-2 space-y-4">
               {cart?.items.map((item: CartItem) => {
                 const title: string = getProductTitle(item.product, language);
-                const subtotal: number =
-                  Number(item.product.price) * item.quantity;
+                const variantPrice = item.variantId
+                  ? item.product.variants.find((v) => v.id === item.variantId)?.price
+                  : item.product.minPrice;
+                const displayPrice: number = Number(variantPrice ?? item.product.minPrice ?? '0');
+                const subtotal: number = displayPrice * item.quantity;
+                const variantStock: number = item.variantId
+                  ? item.product.variants.find((v) => v.id === item.variantId)?.stock ?? item.product.totalStock
+                  : item.product.totalStock;
                 return (
                   <Card
                     key={item.id}
@@ -200,6 +206,7 @@ const CartPage: React.FC = () => {
                         <div className="size-24 sm:size-32 rounded-lg overflow-hidden bg-slate-50">
                           <Image
                             src={
+                              item.variantImage ||
                               item.product.coverImage ||
                               item.product.images?.[0] ||
                               ''
@@ -212,12 +219,19 @@ const CartPage: React.FC = () => {
                         </div>
                       </Link>
                       <div className="flex-1 flex flex-col justify-between min-w-0">
-                        <Link
-                          to={`/products/${item.productId}`}
-                          className="font-medium text-slate-900 hover:text-blue-600 transition-colors line-clamp-2"
-                        >
-                          {title}
-                        </Link>
+                        <div>
+                          <Link
+                            to={`/products/${item.productId}`}
+                            className="font-medium text-slate-900 hover:text-blue-600 transition-colors line-clamp-2"
+                          >
+                            {title}
+                          </Link>
+                          {item.variantInfo && (
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {item.variantInfo}
+                            </p>
+                          )}
+                        </div>
                         <div className="flex items-center justify-between gap-2">
                           <div className="inline-flex items-center border border-slate-200 rounded-lg">
                             <Button
@@ -250,7 +264,7 @@ const CartPage: React.FC = () => {
                                 )
                               }
                               disabled={
-                                item.quantity >= item.product.stock ||
+                                item.quantity >= variantStock ||
                                 updating === item.id
                               }
                             >

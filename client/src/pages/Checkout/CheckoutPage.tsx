@@ -519,6 +519,10 @@ const CheckoutPage: React.FC = () => {
                 <div className="space-y-3 max-h-72 overflow-y-auto">
                   {cart?.items.map((item) => {
                     const title: string = getProductTitle(item.product, language);
+                    const variantPrice = item.variantId
+                      ? item.product.variants.find((v) => v.id === item.variantId)?.price
+                      : item.product.minPrice;
+                    const unitPrice: number = Number(variantPrice ?? item.product.minPrice ?? '0');
                     return (
                       <div
                         key={item.id}
@@ -527,6 +531,7 @@ const CheckoutPage: React.FC = () => {
                         <div className="size-14 rounded-lg overflow-hidden bg-slate-50 flex-shrink-0">
                           <Image
                             src={
+                              item.variantImage ||
                               item.product.coverImage ||
                               item.product.images?.[0] ||
                               ''
@@ -540,15 +545,18 @@ const CheckoutPage: React.FC = () => {
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-slate-700 line-clamp-2">
                             {title}
+                            {item.variantInfo && (
+                              <span className="text-xs text-slate-400 ml-1">
+                                ({item.variantInfo})
+                              </span>
+                            )}
                           </div>
                           <div className="flex justify-between mt-1">
                             <span className="text-slate-400">
                               × {item.quantity}
                             </span>
                             <span className="text-slate-900 font-medium">
-                              ${(
-                                Number(item.product.price) * item.quantity
-                              ).toFixed(2)}
+                              ${(unitPrice * item.quantity).toFixed(2)}
                             </span>
                           </div>
                         </div>

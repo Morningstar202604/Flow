@@ -45,9 +45,22 @@ export interface ProductSpec {
   [key: string]: string;
 }
 
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  sku: string;
+  optionValues: string[];
+  price: string;
+  originalPrice?: string;
+  stock: number;
+  sold: number;
+  image?: string;
+  status: string;
+}
+
 export interface Product {
   id: string;
-  sku?: string;
+  sellerId: string;
   titleZh: string;
   titleEn: string;
   titleEs?: string;
@@ -63,25 +76,26 @@ export interface Product {
   categoryId?: string;
   categoryNameZh?: string;
   categoryNameEn?: string;
-  price: string;
-  originalPrice?: string;
-  stock: number;
-  sold: number;
-  status: 'draft' | 'active' | 'inactive';
   coverImage?: string;
   images: string[];
-  specs: ProductSpec;
-  seoKeywordsZh: string;
-  seoKeywordsEn: string;
-  seoKeywordsEs?: string;
-  seoKeywordsPt?: string;
   bulletPointsZh: string[];
   bulletPointsEn: string[];
   bulletPointsEs?: string[];
   bulletPointsPt?: string[];
+  optionNames: string[];
+  variants: ProductVariant[];
+  minPrice?: string;
+  maxPrice?: string;
+  totalStock: number;
+  totalSold: number;
+  status: 'draft' | 'active' | 'inactive';
   weight?: string;
   avgRating?: number;
   reviewCount?: number;
+  seoKeywordsZh: string;
+  seoKeywordsEn: string;
+  seoKeywordsEs?: string;
+  seoKeywordsPt?: string;
   createdAt: string;
   updatedAt: string;
 }
