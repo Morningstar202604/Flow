@@ -95,7 +95,7 @@ const RefundsManagePage: React.FC = () => {
         setLoading(false);
       }
     },
-    [page, keyword, statusFilter],
+    [page, statusFilter],
   );
 
   useEffect(() => {

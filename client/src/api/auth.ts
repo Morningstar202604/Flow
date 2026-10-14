@@ -5,15 +5,6 @@ import type {
   User,
 } from '@shared/api.interface';
 
-// Global CSRF protection: add X-Requested-With header to all non-GET requests
-http.interceptors.request.use((config) => {
-  const method = (config.method || 'get').toLowerCase();
-  if (method !== 'get') {
-    config.headers.set('X-Requested-With', 'XMLHttpRequest');
-  }
-  return config;
-});
-
 const USER_KEY = 'globalecom_user';
 
 function isLocalStorageAvailable(): boolean {

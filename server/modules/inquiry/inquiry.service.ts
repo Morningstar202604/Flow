@@ -1,12 +1,12 @@
 import { Injectable, Inject, Logger, ConflictException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, desc, count, and, asc } from 'drizzle-orm';
-import { inquirySessions, inquiryMessages } from '@server/database/schema';
+import { inquirySessions, inquiryMessages } from '../../database/schema';
 import type {
   InquirySession,
   InquiryMessage,
   SendMessageRequest,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 
 @Injectable()
 export class InquiryService {

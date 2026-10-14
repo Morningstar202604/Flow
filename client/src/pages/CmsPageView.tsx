@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { ArrowLeft, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getPageBySlug } from '@/api/cms';
 import type { CmsPage } from '@shared/api.interface';
-import { Image } from '@/components/ui/image';
-import { cn } from '@/lib/utils';
 import DOMPurify from 'dompurify';
 
 const CmsPageView: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
+  const { language } = useLanguage();
   const [page, setPage] = useState<CmsPage | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -69,43 +69,19 @@ const CmsPageView: React.FC = () => {
     );
   }
 
+  const displayTitle = language === 'zh' ? page.titleZh : page.titleEn;
+  const displayContent = language === 'zh' ? page.contentZh : page.contentEn;
+
   // Sanitize HTML content
-  const cleanContent = DOMPurify.sanitize(page.content, {
+  const cleanContent = DOMPurify.sanitize(displayContent || '', {
     ADD_TAGS: ['iframe', 'img'],
     ADD_ATTR: ['target', 'rel'],
   });
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Cover Image */}
-      {page.coverImage && (
-        <div className="relative h-64 md:h-80 overflow-hidden">
-          <Image
-            src={page.coverImage}
-            alt={page.title}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-8">
-            <div className="max-w-4xl mx-auto">
-              <h1 className="text-3xl font-bold text-white">{page.title}</h1>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className={cn('max-w-4xl mx-auto px-6', page.coverImage ? 'py-12' : 'pt-24 pb-12')}>
-        {/* Title (when no cover) */}
-        {!page.coverImage && (
-          <h1 className="text-3xl font-bold text-slate-900 mb-8">{page.title}</h1>
-        )}
-
-        {/* Excerpt */}
-        {page.excerpt && (
-          <div className="mb-8 p-4 rounded-lg bg-slate-50 border border-slate-100">
-            <p className="text-sm text-slate-600 italic">{page.excerpt}</p>
-          </div>
-        )}
+      <div className="max-w-4xl mx-auto px-6 pt-24 pb-12">
+        <h1 className="text-3xl font-bold text-slate-900 mb-8">{displayTitle}</h1>
 
         {/* Content */}
         <div

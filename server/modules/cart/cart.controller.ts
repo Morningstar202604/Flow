@@ -4,13 +4,11 @@ import type { Request } from 'express';
 import { CartService } from './cart.service';
 import type {
   CartResponse,
-  AddCartRequest,
-  UpdateCartRequest,
   CartRecoveryCodeResponse,
-  CartImportCodeRequest,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
+import { AddCartItemDto, ImportCartCodeDto, UpdateCartItemDto } from './dto/cart.dto';
 
-@Controller('api/cart')
+@Controller('cart')
 export class CartController {
   constructor(private readonly cartService: CartService) {}
 
@@ -31,7 +29,7 @@ export class CartController {
   }
 
   @Post('items')
-  async addItem(@Req() req: Request, @Body() body: AddCartRequest): Promise<CartResponse> {
+  async addItem(@Req() req: Request, @Body() body: AddCartItemDto): Promise<CartResponse> {
     const userId = req.user?.id;
     const sessionId = this.getSessionId(req.headers);
     return this.cartService.addItem(userId, sessionId, body.productId, body.quantity);
@@ -41,7 +39,7 @@ export class CartController {
   async updateItem(
     @Req() req: Request,
     @Param('id') id: string,
-    @Body() body: UpdateCartRequest,
+    @Body() body: UpdateCartItemDto,
   ): Promise<CartResponse> {
     const userId = req.user?.id;
     const sessionId = this.getSessionId(req.headers);
@@ -70,7 +68,7 @@ export class CartController {
   @Post('import-code')
   async importCode(
     @Req() req: Request,
-    @Body() body: CartImportCodeRequest,
+    @Body() body: ImportCartCodeDto,
   ): Promise<CartResponse> {
     const sessionId = this.getSessionId(req.headers);
     if (!sessionId) {

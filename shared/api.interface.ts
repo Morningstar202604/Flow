@@ -7,6 +7,8 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  /** 会员积分（支付成功累计，退款按金额回滚） */
+  points?: number;
   createdAt: string;
 }
 
@@ -20,6 +22,8 @@ export interface RegisterRequest {
   password: string;
   name: string;
   role?: 'buyer' | 'seller';
+  /** 注册卖家时需携带的邀请码（与 SELLER_REGISTRATION_CODE 环境变量一致） */
+  sellerCode?: string;
 }
 
 export interface LoginRequest {
@@ -381,6 +385,91 @@ export interface AITrendReport {
   createdAt: string;
 }
 
+// ==================== AI 模型设置与自定义 Agent ====================
+
+export type AiConfigSource = 'db' | 'env' | 'none';
+
+export interface AiSettingsView {
+  configured: boolean;
+  source: AiConfigSource;
+  baseUrl: string;
+  model: string;
+  /** UI 中保存的 Key 掩码（环境变量来源的 Key 不回显） */
+  apiKeyMasked: string | null;
+}
+
+export interface AiSettingsTestResult {
+  ok: boolean;
+  model?: string;
+  message: string;
+}
+
+export interface BuiltinAgentMeta {
+  key: string;
+  name: string;
+  description: string;
+  usesModel: string;
+}
+
+export interface CustomAgent {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  userPromptTemplate: string;
+  responseFormat: 'text' | 'json';
+  temperature: number;
+  maxTokens: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentListResult {
+  builtin: BuiltinAgentMeta[];
+  custom: CustomAgent[];
+}
+
+export interface RunAgentResult {
+  content: string;
+  parsed?: unknown;
+}
+
+export interface UpdateAiSettingsRequest {
+  /** 传空字符串清除 UI 中保存的值（回退环境变量/未配置） */
+  baseUrl?: string;
+  apiKey?: string;
+  model?: string;
+}
+
+export interface CreateAgentRequest {
+  name: string;
+  slug?: string;
+  description?: string;
+  systemPrompt: string;
+  userPromptTemplate?: string;
+  responseFormat?: 'text' | 'json';
+  temperature?: number;
+  maxTokens?: number;
+  enabled?: boolean;
+}
+
+export type UpdateAgentRequest = Partial<Omit<CreateAgentRequest, 'slug'>>;
+
+/** AI 报告历史（落库回看） */
+export interface AIReportSummary {
+  id: string;
+  reportType: string;
+  title: string;
+  model?: string;
+  createdAt: string;
+}
+
+export interface AIReportDetail extends AIReportSummary {
+  content: string;
+}
+
 export interface AISelectItem {
   keyword: string;
   estimatedDemand: string;
@@ -396,6 +485,8 @@ export interface AISelectResponse {
 export interface AIStatusResponse {
   configured: boolean;
   model?: string;
+  /** 配置来源：db=UI 设置，env=环境变量，none=未配置 */
+  source?: 'db' | 'env' | 'none';
 }
 
 export interface AIUsageAgentStat {
@@ -731,11 +822,15 @@ export interface ShippingCalculateResponse {
 export interface Collection {
   id: string;
   sellerId: string;
-  name: string;
+  titleZh: string;
+  titleEn: string;
   slug: string;
-  description?: string;
-  image?: string;
-  productIds: string[];
+  descriptionZh?: string;
+  descriptionEn?: string;
+  coverImage?: string;
+  isSmart?: boolean;
+  smartRules?: string | null;
+  productIds?: string[];
   productCount: number;
   sortOrder: number;
   isFeatured: boolean;
@@ -744,11 +839,26 @@ export interface Collection {
   updatedAt: string;
 }
 
-export interface CreateCollectionRequest {
-  name: string;
+export interface StorefrontSection {
+  id: string;
   slug: string;
-  description?: string;
-  image?: string;
+  titleZh: string;
+  titleEn: string;
+  descriptionZh?: string;
+  descriptionEn?: string;
+  coverImage?: string;
+  products: Product[];
+}
+
+export interface CreateCollectionRequest {
+  titleZh: string;
+  titleEn: string;
+  slug?: string;
+  descriptionZh?: string;
+  descriptionEn?: string;
+  coverImage?: string;
+  isSmart?: boolean;
+  smartRules?: Array<{ field: string; operator: string; value: string | number }>;
   productIds?: string[];
   sortOrder?: number;
   isFeatured?: boolean;
@@ -756,10 +866,14 @@ export interface CreateCollectionRequest {
 }
 
 export interface UpdateCollectionRequest {
-  name?: string;
+  titleZh?: string;
+  titleEn?: string;
   slug?: string;
-  description?: string;
-  image?: string;
+  descriptionZh?: string;
+  descriptionEn?: string;
+  coverImage?: string;
+  isSmart?: boolean;
+  smartRules?: Array<{ field: string; operator: string; value: string | number }>;
   productIds?: string[];
   sortOrder?: number;
   isFeatured?: boolean;
@@ -786,53 +900,51 @@ export interface CollectionListResponse {
 export interface CmsPage {
   id: string;
   slug: string;
-  title: string;
-  content: string;
-  excerpt?: string;
-  metaTitle?: string;
-  metaDescription?: string;
-  coverImage?: string;
-  status: 'draft' | 'published' | 'archived';
-  isPublic: boolean;
-  sortOrder: number;
-  viewCount: number;
-  createdBy?: string;
+  titleZh: string;
+  titleEn: string;
+  contentZh: string;
+  contentEn: string;
+  metaTitleZh?: string;
+  metaTitleEn?: string;
+  metaDescZh?: string;
+  metaDescEn?: string;
+  isPublished: boolean;
   updatedBy?: string;
-  publishedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreateCmsPageRequest {
   slug: string;
-  title: string;
-  content: string;
-  excerpt?: string;
-  metaTitle?: string;
-  metaDescription?: string;
-  coverImage?: string;
-  status?: 'draft' | 'published' | 'archived';
-  isPublic?: boolean;
-  sortOrder?: number;
+  titleZh: string;
+  titleEn: string;
+  contentZh?: string;
+  contentEn?: string;
+  metaTitleZh?: string;
+  metaTitleEn?: string;
+  metaDescZh?: string;
+  metaDescEn?: string;
+  isPublished?: boolean;
 }
 
 export interface UpdateCmsPageRequest {
   slug?: string;
-  title?: string;
-  content?: string;
-  excerpt?: string;
-  metaTitle?: string;
-  metaDescription?: string;
-  coverImage?: string;
-  status?: 'draft' | 'published' | 'archived';
-  isPublic?: boolean;
-  sortOrder?: number;
+  titleZh?: string;
+  titleEn?: string;
+  contentZh?: string;
+  contentEn?: string;
+  metaTitleZh?: string;
+  metaTitleEn?: string;
+  metaDescZh?: string;
+  metaDescEn?: string;
+  isPublished?: boolean;
 }
 
 export interface CmsPageListParams {
   page?: number;
   pageSize?: number;
-  status?: CmsPage['status'];
+  /** 'published' | 'draft'（映射到 is_published） */
+  status?: 'published' | 'draft';
   keyword?: string;
 }
 

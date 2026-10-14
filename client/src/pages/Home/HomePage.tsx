@@ -5,18 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Image } from '@/components/ui/image';
 import ProductCard from '@/components/ProductCard';
+import CollectionFloors from '@/components/CollectionFloors';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getFeaturedProducts, listProducts } from '@/api/products';
 import { listCategories } from '@/api/categories';
+import { getStorefront } from '@/api/collections';
 import { checkFavoriteBatch } from '@/api/favorites';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Product, Category } from '@shared/api.interface';
+import type { Product, Category, StorefrontSection } from '@shared/api.interface';
 
 const HomePage: React.FC = () => {
   const { user } = useAuth();
   const [hotProducts, setHotProducts] = useState<Product[]>([]);
   const [newProducts, setNewProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [floors, setFloors] = useState<StorefrontSection[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const { language, t } = useLanguage();
@@ -26,16 +29,19 @@ const HomePage: React.FC = () => {
     const loadData = async (): Promise<void> => {
       try {
         setLoading(true);
-        const [cats, hot, newest] = await Promise.all([
+        const [cats, hot, newest, storefront] = await Promise.all([
           listCategories(),
           getFeaturedProducts(8),
           listProducts({ page: 1, pageSize: 8, sortBy: 'newest' }),
+          getStorefront().catch(() => [] as StorefrontSection[]),
         ]);
         setCategories(cats);
          setHotProducts(hot);
          setNewProducts(newest.items);
+         setFloors(storefront);
          if (user) {
-           const allIds = [...hot, ...newest.items].map((p) => p.id);
+           const floorProductIds = storefront.flatMap((section) => section.products.map((p) => p.id));
+           const allIds = [...hot.map((p) => p.id), ...newest.items.map((p) => p.id), ...floorProductIds];
            const uniqueIds = Array.from(new Set(allIds));
            try {
              const faves = await checkFavoriteBatch(uniqueIds);
@@ -127,6 +133,9 @@ const HomePage: React.FC = () => {
           })}
         </div>
       </section>
+
+      {/* Collection Floors（运营楼层） */}
+      <CollectionFloors sections={floors} favoriteIds={favoriteIds} loading={loading} />
 
       {/* Hot Products */}
       <section className="container mx-auto px-6 py-8">

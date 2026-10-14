@@ -1,23 +1,27 @@
-import { Controller, Post, Get, Body, Req, Query, UseGuards, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req, Query, Param, UseGuards, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
+import { eq, desc } from 'drizzle-orm';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
+import { aiReports } from '../../database/schema';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { AiGatewayService } from './ai-gateway.service';
 import { CopywriterService } from './copywriter.service';
 import { SupportService } from './support.service';
 import { TrendService } from './trend.service';
 import { SelectService } from './select.service';
 import { TranslationService } from './translation.service';
+import { CopywriterDto, SupportChatDto, TranslationDto } from './dto/ai.dto';
 import type {
-  AICopywriterRequest,
   AICopywriterResponse,
-  AITranslationRequest,
   AITranslationResponse,
   AITrendReport,
   AISelectResponse,
   AIStatusResponse,
-  SupportChatRequest,
+  AIReportSummary,
+  AIReportDetail,
   SupportChatResponse,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 
 interface UsageStatsResponse {
   totalCalls: number;
@@ -34,9 +38,10 @@ interface UsageStatsResponse {
   }>;
 }
 
-@Controller('api/ai')
+@Controller('ai')
 export class AiController {
   constructor(
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly aiGateway: AiGatewayService,
     private readonly copywriterService: CopywriterService,
     private readonly supportService: SupportService,
@@ -46,10 +51,12 @@ export class AiController {
   ) {}
 
   @Get('status')
-  getStatus(): AIStatusResponse {
+  async getStatus(): Promise<AIStatusResponse> {
+    const config = await this.aiGateway.resolveConfig();
     return {
-      configured: this.aiGateway.isConfigured(),
-      model: this.aiGateway.isConfigured() ? this.aiGateway.getModel() : undefined,
+      configured: config.apiKey.length > 0,
+      model: config.apiKey.length > 0 ? config.model : undefined,
+      source: config.source,
     };
   }
 
@@ -64,18 +71,66 @@ export class AiController {
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
+  @Get('reports')
+  async listReports(@Query('type') type?: string): Promise<AIReportSummary[]> {
+    const rows = await this.db
+      .select({
+        id: aiReports.id,
+        reportType: aiReports.reportType,
+        title: aiReports.title,
+        model: aiReports.model,
+        createdAt: aiReports.createdAt,
+      })
+      .from(aiReports)
+      .where(type ? eq(aiReports.reportType, type) : undefined)
+      .orderBy(desc(aiReports.createdAt))
+      .limit(20);
+
+    return rows.map((row) => ({
+      id: row.id,
+      reportType: row.reportType,
+      title: row.title,
+      model: row.model ?? undefined,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  @UseGuards(new RolesGuard(['seller', 'admin']))
+  @Get('reports/:id')
+  async getReport(@Param('id') id: string): Promise<AIReportDetail> {
+    const rows = await this.db
+      .select()
+      .from(aiReports)
+      .where(eq(aiReports.id, id));
+    if (rows.length === 0) {
+      throw new NotFoundException('报告不存在');
+    }
+    const row = rows[0];
+    return {
+      id: row.id,
+      reportType: row.reportType,
+      title: row.title,
+      model: row.model ?? undefined,
+      content: row.content,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  @UseGuards(new RolesGuard(['seller', 'admin']))
   @Post('copywriter')
   async copywriter(
-    @Body() dto: AICopywriterRequest,
+    @Body() dto: CopywriterDto,
     @Req() req: Request,
   ): Promise<AICopywriterResponse> {
     const userId = req.user?.id;
     return this.copywriterService.generate(dto, userId);
   }
 
+  // 公开端点（买家用）：额外限流收紧到 10/min 每 IP，防止匿名消耗 LLM 配额
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('support/chat')
   async supportChat(
-    @Body() dto: SupportChatRequest,
+    @Body() dto: SupportChatDto,
     @Req() req: Request,
   ): Promise<SupportChatResponse> {
     const userId = req.user?.id;
@@ -97,9 +152,10 @@ export class AiController {
     return this.selectService.selectProducts(userId);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('translate')
   async translate(
-    @Body() dto: AITranslationRequest,
+    @Body() dto: TranslationDto,
     @Req() req: Request,
   ): Promise<AITranslationResponse> {
     const userId = req.user?.id;

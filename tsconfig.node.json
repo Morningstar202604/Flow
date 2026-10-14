@@ -4,10 +4,9 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "lib": ["ES2022"],
-    "baseUrl": "./",
     "outDir": "./dist-server",
     "rootDir": "./",
-    "strict": false,
+    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -15,12 +14,8 @@
     "declaration": false,
     "sourceMap": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "paths": {
-      "@server/*": ["server/*"],
-      "@shared/*": ["shared/*"]
-    }
+    "emitDecoratorMetadata": true
   },
   "include": ["server/**/*.ts", "shared/**/*.ts"],
-  "exclude": ["node_modules", "dist", "dist-server", "client"]
+  "exclude": ["node_modules", "dist", "dist-server", "client", "**/*.spec.ts"]
 }

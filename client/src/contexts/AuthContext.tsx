@@ -45,7 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [user, setUser] = useState<User | null>(getStoredUser());
   const [loading, setLoading] = useState(true);
-  const [sessionId, setSessionId] = useState<string>(() => getSessionId());
+  const [sessionId] = useState<string>(() => getSessionId());
 
   useEffect(() => {
     getMe().then((u) => {

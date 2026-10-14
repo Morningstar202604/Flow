@@ -11,13 +11,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { InquiryService } from './inquiry.service';
 import type {
   InquirySession,
   InquiryMessage,
   SendMessageRequest,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 
 interface SessionListResponse {
   items: InquirySession[];
@@ -31,7 +31,7 @@ interface CreateSessionRequest {
   userId?: string;
 }
 
-@Controller('api/inquiry')
+@Controller('inquiry')
 export class InquiryController {
   constructor(private readonly inquiryService: InquiryService) {}
 
@@ -77,6 +77,10 @@ export class InquiryController {
       }
       return this.inquiryService.sendMessage(body, req.user.id);
     }
+    // 买家侧仅允许发送 user 消息（assistant 回复由服务端 AI 客服落库，防止伪造）
+    if (body.role !== 'user') {
+      throw new ForbiddenException('买家侧仅可发送 user 角色消息');
+    }
     const raw = req.headers['x-session-id'];
     const headerSessionId = Array.isArray(raw) ? raw[0] : raw;
     if (!headerSessionId || headerSessionId !== body.sessionId) {
@@ -87,11 +91,18 @@ export class InquiryController {
 
   @Post('sessions')
   async createSession(
+    @Req() req: Request,
     @Body() body: CreateSessionRequest,
   ): Promise<InquirySession> {
     if (!body.sessionId) {
       throw new BadRequestException('sessionId 不能为空');
     }
-    return this.inquiryService.createSession(body.sessionId, body.userId);
+    // 会话归属：必须由持有该 sessionId 的浏览器初始化；userId 由服务端从登录态解析，不信任请求体
+    const raw = req.headers['x-session-id'];
+    const headerSessionId = Array.isArray(raw) ? raw[0] : raw;
+    if (!headerSessionId || headerSessionId !== body.sessionId) {
+      throw new ForbiddenException('无权初始化该会话');
+    }
+    return this.inquiryService.createSession(body.sessionId, req.user?.id);
   }
 }

@@ -1,9 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq, desc, sql, sum } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService } from './ai-gateway.service';
-import { products, productVariants, categories } from '@server/database/schema';
-import type { AISelectResponse } from '@shared/api.interface';
+import { parseLlmJson } from './llm-json';
+import { products, productVariants, categories } from '../../database/schema';
+import type { AISelectResponse } from '../../../shared/api.interface';
 
 @Injectable()
 export class SelectService {
@@ -90,7 +91,7 @@ confidence 是 0-1 之间的数字，表示推荐置信度。
       { temperature: 0.8, maxTokens: 2000, responseFormat: 'json', agent: 'select', userId },
     );
 
-    const parsed = JSON.parse(content) as AISelectResponse;
+    const parsed = parseLlmJson<AISelectResponse>(content);
     return {
       items: Array.isArray(parsed.items) ? parsed.items : [],
     };

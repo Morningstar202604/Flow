@@ -1,7 +1,7 @@
 import { Injectable, Inject, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc } from 'drizzle-orm';
-import { logistics, orders, orderFulfillments } from '@server/database/schema';
+import { logistics, orders, orderFulfillments } from '../../database/schema';
 
 export interface TrackingEvent {
   time: string;

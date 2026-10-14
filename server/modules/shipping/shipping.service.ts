@@ -1,14 +1,9 @@
-import { Injectable, Inject, Logger, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc } from 'drizzle-orm';
 
-import { shippingTemplates, orders } from '@server/database/schema';
-
-/** Special zone shape stored in shipping_templates.specialZones JSON */
-interface SpecialZone {
-  countries: string[];
-  extraFee: string;
-}
+import { shippingTemplates, orders } from '../../database/schema';
+import { computeShippingFee } from './shipping-fee';
 
 @Injectable()
 export class ShippingService {
@@ -185,38 +180,32 @@ export class ShippingService {
     subtotal: number,
   ): Promise<string> {
     const tpl = await this._getDefault(sellerId);
-    if (!tpl) return '0';
+    return computeShippingFee(tpl, { country, weightTotal, qtyTotal, subtotal }).fee;
+  }
 
-    // Free shipping threshold
-    if (Number(tpl.freeShippingThreshold) > 0 && subtotal >= Number(tpl.freeShippingThreshold)) {
-      return '0';
-    }
+  /**
+   * 买家结算报价（公开接口调用）：按全局默认模板计算。
+   * 单店铺部署下默认模板即全店运费规则；下单时服务端会用同一函数重算，以其结果为准。
+   */
+  async quoteForBuyer(input: {
+    country?: string;
+    weightTotal?: number;
+    qtyTotal?: number;
+    subtotal: number;
+  }): Promise<{ fee: string; templateId: string | null }> {
+    const template = await this._getAnyDefault();
+    const quote = computeShippingFee(template, input);
+    return { fee: quote.fee, templateId: template?.id ?? null };
+  }
 
-    let fee = Number(tpl.baseFee);
+  private async _getAnyDefault() {
+    const rows = await this.db
+      .select()
+      .from(shippingTemplates)
+      .where(eq(shippingTemplates.isDefault, true))
+      .orderBy(desc(shippingTemplates.createdAt))
+      .limit(1);
 
-    if (tpl.unitType === 'weight') {
-      const extraWeight = Math.max(0, weightTotal - 1); // First 1kg included in baseFee
-      fee += extraWeight * Number(tpl.extraFeePerUnit);
-    } else {
-      const extraQty = Math.max(0, qtyTotal - 1); // First item included in baseFee
-      fee += extraQty * Number(tpl.extraFeePerUnit);
-    }
-
-    // Special zone surcharge
-    if (tpl.specialZones) {
-      try {
-        const zones: SpecialZone[] = JSON.parse(tpl.specialZones);
-        for (const z of zones) {
-          if (z.countries.includes(country)) {
-            fee += Number(z.extraFee || 0);
-            break;
-          }
-        }
-      } catch (err) {
-        this.logger.warn(`Failed to parse specialZones for template ${tpl.id}: ${(err as Error).message}`);
-      }
-    }
-
-    return fee.toFixed(2);
+    return rows[0] ?? null;
   }
 }

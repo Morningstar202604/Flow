@@ -1,4 +1,5 @@
 const tseslint = require('typescript-eslint');
+const reactHooks = require('eslint-plugin-react-hooks');
 
 module.exports = tseslint.config(
   {
@@ -12,7 +13,27 @@ module.exports = tseslint.config(
     ],
   },
   {
-    files: ['client/**/*.{ts,tsx}', 'shared/**/*.{ts,tsx}'],
+    files: ['client/**/*.{ts,tsx}'],
+    extends: [
+      ...tseslint.configs.recommended,
+    ],
+    plugins: {
+      'react-hooks': reactHooks,
+    },
+    languageOptions: {
+      parserOptions: {
+        project: './tsconfig.app.json',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'off',
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+    },
+  },
+  {
+    files: ['shared/**/*.{ts,tsx}'],
     extends: [
       ...tseslint.configs.recommended,
     ],
@@ -27,13 +48,13 @@ module.exports = tseslint.config(
     },
   },
   {
-    files: ['server/**/*.{ts,tsx}', 'shared/**/*.{ts,tsx}'],
+    files: ['server/**/*.{ts,tsx}'],
     extends: [
       ...tseslint.configs.recommended,
     ],
     languageOptions: {
       parserOptions: {
-        project: './tsconfig.node.json',
+        project: './tsconfig.eslint.json',
       },
     },
     rules: {

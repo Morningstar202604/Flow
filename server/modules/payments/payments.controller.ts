@@ -6,19 +6,19 @@ import {
   Req,
   Param,
   BadRequestException,
-  Logger,
+  ForbiddenException,
   Headers,
 } from '@nestjs/common';
 import type { Request } from 'express';
 
 import { PaymentsService } from './payments.service';
-import { ForbiddenException } from '@nestjs/common';
-import type { PayRequest, PayResponse, Payment } from '@shared/api.interface';
+import type { PayResponse, Payment } from '../../../shared/api.interface';
+import { PayDto } from './dto/payments.dto';
 
-@Controller('api/payments')
+type RequestWithRawBody = Request & { rawBody?: Buffer };
+
+@Controller('payments')
 export class PaymentsController {
-  private readonly logger = new Logger(PaymentsController.name);
-
   constructor(private readonly paymentsService: PaymentsService) {}
 
   private getSessionId(req: Request): string | undefined {
@@ -30,30 +30,15 @@ export class PaymentsController {
     return undefined;
   }
 
-  private getClientIp(req: Request): string {
-    const xff = req.headers['x-forwarded-for'];
-    if (typeof xff === 'string' && xff) {
-      return xff.split(',')[0].trim();
-    }
-    const ip = req.socket?.remoteAddress;
-    return ip || 'unknown';
-  }
-
   @Post('pay')
-  async pay(@Req() req: Request, @Body() body: PayRequest): Promise<PayResponse> {
-    if (!body.orderId) {
-      throw new BadRequestException('缺少订单ID');
-    }
-    if (!body.provider) {
-      throw new BadRequestException('缺少支付方式');
-    }
+  async pay(@Req() req: Request, @Body() body: PayDto): Promise<PayResponse> {
     const userId = req.user?.id;
     const sessionId = this.getSessionId(req);
-    const ip = this.getClientIp(req);
     if (!userId && !sessionId) {
       throw new ForbiddenException('请先登录或初始化会话');
     }
-    return this.paymentsService.pay(body.orderId, body.provider, userId, sessionId, { ip });
+    // 客户端 IP 取自 req.ip（trust proxy 由 TRUST_PROXY 环境变量控制），不直接信任 XFF 头
+    return this.paymentsService.pay(body.orderId, body.provider, userId, sessionId, { ip: req.ip });
   }
 
   @Get('config')
@@ -65,11 +50,22 @@ export class PaymentsController {
     return this.paymentsService.getPaymentConfig();
   }
 
+  @Post('stripe-webhook')
+  async handleStripeWebhook(
+    @Req() req: RequestWithRawBody,
+    @Headers('stripe-signature') signature?: string,
+  ): Promise<{ received: boolean }> {
+    const result = await this.paymentsService.handleStripeWebhook(req.rawBody, signature);
+    if (!result) {
+      throw new BadRequestException('无效的 Stripe webhook 请求');
+    }
+    return { received: true };
+  }
+
   @Post('paypal-webhook')
   async handlePayPalWebhook(
-    @Req() req: Request,
     @Headers() headers: Record<string, string>,
-    @Body() body: any,
+    @Body() body: unknown,
   ): Promise<{ received: boolean }> {
     const result = await this.paymentsService.handlePayPalWebhook(headers, body);
     if (!result) {

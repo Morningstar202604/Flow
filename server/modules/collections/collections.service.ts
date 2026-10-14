@@ -7,7 +7,8 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { collections, collectionProducts, products } from '@server/database/schema';
+import { collections, collectionProducts, products } from '../../database/schema';
+import { ProductsService } from '../products/products.service';
 import {
   eq,
   and,
@@ -15,11 +16,23 @@ import {
   asc,
   count,
   gte,
+  inArray,
   sql,
   type SQL,
 } from 'drizzle-orm';
 
 // ==================== Types ====================
+
+export interface StorefrontSection {
+  id: string;
+  slug: string;
+  titleZh: string;
+  titleEn: string;
+  descriptionZh?: string;
+  descriptionEn?: string;
+  coverImage?: string;
+  products: import('../../../shared/api.interface').Product[];
+}
 
 export interface SmartRule {
   field: string;
@@ -111,6 +124,7 @@ export class CollectionsService {
 
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
+    private readonly productsService: ProductsService,
   ) {}
 
   // ── Slug generation ──────────────────────────
@@ -414,6 +428,79 @@ export class CollectionsService {
   }
 
   // ── Featured (public) ─────────────────────────
+
+  /**
+   * 店铺楼层（买家首页用，公开）：精选集合 + 每个集合的完整商品（仅上架），
+   * 共 3 次查询（集合 / 关联行 / 商品+变体），不随集合数增长。
+   */
+  async getStorefront(limitPerCollection = 8): Promise<StorefrontSection[]> {
+    const sectionRows = await this.db
+      .select()
+      .from(collections)
+      .where(and(eq(collections.isFeatured, true), eq(collections.status, 'active')))
+      .orderBy(asc(collections.sortOrder), desc(collections.createdAt))
+      .limit(6);
+
+    if (sectionRows.length === 0) return [];
+
+    const sectionIds = sectionRows.map((row) => row.id);
+    const links = await this.db
+      .select({
+        collectionId: collectionProducts.collectionId,
+        productId: collectionProducts.productId,
+        sortOrder: collectionProducts.sortOrder,
+      })
+      .from(collectionProducts)
+      .where(inArray(collectionProducts.collectionId, sectionIds))
+      .orderBy(asc(collectionProducts.sortOrder));
+
+    const idsBySection = new Map<string, string[]>();
+    for (const link of links) {
+      const list = idsBySection.get(link.collectionId) ?? [];
+      list.push(link.productId);
+      idsBySection.set(link.collectionId, list);
+    }
+
+    const allProductIds = Array.from(new Set(links.map((link) => link.productId)));
+    const allProducts = await this.productsService.findByIds(allProductIds, true);
+    const productMap = new Map(allProducts.map((product) => [product.id, product]));
+
+    return sectionRows
+      .map((row) => {
+        const ids = (idsBySection.get(row.id) ?? []).slice(0, limitPerCollection);
+        const items = ids
+          .map((id) => productMap.get(id))
+          .filter((product): product is NonNullable<typeof product> => Boolean(product));
+        return {
+          id: row.id,
+          slug: row.slug,
+          titleZh: row.titleZh,
+          titleEn: row.titleEn,
+          descriptionZh: row.descriptionZh ?? undefined,
+          descriptionEn: row.descriptionEn ?? undefined,
+          coverImage: row.coverImage ?? undefined,
+          products: items,
+        };
+      })
+      .filter((section) => section.products.length > 0);
+  }
+
+  /**
+   * 按 slug 获取集合详情（买家端公开）：先解析 slug → id，再复用 getOne 的组装逻辑。
+   * 仅返回启用状态的集合。
+   */
+  async getBySlug(slug: string): Promise<CollectionDetail> {
+    const [row] = await this.db
+      .select({ id: collections.id })
+      .from(collections)
+      .where(and(eq(collections.slug, slug), eq(collections.status, 'active')))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException('集合不存在');
+    }
+    return this.getOne(row.id);
+  }
 
   async getFeatured(): Promise<CollectionListItem[]> {
     const rows = await this.db

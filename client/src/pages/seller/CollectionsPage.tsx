@@ -42,7 +42,6 @@ import {
   deleteCollection,
   addProductToCollection,
   removeProductFromCollection,
-  reorderCollectionProducts,
 } from '@/api/collections';
 import type {
   Collection,
@@ -61,7 +60,7 @@ const CollectionsPage: React.FC = () => {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<CreateCollectionRequest>({ name: '', slug: '' });
+  const [form, setForm] = useState<CreateCollectionRequest>({ titleZh: '', titleEn: '' });
 
   const [productsDialogOpen, setProductsDialogOpen] = useState(false);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
@@ -87,16 +86,17 @@ const CollectionsPage: React.FC = () => {
 
   const handleCreate = () => {
     setEditingId(null);
-    setForm({ name: '', slug: '', description: '', sortOrder: collections.length, status: 'active', isFeatured: false });
+    setForm({ titleZh: '', titleEn: '', slug: '', descriptionZh: '', sortOrder: collections.length, status: 'active', isFeatured: false });
     setDialogOpen(true);
   };
 
   const handleEdit = (collection: Collection) => {
     setEditingId(collection.id);
     setForm({
-      name: collection.name,
+      titleZh: collection.titleZh,
+      titleEn: collection.titleEn,
       slug: collection.slug,
-      description: collection.description,
+      descriptionZh: collection.descriptionZh,
       sortOrder: collection.sortOrder,
       isFeatured: collection.isFeatured,
       status: collection.status,
@@ -116,12 +116,12 @@ const CollectionsPage: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) {
-      toast.error('请输入集合名称');
+    if (!form.titleZh.trim()) {
+      toast.error('请输入集合中文名称');
       return;
     }
-    if (!form.slug.trim()) {
-      toast.error('请输入集合标识');
+    if (!form.titleEn.trim()) {
+      toast.error('请输入集合英文名称');
       return;
     }
     try {
@@ -190,17 +190,6 @@ const CollectionsPage: React.FC = () => {
     }
   };
 
-  const handleToggleStatus = async (collection: Collection) => {
-    try {
-      const newStatus = collection.status === 'active' ? 'inactive' : 'active';
-      await updateCollection(collection.id, { status: newStatus });
-      toast.success(newStatus === 'active' ? '已启用' : '已停用');
-      fetchCollections();
-    } catch {
-      toast.error('操作失败');
-    }
-  };
-
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const pagedCollections = collections.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -256,12 +245,12 @@ const CollectionsPage: React.FC = () => {
                   <TableRow key={collection.id}>
                     <TableCell className="font-medium text-slate-900">
                       <div className="flex items-center gap-2">
-                        {collection.image && (
+                        {collection.coverImage && (
                           <div className="h-8 w-8 rounded overflow-hidden bg-slate-100 flex-shrink-0">
-                            <img src={collection.image} alt="" className="h-full w-full object-cover" />
+                            <img src={collection.coverImage} alt="" className="h-full w-full object-cover" />
                           </div>
                         )}
-                        <span>{collection.name}</span>
+                        <span>{collection.titleZh}</span>
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">{collection.slug}</TableCell>
@@ -327,16 +316,25 @@ const CollectionsPage: React.FC = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>集合名称 *</Label>
+              <Label>集合名称（中文）*</Label>
               <Input
                 placeholder="如：春季新品推荐"
-                value={form.name}
-                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                value={form.titleZh}
+                onChange={(e) => setForm((prev) => ({ ...prev, titleZh: e.target.value }))}
                 className="mt-1"
               />
             </div>
             <div>
-              <Label>标识 (slug) *</Label>
+              <Label>集合名称（英文）*</Label>
+              <Input
+                placeholder="如：Spring New Arrivals"
+                value={form.titleEn}
+                onChange={(e) => setForm((prev) => ({ ...prev, titleEn: e.target.value }))}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>标识 (slug)</Label>
               <Input
                 placeholder="如：spring-new-arrivals"
                 value={form.slug}
@@ -346,14 +344,14 @@ const CollectionsPage: React.FC = () => {
                 }}
                 className="mt-1 font-mono text-sm"
               />
-              <p className="mt-1 text-xs text-muted-foreground">用作URL标识，仅支持小写字母、数字和连字符</p>
+              <p className="mt-1 text-xs text-muted-foreground">用作 URL 标识（留空则由英文名自动生成），仅支持小写字母、数字和连字符</p>
             </div>
             <div>
               <Label>描述</Label>
               <Textarea
                 placeholder="集合描述（选填）"
-                value={form.description || ''}
-                onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                value={form.descriptionZh || ''}
+                onChange={(e) => setForm((prev) => ({ ...prev, descriptionZh: e.target.value }))}
                 rows={3}
                 className="mt-1"
               />
@@ -404,7 +402,7 @@ const CollectionsPage: React.FC = () => {
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              管理商品 - {selectedCollection?.name}
+              管理商品 - {selectedCollection?.titleZh}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">

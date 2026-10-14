@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { LanguageProvider } from './contexts/LanguageContext';
@@ -28,10 +28,17 @@ import CollectionsPage from './pages/seller/CollectionsPage';
 import CmsPagesPage from './pages/seller/CmsPagesPage';
 import AuditLogPage from './pages/seller/AuditLogPage';
 import CmsPageView from './pages/CmsPageView';
+import CollectionDetailPage from './pages/CollectionDetail/CollectionDetailPage';
 import NotFound from './pages/NotFound/NotFound';
 import ChatWidget from './components/ChatWidget';
+import { reportVisitOnce } from './lib/visit-beacon';
 
 const RoutesComponent = () => {
+  // 会话内每日一次访问上报（卖家看板访客数）
+  useEffect(() => {
+    reportVisitOnce();
+  }, []);
+
   return (
     <LanguageProvider>
       <AuthProvider>
@@ -40,6 +47,8 @@ const RoutesComponent = () => {
           <Route path="/register" element={<RegisterPage />} />
           {/* Public CMS pages */}
           <Route path="/page/:slug" element={<CmsPageView />} />
+          {/* Public collection detail */}
+          <Route path="/collections/:slug" element={<CollectionDetailPage />} />
           <Route element={<BuyerLayout />}>
             <Route index element={<HomePage />} />
             <Route path="products" element={<ProductListPage />} />

@@ -5,20 +5,22 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { eq, and, desc, count, gte, lt, sql } from 'drizzle-orm';
+import { eq, and, desc, count, sql } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
+import { computeCouponDiscount, type CouponDiscountType } from './coupon-discount';
 import { nanoid } from 'nanoid';
 
-import { coupons, couponUsage } from '@server/database/schema';
+import { coupons, couponUsage } from '../../database/schema';
 import type {
   Coupon,
   CouponListResponse,
   CreateCouponRequest,
   UpdateCouponRequest,
   ValidateCouponResponse,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 import { AuditService } from '../audit/audit.service';
 
 @Injectable()
@@ -73,13 +75,17 @@ export class CouponsService {
     dto: CreateCouponRequest,
     auditMeta?: { userId?: string; role?: string; ip?: string },
   ): Promise<Coupon> {
+    const sellerId = auditMeta?.userId;
+    if (!sellerId) {
+      throw new ForbiddenException('需要卖家身份');
+    }
     if (!dto.code?.trim()) {
       throw new BadRequestException('优惠码不能为空');
     }
     if (dto.type !== 'free_shipping' && (!dto.value || dto.value <= 0)) {
       throw new BadRequestException('面额必须大于 0');
     }
-    if (dto.type === 'percent' && dto.value > 100) {
+    if (dto.type === 'percent' && (dto.value ?? 0) > 100) {
       throw new BadRequestException('百分比折扣不能超过 100');
     }
 
@@ -94,7 +100,7 @@ export class CouponsService {
     const inserted = await this.db
       .insert(coupons)
       .values({
-        sellerId: auditMeta?.userId ?? null,
+        sellerId,
         code: dto.code.trim().toUpperCase(),
         type: dto.type,
         value: (dto.value ?? 0).toString(),
@@ -157,7 +163,7 @@ export class CouponsService {
     if (dto.minOrderAmount !== undefined) patch.minOrderAmount = dto.minOrderAmount.toString();
     if (dto.totalQuantity !== undefined) patch.totalQuantity = dto.totalQuantity;
     if (dto.expiresAt !== undefined) {
-      patch.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+      patch.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : undefined;
     }
     if (dto.active !== undefined) patch.active = dto.active;
     if (dto.appliesTo !== undefined) patch.appliesTo = dto.appliesTo;
@@ -298,17 +304,11 @@ export class CouponsService {
       };
     }
 
-    let discountAmount: Decimal;
-    if (coupon.type === 'percent') {
-      const value = new Decimal(coupon.value as string);
-      discountAmount = orderAmount.mul(value).div(100).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-    } else {
-      discountAmount = new Decimal(coupon.value as string);
-    }
-
-    if (discountAmount.gt(orderAmount)) {
-      discountAmount = orderAmount;
-    }
+    const discountAmount = computeCouponDiscount(
+      coupon.type as CouponDiscountType,
+      coupon.value as string,
+      orderAmount,
+    );
 
     const finalAmount = orderAmount.minus(discountAmount).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
@@ -406,6 +406,10 @@ export class CouponsService {
     count: number,
     auditMeta?: { userId?: string; role?: string; ip?: string },
   ): Promise<string[]> {
+    const sellerId = auditMeta?.userId;
+    if (!sellerId) {
+      throw new ForbiddenException('需要卖家身份');
+    }
     if (count <= 0 || count > 1000) {
       throw new BadRequestException('批量生成数量必须在 1-1000 之间');
     }
@@ -430,7 +434,7 @@ export class CouponsService {
       await this.db
         .insert(coupons)
         .values({
-          sellerId: auditMeta?.userId ?? null,
+          sellerId,
           code,
           type: 'fixed',
           value: '10',

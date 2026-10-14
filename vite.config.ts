@@ -21,7 +21,9 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'dist',
+    // 输出到仓库根 dist/：与服务端 dist-server/ 并列，便于单进程托管与 Docker 拷贝
+    outDir: '../dist',
+    emptyOutDir: true,
     sourcemap: true,
   },
 });

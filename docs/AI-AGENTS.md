@@ -10,6 +10,12 @@
 
 ## 通用调用约定
 
+> **模型配置来源**：界面设置（卖家工作台「AI 分析中心 → 模型设置」）优先级高于 `LLM_*` 环境变量；
+> 两者都未配置时，所有端点统一返回 400「请填写模型」（`LLM_NOT_CONFIGURED_MESSAGE`），绝不返回假数据。
+> 另：卖家可创建任意数量的自定义 Agent（系统提示词 + `{{input}}` 模板 + 文本/JSON 输出），用量按 `custom:<slug>` 独立计量。
+
+
+
 所有 Agent 统一经 `server/modules/ai/ai-gateway.service.ts` 收口：
 
 ```http
@@ -29,7 +35,7 @@ Content-Type: application/json
 - `LLM_BASE_URL` / `LLM_API_KEY` 缺失时，Gateway 在调用前即返回 `400 { message: "未配置 LLM API Key" }`，**绝不返回硬编码假数据**。
 - 前端在 AI 分析中心顶部显示醒目提示条，列出需配置的 3 个环境变量。
 - 失败调用仍会写入 `ai_usage_log`（`success=false` + `error_message`），便于运维排查。
-- SupportAgent 的 RAG 召回部分在未配 `EMBEDDING_API_KEY` 时自动回退到 `products` 表 `ILIKE` 关键词匹配，客服链路仍可用（仅不走向量召回）。
+- SupportAgent 的检索为关键词召回：命中商品关键词时对 `products` 表做 `ILIKE` 模糊匹配（标题已建 pg_trgm GIN 索引）。
 
 ---
 
@@ -54,7 +60,7 @@ Content-Type: application/json
 | 输入 | 买家问题文本 + 当前会话上下文（历史 N 轮） |
 | 输出 | 自然语言回复文本 |
 | 模型 | `deepseek-chat` |
-| RAG 三层检索 | ① `product_embeddings` pgvector 向量相似度召回相关商品（需 `EMBEDDING_API_KEY`）；② 无 embedding key 时回退 `products` 表 `ILIKE` 关键词匹配；③ 拼入 5 条店铺政策 FAQ 常量（退换货/发货/支付/物流/客服时间）+ 买家最近订单摘要 |
+| 三层检索 | ① `products` 表关键词匹配（标题/描述 `ILIKE`，含 pg_trgm 索引）；② 5 条店铺政策 FAQ 常量（退换货/发货/支付/物流/客服时间）；③ 买家最近订单状态摘要 |
 | 落库 | 会话与消息写 `inquiry_sessions` / `inquiry_messages`，卖家端"咨询管理"可见 |
 | 未配 key 行为 | LLM 调用返回 400；但会话已落库，卖家可见买家在等待人工回复 |
 
@@ -104,7 +110,7 @@ Content-Type: application/json
 | Agent | 需要的环境变量 | 缺 key 时行为 |
 |---|---|---|
 | CopywriterAgent | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 400 诚实报错 |
-| SupportAgent | 同上 + `EMBEDDING_API_KEY`（可选） | LLM 400；向量回退关键词匹配 |
+| SupportAgent | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | 400 诚实报错 |
 | TrendAgent | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`（reasoner） | 400 诚实报错 |
 | SelectAgent | 同上 | 400 诚实报错 |
 | TranslationAgent | 同上 | 400 诚实报错，商品回退英文 |

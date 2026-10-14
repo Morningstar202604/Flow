@@ -3,8 +3,8 @@
 | 项 | 内容 |
 |---|---|
 | 应用 | GlobalEcom AI（AI 原生跨境出货台） |
-| 技术栈 | React 19 + NestJS 10 + Drizzle ORM + PostgreSQL 16（pgvector / pg_trgm） |
-| 文档版本 | v1.0.0 / 2026-09-30 |
+| 技术栈 | React 19 + NestJS 12（Express 5）+ Drizzle ORM + PostgreSQL 16（pg_trgm） |
+| 文档版本 | v1.3.0 / 2026-10-14 |
 
 ---
 
@@ -38,10 +38,12 @@
 | `PAYPAL_MODE` | 沙箱/正式 | `sandbox` 或 `live` |
 | `GOOGLE_CLIENT_ID` | Google 登录 | Google Cloud Console → OAuth 同意屏 → 凭据 |
 | `GOOGLE_CLIENT_SECRET` | Google 登录 | 同上 |
-| `EMBEDDING_API_KEY` | 商品向量检索 | 百炼 / OpenAI text-embedding 密钥（未配则 RAG 回退关键词匹配） |
 | `17TRACK_API_KEY` | 真实物流轨迹 | 17TRACK 开放平台申请（未配则演示物流时间线） |
 | `DATABASE_URL` | 数据库连接 | 见 docker-compose 默认值，按需修改 |
-| `CORS_ORIGIN` | 允许的前端域名 | 如 `https://your-shop.com` |
+| `CORS_ORIGINS` | 允许的前端域名（逗号分隔；生产未设置时回退 `APP_URL`） | 如 `https://your-shop.com` |
+| `TRUST_PROXY` | 反向代理后还原真实客户端 IP | nginx/caddy 后部署设为 `1`（否则审计与限流拿到代理 IP） |
+| `SELLER_REGISTRATION_CODE` | 卖家自助注册邀请码 | 自定；不设置则禁止卖家自助注册（演示数据用 `SEED_DEMO_DATA`） |
+| `SEED_DEMO_DATA` | 首次启动写入演示数据 | `true`（仅空库生效）：演示卖家/买家、商品、优惠码 TEST10 |
 | `COOKIE_DOMAIN` | Cookie 作用域 | 如 `.your-shop.com` |
 
 ---
@@ -56,7 +58,7 @@ cd GlobalEcom-AI
 cp .env.example .env
 vim .env
 
-# 3. 启动全部服务（postgres 自动建库 + pgvector/pg_trgm 扩展）
+# 3. 启动全部服务（自动执行数据库迁移 + pg_trgm 扩展；前端由服务端同源托管）
 docker compose up -d --build
 
 # 4. 查看日志
@@ -120,4 +122,7 @@ docker compose exec -T postgres psql -U postgres globalecom < backup_2026-09-30.
 | Google 登录不可用 | 未配 `GOOGLE_CLIENT_ID/SECRET`，前端显示"即将上线" |
 | 物流为模拟时间线 | 未配 `17TRACK_API_KEY`，属正常 |
 | 登录后换设备要重新登录 | token 在 HttpOnly Cookie 中，浏览器级隔离；匿名购物车用"跨设备迁移码"导出/导入 |
-| 跨域 / Cookie 不生效 | 检查 `CORS_ORIGIN`、`COOKIE_DOMAIN` 与实际访问域名一致 |
+| 跨域 / Cookie 不生效 | 检查 `CORS_ORIGINS`、`COOKIE_DOMAIN` 与实际访问域名一致 |
+| Stripe 支付后订单未变更 | 确认 webhook 已指向 `{APP_URL}/api/payments/stripe-webhook` 且 `STRIPE_WEBHOOK_SECRET` 正确 |
+| PayPal 支付后订单未变更 | 确认 webhook 已指向 `{APP_URL}/api/payments/paypal-webhook`（事件 `PAYMENT.CAPTURE.COMPLETED`）且 `PAYPAL_WEBHOOK_ID` 正确 |
+| 升级旧库数据 | 1.2.0 起使用 `npm run db:migrate` 管理结构；用 `db:push` 建的旧库请先备份再执行迁移 |

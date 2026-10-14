@@ -1,9 +1,12 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { eq, desc, ilike, or, and, inArray, sum, sql } from 'drizzle-orm';
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { eq, desc, ilike, or, and, inArray, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService, type ChatMessage } from './ai-gateway.service';
-import { products, productVariants, inquiryMessages, orders, orderFulfillments } from '@server/database/schema';
-import type { SupportChatRequest, SupportChatResponse } from '@shared/api.interface';
+import { products, productVariants, inquiryMessages, inquirySessions, orders, orderFulfillments } from '../../database/schema';
+import type { SupportChatRequest, SupportChatResponse } from '../../../shared/api.interface';
+
+const MAX_MESSAGE_LENGTH = 2000;
+const SESSION_ID_PATTERN = /^[\w-]{8,64}$/;
 
 interface FAQEntry {
   keywords: string[];
@@ -41,16 +44,25 @@ const SHOP_FAQS: FAQEntry[] = [
 
 @Injectable()
 export class SupportService {
+  private readonly logger = new Logger(SupportService.name);
+
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly aiGateway: AiGatewayService,
   ) {}
 
   async chat(dto: SupportChatRequest, userId?: string): Promise<SupportChatResponse> {
-    const messageLower = dto.message.toLowerCase();
+    const message = dto.message?.trim() ?? '';
+    if (!message) {
+      throw new BadRequestException('消息不能为空');
+    }
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      throw new BadRequestException(`消息不能超过 ${MAX_MESSAGE_LENGTH} 个字符`);
+    }
+    const messageLower = message.toLowerCase();
 
     // RAG: 检索相关商品
-    const relatedProducts = await this.searchProducts(dto.message, dto.language);
+    const relatedProducts = await this.searchProducts(message, dto.language);
 
     // RAG: 匹配店铺政策 FAQ
     const matchedFaqs = this.matchFaqs(messageLower);
@@ -91,7 +103,7 @@ export class SupportService {
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
       ...historyMessages,
-      { role: 'user', content: dto.message },
+      { role: 'user', content: message },
     ];
 
     const { content: reply } = await this.aiGateway.chat(messages, {
@@ -110,10 +122,52 @@ export class SupportService {
       sources.push(`相关商品 (${relatedProducts.length}个)`);
     }
 
+    const replyText = reply.trim();
+
+    // 会话落库：卖家「咨询管理」可见完整对话，同时作为后续多轮的上下文来源
+    await this.persistConversation(dto.sessionId, message, replyText, userId);
+
     return {
-      reply: reply.trim(),
+      reply: replyText,
       sources: sources.length > 0 ? sources : undefined,
     };
+  }
+
+  /** 落库失败不影响本次回复（best-effort） */
+  private async persistConversation(
+    sessionId: string | undefined,
+    userMessage: string,
+    assistantReply: string,
+    userId?: string,
+  ): Promise<void> {
+    if (!sessionId || !SESSION_ID_PATTERN.test(sessionId)) return;
+    try {
+      const existing = await this.db
+        .select({ id: inquirySessions.id })
+        .from(inquirySessions)
+        .where(eq(inquirySessions.sessionId, sessionId));
+
+      if (existing.length === 0) {
+        await this.db.insert(inquirySessions).values({
+          sessionId,
+          userId: userId ?? null,
+          status: 'active',
+          lastMessageAt: new Date(),
+        });
+      } else {
+        await this.db
+          .update(inquirySessions)
+          .set({ lastMessageAt: new Date() })
+          .where(eq(inquirySessions.sessionId, sessionId));
+      }
+
+      await this.db.insert(inquiryMessages).values([
+        { sessionId, role: 'user', content: userMessage },
+        { sessionId, role: 'assistant', content: assistantReply },
+      ]);
+    } catch (err) {
+      this.logger.warn(`会话落库失败: ${(err as Error).message}`);
+    }
   }
 
   private async searchProducts(

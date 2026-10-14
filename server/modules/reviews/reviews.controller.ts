@@ -10,15 +10,15 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { ReviewsService } from './reviews.service';
+import { CreateReviewDto } from './dto/reviews.dto';
 import type {
   ProductReview,
   ProductReviewsResponse,
-  CreateReviewRequest,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 
-@Controller('api/products')
+@Controller('products')
 export class ReviewsController {
   constructor(private readonly reviewsService: ReviewsService) {}
 
@@ -43,13 +43,10 @@ export class ReviewsController {
   async createReview(
     @Req() req: Request,
     @Param('id') productId: string,
-    @Body() body: CreateReviewRequest,
+    @Body() body: CreateReviewDto,
   ): Promise<ProductReview> {
     const userId = req.user?.id;
     if (!userId) throw new BadRequestException('请先登录后评价');
-    if (!body.rating || body.rating < 1 || body.rating > 5) {
-      throw new BadRequestException('评分必须在 1-5 之间');
-    }
     return this.reviewsService.createReview(productId, userId, body);
   }
 }

@@ -2,12 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   useForm,
-  Controller,
   type SubmitHandler,
 } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { CreditCard, ArrowLeft, Package, Check, Zap, Tag, X } from 'lucide-react';
+import { ArrowLeft, Package, Check, Zap, Tag, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,6 +27,7 @@ import { getCart } from '@/api/cart';
 import { createOrder } from '@/api/orders';
 import { payForOrder, getPaymentConfig } from '@/api/payments';
 import { validateCoupon } from '@/api/coupons';
+import { getShippingQuote } from '@/api/shipping';
 import { toast } from 'sonner';
 import { getProductTitle } from '@/utils/product-i18n';
 import type {
@@ -47,16 +47,16 @@ const CheckoutPage: React.FC = () => {
     paypalConfigured: boolean;
     demoMode: boolean;
   } | null>(null);
-  const [orderId, setOrderId] = useState<string | null>(null);
+  const [, setOrderId] = useState<string | null>(null);
   const [couponCodeInput, setCouponCodeInput] = useState<string>('');
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | null>(null);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [couponMessage, setCouponMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState<boolean>(false);
+  const [shippingFee, setShippingFee] = useState<number>(0);
   const { language, t } = useLanguage();
   const navigate = useNavigate();
 
-  const VALID_PAYMENT_METHODS = ['demo', 'stripe', 'paypal'] as const;
 
   const checkoutSchema = z.object({
     buyerName: z
@@ -139,6 +139,36 @@ const CheckoutPage: React.FC = () => {
     void load();
   }, [navigate, t.cart.empty]);
 
+  const subtotal: number = Number(cart?.total || 0);
+  const qtyTotal: number = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const weightTotal: number = cart?.items.reduce((sum, item) => {
+    const weight = Number((item.product as { weight?: string | number | null } | undefined)?.weight ?? 0);
+    return sum + (Number.isFinite(weight) ? weight : 0) * item.quantity;
+  }, 0) ?? 0;
+  const watchedCountry = form.watch('shippingCountry');
+
+  // 运费报价：展示用；下单时服务端会用同一口径重算，以订单中的金额为准
+  useEffect(() => {
+    if (!cart || cart.items.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const quote = await getShippingQuote({
+          subtotal,
+          qtyTotal,
+          weightTotal,
+          country: watchedCountry || undefined,
+        });
+        if (!cancelled) setShippingFee(Number(quote.fee) || 0);
+      } catch {
+        if (!cancelled) setShippingFee(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cart, subtotal, qtyTotal, weightTotal, watchedCountry]);
+
   const handlePlaceOrder: SubmitHandler<CheckoutFormValues> = async (
     values: CheckoutFormValues,
   ): Promise<void> => {
@@ -172,8 +202,7 @@ const CheckoutPage: React.FC = () => {
     }
   };
 
-  const subtotal: number = Number(cart?.total || 0);
-  const finalAmount: number = Math.max(0, subtotal - discountAmount);
+  const finalAmount: number = Math.max(0, subtotal + shippingFee - discountAmount);
 
   const handleApplyCoupon = async (): Promise<void> => {
     if (!couponCodeInput.trim()) return;
@@ -637,6 +666,10 @@ const CheckoutPage: React.FC = () => {
                       {cart?.itemCount} {t.cart.itemsCount}
                     </span>
                     <span>${Number(cart?.subtotal || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>{t.cart.shipping}</span>
+                    <span>${shippingFee.toFixed(2)}</span>
                   </div>
                   {appliedCouponCode && (
                     <div className="flex justify-between text-emerald-600">

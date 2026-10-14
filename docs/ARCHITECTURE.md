@@ -22,7 +22,7 @@
 └────────────┼─────────────────────────────────┼───────────────┘
              ▼                                 ▼
 ┌──────────────────────────────────────────────────────────────┐
-│            NestJS 10 API 网关（单一 Node 进程）                │
+│            NestJS 12 API 网关（单一 Node 进程）                │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │  Middleware: jwt-auth → csrf-header → rate-limit      │  │
 │  │  Guards: RolesGuard (buyer/seller)                    │  │
@@ -39,7 +39,7 @@
                ▼                              ▼
    ┌──────────────────────┐      ┌──────────────────────────────┐
    │  PostgreSQL 16       │      │  外部 OpenAI 兼容 LLM 端点    │
-   │  + pgvector           │◄────►│  (DeepSeek / 火山方舟 / ...) │
+   │  + pg_trgm (GIN)      │◄────►│  (DeepSeek / 火山方舟 / ...) │
    │  + pg_trgm            │      │  - /v1/chat/completions      │
    │  Drizzle ORM          │      │  - /v1/embeddings            │
    └──────────────────────┘      └──────────────────────────────┘
@@ -64,7 +64,7 @@ GlobalEcom-AI/
 │       ├── api/           # fetch 封装（credentials: include）
 │       ├── contexts/      # AuthContext / LanguageContext
 │       └── i18n/          # zh / en / es / pt 四语言
-├── server/        # NestJS 10 后端
+├── server/        # NestJS 12 后端
 │   └── src/
 │       ├── modules/       # 16 个业务模块（auth/products/orders/...）
 │       ├── common/        # middleware / guards / filters
@@ -116,7 +116,7 @@ GlobalEcom-AI/
 | 审计 | `audit_logs` | 9 类写操作前后值 diff + IP |
 | 审计 | `cart_recovery_codes` | 匿名购物车跨设备迁移码（24h 一次性） |
 
-扩展：`pgvector`（向量检索）、`pg_trgm` + GIN 索引（订单/商品模糊搜索）。
+扩展：`pg_trgm` + GIN 索引（商品标题模糊搜索）。
 
 ---
 

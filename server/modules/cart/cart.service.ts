@@ -4,15 +4,12 @@ import {
   Logger,
   BadRequestException,
   NotFoundException,
-  ForbiddenException,
-  ConflictException,
 } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { eq, and, desc, count, gte, lt, sql, inArray } from 'drizzle-orm';
-import { Decimal } from 'decimal.js';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 
-import { cartItems, products, productVariants, cartRecoveryCodes } from '@server/database/schema';
-import type { CartResponse, CartItem } from '@shared/api.interface';
+import { cartItems, products, productVariants, cartRecoveryCodes } from '../../database/schema';
+import type { CartResponse, CartItem } from '../../../shared/api.interface';
 
 @Injectable()
 export class CartService {
@@ -98,8 +95,6 @@ export class CartService {
       const price = variant ? (variant.price as string) : '0';
       const originalPrice = variant ? (variant.originalPrice as string | undefined) : undefined;
       const stock = variant ? variant.stock : Number(row.productTotalStock ?? 0);
-      const sold = variant ? variant.sold : Number(row.productTotalSold ?? 0);
-      const sku = variant?.sku ?? undefined;
       const variantImage = variant?.image ?? undefined;
       const variantInfo = variant?.optionValues && Array.isArray(variant.optionValues) && variant.optionValues.length > 0
         ? variant.optionValues.join(' / ')
@@ -450,20 +445,31 @@ export class CartService {
         .where(eq(cartRecoveryCodes.id, recoveryRecord.id));
 
       for (const item of sourceItems) {
-        await tx
-          .insert(cartItems)
-          .values({
+        // 与 addItem 一致的手动合并：variant_id 可空，唯一约束无法覆盖 NULL 去重
+        const existing = await tx
+          .select({ id: cartItems.id, quantity: cartItems.quantity })
+          .from(cartItems)
+          .where(and(
+            eq(cartItems.sessionId, currentSessionId),
+            eq(cartItems.productId, item.productId),
+            item.variantId
+              ? eq(cartItems.variantId, item.variantId)
+              : sql`${cartItems.variantId} IS NULL`,
+          ));
+
+        if (existing.length > 0) {
+          await tx
+            .update(cartItems)
+            .set({ quantity: existing[0].quantity + item.quantity, updatedAt: now })
+            .where(eq(cartItems.id, existing[0].id));
+        } else {
+          await tx.insert(cartItems).values({
             sessionId: currentSessionId,
             productId: item.productId,
             variantId: item.variantId,
             quantity: item.quantity,
-          })
-          .onConflictDoUpdate({
-            target: [cartItems.sessionId, cartItems.productId, cartItems.variantId],
-            set: {
-              quantity: sql<number>`${cartItems.quantity} + ${item.quantity}`,
-            },
           });
+        }
       }
     });
 

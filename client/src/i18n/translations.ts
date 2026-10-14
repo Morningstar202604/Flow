@@ -10,6 +10,7 @@ export interface Translations {
     sellerCenter: string;
     searchPlaceholder: string;
     language: string;
+    points: string;
   };
   home: {
     heroTitle: string;
@@ -19,6 +20,7 @@ export interface Translations {
     newArrivals: string;
     categories: string;
     viewAll: string;
+    featuredCollection: string;
   };
   product: {
     addToCart: string;
@@ -66,6 +68,7 @@ export interface Translations {
     couponInvalid: string;
     discount: string;
     finalTotal: string;
+    shipping: string;
     removeCoupon: string;
     minOrderNotMet: string;
     crossDevice: string;
@@ -152,6 +155,7 @@ export interface Translations {
     send: string;
     typing: string;
     welcome: string;
+    unavailable: string;
   };
   auth: {
     signIn: string;
@@ -237,6 +241,7 @@ export const translations: Record<Language, Translations> = {
       sellerCenter: '卖家中心',
       searchPlaceholder: '搜索商品...',
       language: '语言',
+      points: '积分',
     },
     home: {
       heroTitle: '发现全球好物',
@@ -246,6 +251,7 @@ export const translations: Record<Language, Translations> = {
       newArrivals: '新品上架',
       categories: '商品分类',
       viewAll: '查看全部',
+      featuredCollection: '精选集合',
     },
     product: {
       addToCart: '加入购物车',
@@ -293,6 +299,7 @@ export const translations: Record<Language, Translations> = {
       couponInvalid: '优惠码无效',
       discount: '优惠',
       finalTotal: '应付金额',
+      shipping: '运费',
       removeCoupon: '取消',
       minOrderNotMet: '未达到最低消费金额',
       crossDevice: '跨设备迁移',
@@ -379,6 +386,7 @@ export const translations: Record<Language, Translations> = {
       send: '发送',
       typing: '正在输入...',
       welcome: '您好！我是智能客服，有什么可以帮您的吗？',
+      unavailable: '智能客服暂未开放',
     },
     auth: {
       signIn: '登录',
@@ -462,6 +470,7 @@ export const translations: Record<Language, Translations> = {
       sellerCenter: 'Seller Center',
       searchPlaceholder: 'Search products...',
       language: 'Language',
+      points: 'Points',
     },
     home: {
       heroTitle: 'Discover Global Goods',
@@ -471,6 +480,7 @@ export const translations: Record<Language, Translations> = {
       newArrivals: 'New Arrivals',
       categories: 'Categories',
       viewAll: 'View All',
+      featuredCollection: 'Featured Collection',
     },
     product: {
       addToCart: 'Add to Cart',
@@ -518,6 +528,7 @@ export const translations: Record<Language, Translations> = {
       couponInvalid: 'Invalid coupon code',
       discount: 'Discount',
       finalTotal: 'Total Payable',
+      shipping: 'Shipping',
       removeCoupon: 'Remove',
       minOrderNotMet: 'Minimum order amount not met',
       crossDevice: 'Cross-Device Sync',
@@ -605,6 +616,7 @@ export const translations: Record<Language, Translations> = {
       send: 'Send',
       typing: 'Typing...',
       welcome: 'Hello! I am your AI assistant. How can I help you today?',
+      unavailable: 'AI support is not available yet',
     },
     auth: {
       signIn: 'Sign In',
@@ -688,6 +700,7 @@ export const translations: Record<Language, Translations> = {
       sellerCenter: 'Centro de Vendedores',
       searchPlaceholder: 'Buscar productos...',
       language: 'Idioma',
+      points: 'Puntos',
     },
     home: {
       heroTitle: 'Descubre productos del mundo',
@@ -698,6 +711,7 @@ export const translations: Record<Language, Translations> = {
       newArrivals: 'Novedades',
       categories: 'Categorías',
       viewAll: 'Ver Todo',
+      featuredCollection: 'Colección Destacada',
     },
     product: {
       addToCart: 'Añadir al Carrito',
@@ -745,6 +759,7 @@ export const translations: Record<Language, Translations> = {
       couponInvalid: 'Código de cupón inválido',
       discount: 'Descuento',
       finalTotal: 'Total a Pagar',
+      shipping: 'Envío',
       removeCoupon: 'Quitar',
       minOrderNotMet: 'No se alcanza el pedido mínimo',
       crossDevice: 'Sincronización entre dispositivos',
@@ -833,6 +848,7 @@ export const translations: Record<Language, Translations> = {
       typing: 'Escribiendo...',
       welcome:
         '¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?',
+      unavailable: 'El soporte de IA aún no está disponible',
     },
     auth: {
       signIn: 'Iniciar Sesión',
@@ -917,6 +933,7 @@ export const translations: Record<Language, Translations> = {
       sellerCenter: 'Central do Vendedor',
       searchPlaceholder: 'Buscar produtos...',
       language: 'Idioma',
+      points: 'Pontos',
     },
     home: {
       heroTitle: 'Descubra produtos do mundo',
@@ -927,6 +944,7 @@ export const translations: Record<Language, Translations> = {
       newArrivals: 'Novidades',
       categories: 'Categorias',
       viewAll: 'Ver Tudo',
+      featuredCollection: 'Coleção em Destaque',
     },
     product: {
       addToCart: 'Adicionar ao Carrinho',
@@ -974,6 +992,7 @@ export const translations: Record<Language, Translations> = {
       couponInvalid: 'Código de cupom inválido',
       discount: 'Desconto',
       finalTotal: 'Total a Pagar',
+      shipping: 'Frete',
       removeCoupon: 'Remover',
       minOrderNotMet: 'Valor mínimo do pedido não atingido',
       crossDevice: 'Sincronização entre dispositivos',
@@ -1062,6 +1081,7 @@ export const translations: Record<Language, Translations> = {
       typing: 'Digitando...',
       welcome:
         'Olá! Sou seu assistente virtual. Como posso ajudar hoje?',
+      unavailable: 'O suporte de IA ainda não está disponível',
     },
     auth: {
       signIn: 'Entrar',

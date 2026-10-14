@@ -8,9 +8,9 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuditService } from './audit.service';
-import type { AuditLogListResponse } from '@shared/api.interface';
+import type { AuditLogListResponse } from '../../../shared/api.interface';
 
 class AuditLogQueryDto {
   @IsOptional()
@@ -38,7 +38,7 @@ class AuditLogQueryDto {
   endDate?: string;
 }
 
-@Controller('api/audit-logs')
+@Controller('audit-logs')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 

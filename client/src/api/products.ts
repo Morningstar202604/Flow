@@ -85,3 +85,10 @@ export async function importProducts(
 export function downloadImportTemplate(): string {
   return '/api/products/import-template';
 }
+
+/** 批量按 ID 查询商品（聚合场景，仅上架商品） */
+export async function getProductsByIds(ids: string[]): Promise<Product[]> {
+  if (ids.length === 0) return [];
+  const { data } = await http.get<Product[]>(`/api/products/by-ids?ids=${encodeURIComponent(ids.join(','))}`);
+  return data;
+}

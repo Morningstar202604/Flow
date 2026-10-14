@@ -1,17 +1,17 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, Req, UseGuards, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 
 import { OrdersService } from './orders.service';
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import type {
   Order,
   OrderListResponse,
   OrderStatus,
   CreateOrderRequest,
   OrderStatusUpdateRequest,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 
-@Controller('api/orders')
+@Controller('orders')
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 

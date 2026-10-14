@@ -3,7 +3,14 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { eq, and, gte, lte, count, sum } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { aiUsageLog } from '@server/database/schema';
+import { aiSettings, aiUsageLog } from '../../database/schema';
+import {
+  LLM_NOT_CONFIGURED_MESSAGE,
+  buildChatCompletionsUrl,
+  resolveLlmConfig,
+  type LlmDbConfig,
+  type ResolvedLlmConfig,
+} from './llm-config';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -45,31 +52,35 @@ interface UsageStats {
 @Injectable()
 export class AiGatewayService {
   private readonly logger = new Logger(AiGatewayService.name);
-  private readonly baseUrl: string;
-  private readonly apiKey: string;
-  private readonly model: string;
 
   constructor(
     private readonly httpService: HttpService,
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
-  ) {
-    this.baseUrl = process.env.LLM_BASE_URL || '';
-    this.apiKey = process.env.LLM_API_KEY || '';
-    this.model = process.env.LLM_MODEL || 'deepseek-chat';
-  }
+  ) {}
 
-  isConfigured(): boolean {
-    return Boolean(this.apiKey && this.baseUrl);
-  }
-
-  getModel(): string {
-    return this.model;
-  }
-
-  private ensureConfigured(): void {
-    if (!this.isConfigured()) {
-      throw new BadRequestException('未配置 LLM API Key');
+  /**
+   * 每次调用时解析配置（UI 设置 > 环境变量），设置保存后立即生效、无需重启。
+   * 配置为单行级查询，相对 LLM 调用延迟可忽略。
+   */
+  async resolveConfig(): Promise<ResolvedLlmConfig> {
+    const rows = await this.db.select().from(aiSettings);
+    const dbConfig: LlmDbConfig = {};
+    for (const row of rows) {
+      if (row.key === 'llm_base_url') dbConfig.baseUrl = row.value;
+      else if (row.key === 'llm_api_key') dbConfig.apiKey = row.value;
+      else if (row.key === 'llm_model') dbConfig.model = row.value;
     }
+    return resolveLlmConfig(dbConfig, process.env);
+  }
+
+  async isConfigured(): Promise<boolean> {
+    const config = await this.resolveConfig();
+    return config.apiKey.length > 0;
+  }
+
+  async getModel(): Promise<string> {
+    const config = await this.resolveConfig();
+    return config.model;
   }
 
   async chat(
@@ -80,15 +91,17 @@ export class AiGatewayService {
     const userId = options?.userId;
     const startMs = Date.now();
 
-    if (!this.isConfigured()) {
+    const config = await this.resolveConfig();
+    if (!config.apiKey) {
       await this.logUsage({
         agent,
+        model: config.model,
         success: false,
         durationMs: 0,
-        errorMessage: '未配置 LLM API Key',
+        errorMessage: LLM_NOT_CONFIGURED_MESSAGE,
         userId,
       });
-      throw new BadRequestException('未配置 LLM API Key');
+      throw new BadRequestException(LLM_NOT_CONFIGURED_MESSAGE);
     }
 
     const temperature = options?.temperature ?? 0.7;
@@ -98,7 +111,7 @@ export class AiGatewayService {
       : undefined;
 
     const body = {
-      model: this.model,
+      model: config.model,
       messages,
       temperature,
       max_tokens: maxTokens,
@@ -106,11 +119,11 @@ export class AiGatewayService {
     };
 
     try {
-      const url = `${this.baseUrl.replace(/\/$/, '')}/v1/chat/completions`;
+      const url = buildChatCompletionsUrl(config.baseUrl);
       const response = await firstValueFrom(
         this.httpService.post(url, body, {
           headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
+            'Authorization': `Bearer ${config.apiKey}`,
             'Content-Type': 'application/json',
           },
           timeout: 60000,
@@ -138,6 +151,7 @@ export class AiGatewayService {
       const durationMs = Date.now() - startMs;
       void this.logUsage({
         agent,
+        model: config.model,
         success: true,
         durationMs,
         inputTokens: usage?.prompt_tokens,
@@ -153,6 +167,7 @@ export class AiGatewayService {
 
       void this.logUsage({
         agent,
+        model: config.model,
         success: false,
         durationMs,
         errorMessage,
@@ -160,12 +175,19 @@ export class AiGatewayService {
       });
 
       if (error instanceof BadRequestException) throw error;
-      throw new InternalServerErrorException('AI 服务调用失败，请稍后重试');
+      // 回显上游 HTTP 状态，便于用户在「模型设置」中定位问题（401=Key 错误 / 404=BaseURL 或模型名错误）
+      const upstreamStatus = (error as { response?: { status?: number } })?.response?.status;
+      throw new InternalServerErrorException(
+        upstreamStatus
+          ? `AI 服务调用失败（上游 HTTP ${upstreamStatus}），请检查模型设置`
+          : 'AI 服务调用失败，请检查模型设置后重试',
+      );
     }
   }
 
   private async logUsage(params: {
     agent: string;
+    model: string;
     success: boolean;
     durationMs: number;
     inputTokens?: number;
@@ -176,7 +198,7 @@ export class AiGatewayService {
     try {
       await this.db.insert(aiUsageLog).values({
         agent: params.agent,
-        model: this.model,
+        model: params.model,
         inputTokens: params.inputTokens ?? 0,
         outputTokens: params.outputTokens ?? 0,
         durationMs: params.durationMs,

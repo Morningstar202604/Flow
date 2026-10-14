@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AiGatewayService } from './ai-gateway.service';
-import type { AICopywriterRequest, AICopywriterResponse } from '@shared/api.interface';
+import { parseLlmJson } from './llm-json';
+import type { AICopywriterRequest, AICopywriterResponse } from '../../../shared/api.interface';
 
 @Injectable()
 export class CopywriterService {
@@ -31,7 +32,7 @@ export class CopywriterService {
       { temperature: 0.8, maxTokens: 1500, responseFormat: 'json', agent: 'copywriter', userId },
     );
 
-    const parsed = JSON.parse(content) as AICopywriterResponse;
+    const parsed = parseLlmJson<AICopywriterResponse>(content);
     return {
       titleEn: parsed.titleEn || '',
       bulletPoints: Array.isArray(parsed.bulletPoints) ? parsed.bulletPoints : [],
@@ -39,4 +40,5 @@ export class CopywriterService {
       seoKeywords: parsed.seoKeywords || '',
     };
   }
+
 }

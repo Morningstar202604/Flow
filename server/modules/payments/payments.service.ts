@@ -6,22 +6,49 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { eq, and, desc, or, isNull, sql } from 'drizzle-orm';
-import { nanoid } from 'nanoid';
+import { and, eq, desc, sql } from 'drizzle-orm';
 
-import { payments, orders, orderItems, refunds } from '@server/database/schema';
+import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
+import {
+  payments,
+  orders,
+  orderItems,
+  productVariants,
+  products,
+  stockMovements,
+  pointTransactions,
+  users,
+} from '../../database/schema';
 import type {
   Payment,
   PaymentProvider,
   PaymentStatus,
   PayResponse,
   Order,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 
 import { StripeService } from './stripe.service';
 import { PayPalService } from './paypal.service';
 import { AuditService } from '../audit/audit.service';
+
+type MarkPaidProvider = PaymentProvider | 'manual';
+
+export interface MarkPaidOptions {
+  provider: MarkPaidProvider;
+  /** 渠道流水号（幂等锚点）：同一流水重复入账会被忽略 */
+  transactionId: string;
+  /** 渠道实收金额；缺省按订单总额记录 */
+  amount?: string;
+  currency?: string;
+  actorUserId?: string;
+}
+
+export interface MarkPaidResult {
+  order: typeof orders.$inferSelect;
+  paymentId: string | null;
+  /** true = 订单此前已非待支付状态，本次未做任何变更（webhook 重复投递/晚到回调） */
+  skipped: boolean;
+}
 
 @Injectable()
 export class PaymentsService {
@@ -41,7 +68,7 @@ export class PaymentsService {
   private mapPayment(row: {
     id: string;
     orderId: string;
-    provider: string;
+    provider: string | null;
     amount: string;
     currency: string;
     status: string;
@@ -83,7 +110,7 @@ export class PaymentsService {
     return {
       id: order.id,
       orderNo: order.orderNo,
-      userId: order.userId,
+      userId: order.userId ?? undefined,
       buyerName: addr?.receiverName ?? '',
       buyerPhone: addr?.phone,
       shippingAddress: addr?.addressLine1 ?? '',
@@ -121,6 +148,166 @@ export class PaymentsService {
     };
   }
 
+  /**
+   * 支付成功入账的唯一入口（Demo / Stripe webhook / PayPal webhook / 卖家手动标记共用）。
+   * 幂等：仅当订单处于 pending_payment 时入账；重复调用（webhook 重投）直接跳过；
+   * 支付流水号在 payments 表有唯一索引，并发重复也会被数据库拦截。
+   * 入账同时累计销量（variant.sold / product.totalSold）并写库存流水。
+   */
+  async markOrderPaid(orderId: string, opts: MarkPaidOptions): Promise<MarkPaidResult> {
+    const result = await this.db.transaction(async (tx) => {
+      const orderRows = await tx.select().from(orders).where(eq(orders.id, orderId));
+      if (orderRows.length === 0) {
+        throw new NotFoundException('订单不存在');
+      }
+      const order = orderRows[0];
+
+      if (order.status !== 'pending_payment') {
+        return { order, paymentId: null, skipped: true };
+      }
+
+      const now = new Date();
+      const amount = opts.amount ?? (order.totalAmount as string);
+      const currency = opts.currency ?? 'USD';
+
+      // 渠道预创建的 pending 流水（Stripe intent / PayPal order）就地升级为 paid，
+      // 避免支付历史出现 "pending 与 paid 并存"；无 pending 时插入（重复流水由唯一索引兜底）
+      const pendingRows = await tx
+        .select({ id: payments.id })
+        .from(payments)
+        .where(and(
+          eq(payments.orderId, orderId),
+          eq(payments.provider, opts.provider),
+          eq(payments.status, 'pending'),
+        ))
+        .limit(1);
+
+      let paymentId: string | null = null;
+      if (pendingRows.length > 0) {
+        const upgraded = await tx
+          .update(payments)
+          .set({
+            status: 'paid',
+            transactionId: opts.transactionId,
+            amount,
+            currency,
+            updatedAt: now,
+          })
+          .where(eq(payments.id, pendingRows[0].id))
+          .returning({ id: payments.id });
+        paymentId = upgraded[0]?.id ?? null;
+      } else {
+        const insertedPayments = await tx
+          .insert(payments)
+          .values({
+            orderId,
+            method: opts.provider === 'manual' ? 'demo' : opts.provider,
+            provider: opts.provider,
+            amount,
+            currency,
+            status: 'paid',
+            transactionId: opts.transactionId,
+          })
+          .onConflictDoNothing()
+          .returning({ id: payments.id });
+        paymentId = insertedPayments[0]?.id ?? null;
+      }
+
+      const updatedOrders = await tx
+        .update(orders)
+        .set({
+          status: 'paid',
+          paidAt: now,
+          paymentMethod: opts.provider === 'manual' ? 'demo' : opts.provider,
+          paymentId: opts.transactionId,
+          updatedAt: now,
+        })
+        .where(eq(orders.id, orderId))
+        .returning();
+
+      const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+      for (const item of items) {
+        if (item.variantId) {
+          await tx
+            .update(productVariants)
+            .set({
+              sold: sql`${productVariants.sold} + ${item.quantity}`,
+              updatedAt: now,
+            })
+            .where(eq(productVariants.id, item.variantId));
+
+          await tx.insert(stockMovements).values({
+            variantId: item.variantId,
+            quantity: -item.quantity,
+            reason: 'sale',
+            referenceId: orderId,
+            note: `Order paid: ${order.orderNo}`,
+            createdBy: opts.actorUserId ?? null,
+          });
+        }
+        await tx
+          .update(products)
+          .set({
+            totalSold: sql`${products.totalSold} + ${item.quantity}`,
+            updatedAt: now,
+          })
+          .where(eq(products.id, item.productId));
+      }
+
+      // 会员积分：1 美元 = 1 分（仅登录用户），退款审批时按金额回滚
+      if (order.userId) {
+        const points = Math.floor(Number(amount));
+        if (points > 0) {
+          await tx.insert(pointTransactions).values({
+            userId: order.userId,
+            amount: points,
+            type: 'earn',
+            source: 'order',
+            referenceId: orderId,
+            note: `Order ${order.orderNo}`,
+          });
+          await tx
+            .update(users)
+            .set({ points: sql`${users.points} + ${points}` })
+            .where(eq(users.id, order.userId));
+        }
+      }
+
+      return {
+        order: updatedOrders[0],
+        paymentId,
+        skipped: false,
+      };
+    });
+
+    if (result.skipped) {
+      this.logger.warn(
+        `markOrderPaid skipped: order=${orderId} status=${result.order.status} provider=${opts.provider} txn=${opts.transactionId}`,
+      );
+    } else {
+      this.logger.log(
+        `Order paid: order=${result.order.orderNo} provider=${opts.provider} txn=${opts.transactionId}`,
+      );
+      try {
+        void this.auditService.log({
+          action: 'payment.pay',
+          entity: 'payment',
+          entityId: result.paymentId ?? opts.transactionId,
+          after: {
+            provider: opts.provider,
+            transactionId: opts.transactionId,
+            amount: opts.amount ?? (result.order.totalAmount as string),
+          },
+          userId: opts.actorUserId ?? result.order.userId ?? undefined,
+        });
+      } catch {
+        // Audit log failure must not affect main flow
+      }
+    }
+
+    return result;
+  }
+
   async pay(
     orderId: string,
     provider: PaymentProvider,
@@ -150,7 +337,7 @@ export class PaymentsService {
     const currency = 'USD';
 
     if (provider === 'stripe' && this.stripeService.isConfigured()) {
-      const { clientSecret, paymentIntentId } = await this.stripeService.createPaymentIntent(
+      const { paymentIntentId } = await this.stripeService.createPaymentIntent(
         amount,
         currency,
         orderId,
@@ -183,7 +370,7 @@ export class PaymentsService {
       };
     }
 
-    return this.processDemoPayment(orderId, provider, amount, currency, order, auditMeta);
+    return this.processDemoPayment(orderId, provider, order, auditMeta);
   }
 
   private checkSessionOwnership(addressSnapshot: string, sessionId: string): boolean {
@@ -198,77 +385,37 @@ export class PaymentsService {
   private async processDemoPayment(
     orderId: string,
     provider: PaymentProvider,
-    amount: number,
-    currency: string,
     order: typeof orders.$inferSelect,
     auditMeta?: { ip?: string },
   ): Promise<PayResponse> {
     const transactionId = this.generateDemoTransactionId();
 
-    const result = await this.db.transaction(async (tx) => {
-      const paymentRows = await tx
-        .insert(payments)
-        .values({
-          orderId,
-          method: provider,
-          provider,
-          amount: amount.toString(),
-          currency,
-          status: 'paid',
-          transactionId,
-        })
-        .returning();
-
-      const now = new Date();
-      const updatedOrders = await tx
-        .update(orders)
-        .set({
-          status: 'paid',
-          paidAt: now,
-          paymentMethod: provider,
-        })
-        .where(eq(orders.id, orderId))
-        .returning();
-
-      return { payment: paymentRows[0], order: updatedOrders[0] };
+    const result = await this.markOrderPaid(orderId, {
+      provider,
+      transactionId,
+      amount: order.totalAmount as string,
     });
 
-    this.logger.log(
-      `Demo payment successful: order=${order.orderNo} provider=${provider} txn=${transactionId} amount=${amount}`,
-    );
-
-    // Audit log for payment
-    try {
-      void this.auditService.log({
-        action: 'payment.pay',
-        entity: 'payment',
-        entityId: result.payment.id,
-        after: {
-          amount: result.payment.amount,
-          provider,
-          status: 'paid',
-        },
-        userId: order.userId ?? undefined,
-        role: order.userId ? 'buyer' : undefined,
-        ip: auditMeta?.ip,
-      });
-    } catch {
-      // Audit log failure must not affect main flow
-    }
-
-    const updatedOrder = result.order;
     const items = await this.db
       .select()
       .from(orderItems)
       .where(eq(orderItems.orderId, orderId));
 
+    const paymentRows = result.paymentId
+      ? await this.db.select().from(payments).where(eq(payments.id, result.paymentId))
+      : [];
+
+    void auditMeta;
+
     return {
       success: true,
-      payment: this.mapPayment({
-        ...result.payment,
-        createdAt: new Date(result.payment.createdAt),
-      }),
-      order: this.mapOrderForResponse(updatedOrder, items),
+      payment: paymentRows[0]
+        ? this.mapPayment({
+            ...paymentRows[0],
+            createdAt: new Date(paymentRows[0].createdAt),
+          })
+        : undefined,
+      order: this.mapOrderForResponse(result.order, items),
       demoMode: true,
       message: '演示支付成功',
     };
@@ -298,13 +445,14 @@ export class PaymentsService {
   }
 
   /**
-   * Process a refund through the payment provider and record it.
-   * Supports both Stripe and PayPal partial/full refunds.
+   * 向支付渠道发起退款并更新本笔支付的状态。
+   * 退款记录（refunds 表）、订单状态与库存回滚由调用方（RefundsService）负责，
+   * 本方法只做「渠道调用 + payments 行状态」，避免双记账。
    */
   async processRefund(
     paymentId: string,
     amount?: number,
-  ): Promise<{ refundId: string; providerRefundId: string | null; status: string }> {
+  ): Promise<{ providerRefundId: string | null; paymentStatus: string }> {
     const paymentRows = await this.db.select().from(payments).where(eq(payments.id, paymentId));
     if (paymentRows.length === 0) {
       throw new NotFoundException('支付记录不存在');
@@ -315,25 +463,15 @@ export class PaymentsService {
       throw new BadRequestException('只能对已支付记录发起退款');
     }
 
-    const orderRows = await this.db.select().from(orders).where(eq(orders.id, payment.orderId));
-    if (orderRows.length === 0) {
-      throw new NotFoundException('订单不存在');
-    }
-
-    const order = orderRows[0];
-    const orderId = order.id;
-
-    // Calculate refund amount
     const paymentAmount = Number(payment.amount);
     const refundAmount = amount ?? paymentAmount;
 
-    if (refundAmount <= 0 || refundAmount > paymentAmount) {
+    if (!Number.isFinite(refundAmount) || refundAmount <= 0 || refundAmount > paymentAmount) {
       throw new BadRequestException('退款金额无效');
     }
 
     let providerRefundId: string | null = null;
 
-    // Call provider refund API
     if (payment.provider === 'stripe' && payment.transactionId && this.stripeService.isConfigured()) {
       try {
         const result = await this.stripeService.refund(payment.transactionId, refundAmount);
@@ -343,73 +481,29 @@ export class PaymentsService {
         throw new BadRequestException(`Stripe 退款失败: ${(err as Error).message}`);
       }
     } else if (payment.provider === 'paypal' && payment.transactionId && this.payPalService.isConfigured()) {
-      this.logger.warn('PayPal refund not yet implemented for PDP captures');
-      providerRefundId = `PAYPAL_REFUND_${Date.now()}`;
+      try {
+        const result = await this.payPalService.refundCapture(
+          payment.transactionId,
+          refundAmount,
+          payment.currency,
+        );
+        providerRefundId = result.refundId;
+      } catch (err) {
+        this.logger.error('PayPal refund failed', (err as Error).message);
+        throw new BadRequestException(`PayPal 退款失败: ${(err as Error).message}`);
+      }
     } else {
-      // Demo mode
+      // 演示模式：无真实渠道可退，生成可追溯的演示单号
       providerRefundId = `DEMO_REFUND_${Date.now()}`;
     }
 
-    const refundNo = `RF${Date.now().toString().toUpperCase()}${nanoid(6).toUpperCase()}`;
+    const newPaymentStatus = refundAmount >= paymentAmount ? 'refunded' : payment.status;
+    await this.db
+      .update(payments)
+      .set({ status: newPaymentStatus, updatedAt: new Date() })
+      .where(eq(payments.id, paymentId));
 
-    const result = await this.db.transaction(async (tx) => {
-      // Insert refund record
-      const refundRows = await tx
-        .insert(refunds)
-        .values({
-          orderId,
-          userId: order.userId,
-          refundNo,
-          status: 'completed',
-          amount: refundAmount.toFixed(2),
-          reason: 'refund',
-          reasonDetail: 'Refunded via payment service',
-          refundMethod: 'original',
-          approvedAt: new Date(),
-          completedAt: new Date(),
-        })
-        .returning();
-
-      // Update payment status
-      const newPaymentStatus = refundAmount >= paymentAmount ? 'refunded' : payment.status;
-      await tx
-        .update(payments)
-        .set({ status: newPaymentStatus, updatedAt: new Date() })
-        .where(eq(payments.id, paymentId));
-
-      // Update order status if full refund
-      if (refundAmount >= paymentAmount) {
-        await tx
-          .update(orders)
-          .set({ status: 'refunded', updatedAt: new Date() })
-          .where(eq(orders.id, orderId));
-      } else {
-        await tx
-          .update(orders)
-          .set({ status: 'partially_refunded', updatedAt: new Date() })
-          .where(eq(orders.id, orderId));
-      }
-
-      return refundRows[0];
-    });
-
-    try {
-      void this.auditService.log({
-        action: 'payment.refund',
-        entity: 'refund',
-        entityId: result.id,
-        after: {
-          paymentId,
-          amount: refundAmount.toFixed(2),
-          provider: payment.provider,
-          providerRefundId,
-        },
-      });
-    } catch {
-      // Audit log failure must not affect main flow
-    }
-
-    return { refundId: result.id, providerRefundId, status: result.status };
+    return { providerRefundId, paymentStatus: newPaymentStatus };
   }
 
   async getPaymentsByOrder(
@@ -459,9 +553,64 @@ export class PaymentsService {
     };
   }
 
+  /**
+   * Stripe webhook：验签（时间戳容忍 + 恒定时间比较）→ payment_intent.succeeded → 幂等入账。
+   * 返回 false 表示验签失败（HTTP 400，Stripe 会重试并在后台标记端点异常）。
+   */
+  async handleStripeWebhook(rawBody: Buffer | undefined, signature: string | undefined): Promise<boolean> {
+    if (!rawBody || !signature) {
+      this.logger.warn('Stripe webhook rejected: missing raw body or signature');
+      return false;
+    }
+
+    const event = this.stripeService.verifyAndParse(rawBody, signature);
+    if (!event) {
+      this.logger.warn('Stripe webhook rejected: signature verification failed');
+      return false;
+    }
+
+    if (event.type !== 'payment_intent.succeeded') {
+      this.logger.log(`Stripe webhook skipped: ${event.type}`);
+      return true;
+    }
+
+    const data = event.data as {
+      id?: string;
+      amount_received?: number;
+      currency?: string;
+      metadata?: { orderId?: string };
+    };
+    const orderId = data.metadata?.orderId;
+    if (!orderId || !data.id) {
+      this.logger.warn('Stripe webhook rejected: missing metadata.orderId or payment intent id');
+      return false;
+    }
+
+    const amount = typeof data.amount_received === 'number'
+      ? (data.amount_received / 100).toFixed(2)
+      : undefined;
+
+    const result = await this.markOrderPaid(orderId, {
+      provider: 'stripe',
+      transactionId: data.id,
+      amount,
+      currency: (data.currency ?? 'usd').toUpperCase(),
+    });
+
+    if (result.skipped && result.order.status !== 'paid') {
+      this.logger.error(
+        `Stripe 已收款但订单状态不可入账: order=${orderId} status=${result.order.status} txn=${data.id}（需人工核对）`,
+      );
+    }
+    return true;
+  }
+
+  /**
+   * PayPal webhook：验签 → PAYMENT.CAPTURE.COMPLETED → 幂等入账（capture id 作为流水锚点）。
+   */
   async handlePayPalWebhook(
     headers: Record<string, string>,
-    body: any,
+    body: unknown,
   ): Promise<boolean> {
     const verified = await this.payPalService.verifyWebhook(
       headers,
@@ -477,42 +626,31 @@ export class PaymentsService {
       return true;
     }
 
-    const orderId = (data as Record<string, any>)?.custom_id;
-    const transactionId = (data as Record<string, any>)?.id;
-    const amount = (data as Record<string, any>)?.amount?.value;
-    const currency = (data as Record<string, any>)?.amount?.currency_code ?? 'USD';
+    const resource = data as {
+      id?: string;
+      custom_id?: string;
+      amount?: { value?: string; currency_code?: string };
+    };
+    const orderId = resource.custom_id;
+    const transactionId = resource.id;
 
-    if (!orderId) {
-      this.logger.warn('PayPal webhook rejected: missing custom_id (orderId)');
+    if (!orderId || !transactionId) {
+      this.logger.warn('PayPal webhook rejected: missing custom_id (orderId) or capture id');
       return false;
     }
 
-    try {
-      await this.db.transaction(async (tx) => {
-        await tx
-          .insert(payments)
-          .values({
-            orderId,
-            method: 'paypal',
-            provider: 'paypal',
-            amount: amount?.toString() ?? '0',
-            currency,
-            status: 'paid',
-            transactionId: transactionId ?? null,
-          });
-        await tx
-          .update(orders)
-          .set({
-            status: 'paid',
-            paidAt: new Date(),
-            paymentMethod: 'paypal',
-          })
-          .where(eq(orders.id, orderId));
-      });
-      return true;
-    } catch (err) {
-      this.logger.error('PayPal webhook order update failed', (err as Error).message);
-      return false;
+    const result = await this.markOrderPaid(orderId, {
+      provider: 'paypal',
+      transactionId,
+      amount: resource.amount?.value,
+      currency: resource.amount?.currency_code ?? 'USD',
+    });
+
+    if (result.skipped && result.order.status !== 'paid') {
+      this.logger.error(
+        `PayPal 已收款但订单状态不可入账: order=${orderId} status=${result.order.status} capture=${transactionId}（需人工核对）`,
+      );
     }
+    return true;
   }
 }

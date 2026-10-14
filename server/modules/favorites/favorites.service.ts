@@ -3,13 +3,12 @@ import {
   Inject,
   Logger,
   ForbiddenException,
-  NotFoundException,
 } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, desc, and, inArray, sql } from 'drizzle-orm';
 
-import { favorites, products, productVariants } from '@server/database/schema';
-import type { FavoriteProduct } from '@shared/api.interface';
+import { favorites, products, productVariants } from '../../database/schema';
+import type { FavoriteProduct } from '../../../shared/api.interface';
 
 @Injectable()
 export class FavoritesService {

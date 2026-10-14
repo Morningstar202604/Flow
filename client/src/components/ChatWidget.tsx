@@ -168,10 +168,11 @@ const ChatWidget: React.FC = () => {
                 setInput(e.target.value)
               }
               onKeyDown={handleKeyDown}
-              placeholder={chatText.placeholder}
+              disabled={!aiConfigured}
+              placeholder={aiConfigured ? chatText.placeholder : chatText.unavailable}
               className="flex-1"
             />
-            <Button onClick={handleSend} disabled={isTyping || !input.trim()}>
+            <Button onClick={handleSend} disabled={isTyping || !input.trim() || !aiConfigured}>
               <Send className="size-4" />
             </Button>
           </div>

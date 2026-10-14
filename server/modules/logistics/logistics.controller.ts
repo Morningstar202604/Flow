@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { IsString } from 'class-validator';
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { LogisticsService, type TrackingInfo } from './logistics.service';
 
 class RegisterTrackingDto {
@@ -24,7 +24,7 @@ class RegisterTrackingDto {
   trackingNumber!: string;
 }
 
-@Controller('api/logistics')
+@Controller('logistics')
 export class LogisticsController {
   constructor(private readonly logisticsService: LogisticsService) {}
 

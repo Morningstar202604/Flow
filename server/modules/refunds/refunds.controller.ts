@@ -8,15 +8,24 @@ import {
   Req,
   UseGuards,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 
 import { RefundsService } from './refunds.service';
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Controller()
 export class RefundsController {
   constructor(private readonly refundsService: RefundsService) {}
+
+  /** RolesGuard 已校验卖家身份；此处集中收窄 userId 类型 */
+  private getSellerId(req: Request): string {
+    if (!req.user) {
+      throw new ForbiddenException('请先登录');
+    }
+    return req.user.id;
+  }
 
   // ==================== Buyer Routes ====================
 
@@ -24,7 +33,7 @@ export class RefundsController {
    * Buyer: Apply for a refund on an order
    * POST /api/orders/:orderId/refunds
    */
-  @Post('api/orders/:orderId/refunds')
+  @Post('orders/:orderId/refunds')
   async requestRefund(
     @Req() req: Request,
     @Param('orderId') orderId: string,
@@ -58,7 +67,7 @@ export class RefundsController {
    * Buyer: List own refunds
    * GET /api/my/refunds
    */
-  @Get('api/my/refunds')
+  @Get('my/refunds')
   async listMyRefunds(
     @Req() req: Request,
     @Query('status') status?: string,
@@ -73,6 +82,22 @@ export class RefundsController {
     return this.refundsService.listForUser(userId, { status, page, pageSize });
   }
 
+  /**
+   * Buyer: Get own refund detail
+   * GET /api/my/refunds/:id
+   */
+  @Get('my/refunds/:id')
+  async getMyRefund(
+    @Req() req: Request,
+    @Param('id') id: string,
+  ) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new BadRequestException('请先登录');
+    }
+    return this.refundsService.getDetail(id, userId);
+  }
+
   // ==================== Seller Routes ====================
 
   /**
@@ -80,7 +105,7 @@ export class RefundsController {
    * GET /api/refunds
    */
   @UseGuards(new RolesGuard(['seller', 'admin']))
-  @Get('api/refunds')
+  @Get('refunds')
   async listForSeller(
     @Req() req: Request,
     @Query('status') status?: string,
@@ -88,7 +113,7 @@ export class RefundsController {
     @Query('pageSize') pageSize?: string,
     @Query('keyword') keyword?: string,
   ) {
-    const sellerId = req.user?.id;
+    const sellerId = this.getSellerId(req);
     return this.refundsService.listForSeller(sellerId, { status, page, pageSize, keyword });
   }
 
@@ -97,7 +122,7 @@ export class RefundsController {
    * GET /api/refunds/:id
    */
   @UseGuards(new RolesGuard(['seller', 'admin']))
-  @Get('api/refunds/:id')
+  @Get('refunds/:id')
   async getRefundDetail(@Param('id') id: string) {
     return this.refundsService.getDetail(id);
   }
@@ -107,13 +132,13 @@ export class RefundsController {
    * POST /api/refunds/:id/approve
    */
   @UseGuards(new RolesGuard(['seller', 'admin']))
-  @Post('api/refunds/:id/approve')
+  @Post('refunds/:id/approve')
   async approveRefund(
     @Req() req: Request,
     @Param('id') id: string,
     @Body() body: { reply?: string },
   ) {
-    const sellerId = req.user?.id;
+    const sellerId = this.getSellerId(req);
     return this.refundsService.approveRefund(id, sellerId, { reply: body.reply });
   }
 
@@ -122,13 +147,13 @@ export class RefundsController {
    * POST /api/refunds/:id/reject
    */
   @UseGuards(new RolesGuard(['seller', 'admin']))
-  @Post('api/refunds/:id/reject')
+  @Post('refunds/:id/reject')
   async rejectRefund(
     @Req() req: Request,
     @Param('id') id: string,
     @Body() body: { reply: string },
   ) {
-    const sellerId = req.user?.id;
+    const sellerId = this.getSellerId(req);
     if (!body.reply?.trim()) {
       throw new BadRequestException('拒绝退款需要说明原因');
     }

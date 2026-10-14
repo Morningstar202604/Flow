@@ -1,8 +1,8 @@
 import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { categories } from '@server/database/schema';
+import { categories } from '../../database/schema';
 import { eq, asc } from 'drizzle-orm';
-import type { Category } from '@shared/api.interface';
+import type { Category } from '../../../shared/api.interface';
 
 interface CreateCategoryInput {
   nameZh: string;

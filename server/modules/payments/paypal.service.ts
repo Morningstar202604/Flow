@@ -13,10 +13,12 @@ export class PayPalService {
   constructor() {
     this.clientId = process.env.PAYPAL_CLIENT_ID;
     this.clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+    // PAYPAL_API_BASE 用于对接 API 代理或联调环境；默认按 PAYPAL_MODE 选官方地址
     this.baseUrl =
-      process.env.PAYPAL_MODE === 'live'
+      process.env.PAYPAL_API_BASE ??
+      (process.env.PAYPAL_MODE === 'live'
         ? 'https://api-m.paypal.com'
-        : 'https://api-m.sandbox.paypal.com';
+        : 'https://api-m.sandbox.paypal.com');
     if (!this.clientId || !this.clientSecret) {
       this.logger.warn(
         'PayPal not configured: PAYPAL_CLIENT_ID and/or PAYPAL_CLIENT_SECRET missing. Running in demo mode.',
@@ -124,11 +126,55 @@ export class PayPalService {
     const paymentCapture = purchaseUnit?.payments?.captures?.[0];
 
     return {
-      status: data.status,
-      transactionId: paymentCapture?.id ?? data.id,
+      status: data.status ?? 'UNKNOWN',
+      transactionId: paymentCapture?.id ?? data.id ?? '',
       amount: Number(purchaseUnit?.amount?.value ?? 0),
       currency: purchaseUnit?.amount?.currency_code ?? 'USD',
     };
+  }
+
+  /**
+   * 对已 capture 的支付发起退款（支持部分/全额）。
+   * PayPal REST: POST /v2/payments/captures/{capture_id}/refunds
+   * 不传 amount 表示全额退款；失败抛错（不做任何伪造成功）。
+   */
+  async refundCapture(
+    captureId: string,
+    amount?: number,
+    currency = 'USD',
+  ): Promise<{ refundId: string; status: string }> {
+    if (!this.isConfigured()) {
+      throw new Error('PayPal not configured');
+    }
+
+    const token = await this.getAccessToken();
+    const body = amount !== undefined
+      ? JSON.stringify({
+          amount: {
+            value: amount.toFixed(2),
+            currency_code: currency.toUpperCase(),
+          },
+        })
+      : '{}';
+
+    const response = await fetch(
+      `${this.baseUrl}/v2/payments/captures/${encodeURIComponent(captureId)}/refunds`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body,
+      },
+    );
+
+    const data = await response.json() as { id?: string; status?: string };
+    if (!response.ok) {
+      throw new Error(`PayPal refund failed: ${JSON.stringify(data)}`);
+    }
+
+    return { refundId: data.id ?? '', status: data.status ?? 'UNKNOWN' };
   }
 
   async verifyWebhook(
@@ -167,17 +213,8 @@ export class PayPalService {
       return null;
     }
 
-    let publicKey: crypto.KeyObject | null = null;
-    try {
-      const certResponse = await fetch(certUrl);
-      if (!certResponse.ok) {
-        this.logger.warn(`PayPal webhook rejected: failed to fetch cert (${certResponse.status})`);
-        return null;
-      }
-      const certPem = await certResponse.text();
-      publicKey = crypto.createPublicKey(certPem);
-    } catch (err) {
-      this.logger.warn('PayPal webhook rejected: failed to load cert', (err as Error).message);
+    const publicKey = await this.loadWebhookCert(certUrl);
+    if (!publicKey) {
       return null;
     }
 
@@ -204,6 +241,25 @@ export class PayPalService {
 
     this.logger.log(`PayPal webhook verified: ${event.event_type}`);
     return { eventType: event.event_type ?? 'UNKNOWN', data: event.resource ?? {} };
+  }
+
+  /**
+   * 加载 webhook 验签公钥（生产路径从 PayPal 官方域拉取证书）。
+   * 独立成 protected 方法：测试可注入本地生成密钥对，生产安全性不降级。
+   */
+  protected async loadWebhookCert(certUrl: string): Promise<crypto.KeyObject | null> {
+    try {
+      const certResponse = await fetch(certUrl);
+      if (!certResponse.ok) {
+        this.logger.warn(`PayPal webhook rejected: failed to fetch cert (${certResponse.status})`);
+        return null;
+      }
+      const certPem = await certResponse.text();
+      return crypto.createPublicKey(certPem);
+    } catch (err) {
+      this.logger.warn('PayPal webhook rejected: failed to load cert', (err as Error).message);
+      return null;
+    }
   }
 
   private async getAccessToken(): Promise<string> {

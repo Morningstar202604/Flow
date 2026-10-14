@@ -21,13 +21,6 @@ const BuyerLayout: React.FC = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = React.useState('');
 
-  const toggleLanguage = (): void => {
-    const order: Language[] = ['zh', 'en', 'es', 'pt'];
-    const idx: number = order.indexOf(language);
-    const nextLang: Language = order[(idx + 1) % order.length];
-    setLanguage(nextLang);
-  };
-
   const handleLanguageSelect = (lang: Language): void => {
     setLanguage(lang);
   };
@@ -147,6 +140,14 @@ const BuyerLayout: React.FC = () => {
                         <span className="hidden sm:inline text-sm font-medium max-w-[100px] truncate">
                           {user.name}
                         </span>
+                        {typeof user.points === 'number' && user.points > 0 && (
+                          <span
+                            className="hidden md:inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
+                            title={t.nav.points}
+                          >
+                            {user.points} {t.nav.points}
+                          </span>
+                        )}
                       </Button>
                     </Link>
                     <Button

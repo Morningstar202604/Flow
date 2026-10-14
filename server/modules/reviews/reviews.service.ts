@@ -9,12 +9,12 @@ import {
 } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
-import { reviews, products, orders, orderItems, users } from '@server/database/schema';
+import { reviews, products, orders, orderItems, users } from '../../database/schema';
 import type {
   ProductReview,
   ProductReviewsResponse,
   CreateReviewRequest,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 
 @Injectable()
 export class ReviewsService {
@@ -126,7 +126,7 @@ export class ReviewsService {
         productId,
         userId,
         rating: dto.rating,
-        content: dto.comment ?? null,
+        content: dto.comment ?? undefined,
       })
       .returning();
 

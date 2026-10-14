@@ -8,7 +8,6 @@ import {
   MapPin,
   CreditCard,
   Eye,
-  Circle,
   Info,
   RotateCcw,
 } from 'lucide-react';
@@ -52,7 +51,7 @@ const OrdersPage: React.FC = () => {
   const [detailLoading, setDetailLoading] = useState<boolean>(false);
   const [logisticsData, setLogisticsData] = useState<LogisticsTracking | null>(null);
   const [logisticsLoading, setLogisticsLoading] = useState<boolean>(false);
-  const { language, t } = useLanguage();
+  const { t } = useLanguage();
   const [refundModalOpen, setRefundModalOpen] = useState(false);
 
   const initialOrderId: string = searchParams.get('order') || '';
@@ -108,19 +107,6 @@ const OrdersPage: React.FC = () => {
     } finally {
       setDetailLoading(false);
     }
-  };
-
-  const getStepIcon = (status: OrderStatus, step: OrderStatus, index: number, currentIndex: number) => {
-    if (status === 'cancelled') {
-      return <Clock className="size-4" />;
-    }
-    if (index < currentIndex) {
-      return <CheckCircle2 className="size-5 text-emerald-500" />;
-    }
-    if (index === currentIndex) {
-      return <CheckCircle2 className="size-5 text-blue-500" />;
-    }
-    return <Circle className="size-5 text-slate-300" />;
   };
 
   const renderTimeline = (order: Order): React.ReactNode => {

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc } from 'drizzle-orm';
-import { addresses } from '@server/database/schema';
+import { addresses } from '../../database/schema';
 
 export interface CreateAddressDto {
   label?: string;

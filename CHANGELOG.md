@@ -5,6 +5,192 @@
 
 ---
 
+## [1.7.0] — 2026-10-15
+
+买家端运营楼层 + 集合详情页：卖家建的集合真正出现在前台。
+
+### Added
+- **首页运营楼层**：卖家标记为「首页推荐」的集合自动成为首页楼层，横向滚动展示集合内商品（一次查询取回集合+商品+变体，不随集合数增长）
+  - 楼层标题/描述按当前语言自动切换（zh/en/es/pt）
+  - 楼层右上角「查看全部」进入集合详情
+- **集合详情页**（`/collections/:slug`，买家公开）：渐变头部 + 集合信息 + 全部上架商品网格，支持收藏
+- 后端公开端点：`GET /api/collections/storefront`（楼层）、`GET /api/collections/by-slug/:slug`（详情）、`GET /api/products/by-ids?ids=`（批量商品）
+- 商品图优雅占位：空图或加载失败时展示占位图形，取代破图图标（全站商品卡受益）
+
+### Changed
+- 首页数据加载合并为一次并发请求（分类、热销、新品、楼层），并统一收藏状态批量查询
+- 楼层/详情复用 `ProductsService` 的完整商品映射（含变体），确保楼层商品可直接加购
+
+### Verification
+- `smoke-workflows` 扩至 16 步并覆盖楼层/详情/批量商品（含"楼层商品必须是含变体的完整对象"断言）
+- 视觉验收：无头浏览器截图核对首页楼层与集合详情页渲染（含无图商品的占位降级）
+
+---
+
+## [1.6.0] — 2026-10-14
+
+全工作流实测：把"跑不通的工作流"逐个跑通（16 步端到端 + 5 个真实断裂点修复）。
+
+### Fixed（真实断裂点，均由端到端冒烟暴露）
+- **商品集合模块从未被注册**：`CollectionsModule` 不在 AppModule，`/api/collections/*` 全部 404，卖家集合页与首页运营楼层完全不可用
+- **集合契约错位**：后端/数据库用 `titleZh/titleEn/descriptionZh/coverImage`，shared 契约与前端却用 `name/description/image`，卖家"新建集合"必然 400
+- **CMS 契约错位**：数据库为双语 `title_zh/title_en/content_zh/content_en/is_published`，而服务层 DTO、shared 契约、买卖两端页面全用单语 `title/content/status/isPublic`，CMS 页面创建必然 400，买家页字段也不存在
+- **CMS 列表过滤与搜索失效**：前端传 `status=draft|published` + `keyword`，后端只认 `isPublished` 且不支持 keyword，发布态筛选与搜索框形同虚设
+- **CSV 批量导入必然失败**：`cover_image` 为 NOT NULL，导入却写 null → 全事务回滚，所有行报"数据库写入失败"
+- **界面建商品无法下单**：界面创建只填价格/库存不建变体，而购物车/下单走变体 → 库存扣不动；同时界面编辑的价格/库存被静默丢弃
+- **购物车迁移码恢复 500**：`ON CONFLICT (session_id, product_id, variant_id)` 无对应唯一约束，跨设备购物车恢复（README 宣传能力）必然 500
+- **登录合并购物车 500 且丢规格**：同样 ON CONFLICT 问题，且并入时丢弃 `variantId`
+
+### Added
+- `scripts/smoke-workflows.mjs`（16 步、零凭据依赖）：认证/购物车/收藏/地址/商品(含变体)/CSV/搜索/履约/物流/评价/集合/CMS/咨询/看板/审计/越权拦截，全部端到端断言；CI 中与降级冒烟、业务冒烟、渠道冒烟同实例执行
+- 商品创建 DTO 支持 `variants`（嵌套校验）；无变体时自动生成默认变体，与 CSV 导入口径一致
+- 界面编辑商品的价格/库存同步到（唯一）变体并重算聚合库存；无变体商品自动补建
+- CMS 列表支持 `status`（published/draft）与 `keyword`（中英标题+slug）过滤；买家 CMS 页按当前语言择一渲染
+
+### Verification
+- `smoke-workflows` 16/16 ALL PASSED；`smoke` 19/19；`smoke-ai-degraded` 6/6；`smoke-providers` 18/18；单测 52/52；lint 0；双端 strict TS 0 错误
+
+---
+
+## [1.5.1] — 2026-10-14
+
+Key 全凭商家自选：多服务商预填、无 Key 全功能照常运行（并用冒烟钉死）。
+
+### Added
+- 模型设置新增**服务商一键预填**：DeepSeek / 通义千问 / 智谱 GLM / OpenAI / 火山方舟（Key 用商家自己的账号；也可手填任意 OpenAI 兼容端点）
+- `scripts/smoke-ai-degraded.mjs` + CI 步骤：在**无任何模型 Key** 的实例上验证——AI 端点统一诚实拒绝（含计量如实记录失败）、设置与 Agent 管理可用、核心交易闭环照常（CI 中与 19 步业务冒烟同实例执行）
+- 买家侧客服组件未配置时禁用输入并显示「智能客服暂未开放」（四语言）
+
+### Fixed
+- **非 v1 版本路径服务商被拼错端点**：网关由"总是追加 /v1/chat/completions"改为智能组装（`buildChatCompletionsUrl`）——智谱 `/api/paas/v4`、火山方舟 `/api/v3`、通义 compatible-mode 等路径现在都能正确拼出 `/chat/completions`（R14 契约测试 4 组 10 断言）
+
+### Verification
+- 单测 52/52；无 Key 降级冒烟 6/6 ALL PASSED + 同实例 19 步业务冒烟 ALL PASSED；providers 18 步回归 ALL PASSED；compose 部署回归通过
+
+---
+
+## [1.5.0] — 2026-10-14
+
+模型配置自有化 + 自定义 Agent：卖家在界面里填模型、建自己的 Agent，未配置时全站诚实提示。
+
+### Added
+- **模型设置（界面配置）**：卖家工作台「AI 分析中心 → 模型设置」填写 Base URL / API Key / 模型名；保存即生效（网关按调用解析配置，无需重启）；Key 永不明文回显（掩码 `sk-****1234`）；支持一键清除回退；「测试连通」真实调用模型并回显上游 HTTP 状态（401=Key 错 / 404=BaseURL 或模型名错）
+- **配置优先级**：界面设置（DB）> 环境变量（引导默认值）> 未配置；字段级合并；变更写审计（只记掩码）
+- **自定义 Agent**：任意数量用户自建 Agent（系统提示词 + `{{input}}` 模板渲染 + 文本/JSON 输出 + temperature/maxTokens + 启停），创建后可立即试跑；JSON 模式自动解析；用量独立入账（`custom:<slug>`）并出现在用量统计
+- 内置 5 个 Agent 在「我的 Agent」中只读展示（各带专属数据管线），与自定义 Agent 并列
+- 统一诚实提示 `LLM_NOT_CONFIGURED_MESSAGE`：未配置时所有 AI 端点、卖家横幅、客服组件使用同一文案口径——「请填写模型」，绝不返回假数据
+- `ai_settings` / `ai_agents` 两张表 + 迁移 `0001`；settings/agents 接口全部 seller 鉴权
+
+### Changed
+- AI 网关重构：配置从构造期缓存改为按调用解析（`resolveConfig`，纯函数 `resolveLlmConfig` 承载优先级逻辑并有单测锁定）
+- 上游失败信息回显 HTTP 状态，便于在模型设置页定位问题
+- 买家侧客服组件未配置时保持既有"配置中"提示（不引导买家去配置）
+
+### Verification
+- 单测 48/48（新增：配置优先级/掩码/模板渲染 R12、网关诚实拒绝 R13）
+- `smoke-providers` 扩至 18 步 ALL PASSED：模型设置链路（env→db→掩码→连通测试→清除回退）、自定义 Agent 全生命周期（创建→模板贯穿→JSON 解析→用量入账→停用拒绝→删除）+ 原有 5 Agent 与 Stripe/PayPal 钱链路
+
+---
+
+## [1.4.0] — 2026-10-14
+
+渠道联调闭环：内置本地渠道模拟器，AI 与支付链路在无真实凭据下完成全链路实测。
+
+### Added
+- `scripts/mock-providers.mjs` 本地渠道模拟器（联调/CI 专用，非生产代码）：同时扮演 Stripe（payment_intents / refunds）、PayPal（oauth token / checkout orders / captures refunds）与 OpenAI 兼容 LLM，并支持以**真实 HMAC 签名**回调应用的 Stripe webhook
+- `scripts/smoke-providers.mjs` 渠道全链路冒烟（13 步）：五个 AI Agent（文案 JSON / 翻译 / 选品 / 趋势落库回看 / 客服会话落库 / 用量统计 5/5 入账）+ Stripe（intent → 签名 webhook 幂等入账 → 全额退款渠道调用）+ PayPal（下单 → capture 退款出款，含金额/币种/Bearer 断言）
+- CI 新增 `providers` job：Postgres service + 模拟器 + 应用 + 全链路断言，每次提交自动执行
+- `STRIPE_API_BASE` / `PAYPAL_API_BASE`：API 基址覆盖（对接代理或联调环境；默认官方地址，生产安全性不变）
+- PayPal 证书拉取抽为 `loadWebhookCert` protected 缝：单测注入本地密钥对覆盖验签全路径（篡改/证书域注入/缺头/错算法/多场景），生产仍只信任 PayPal 官方域
+- 共享 `parseLlmJson`（剥离代码围栏 + 502 明确报错），SelectAgent 补上此前缺失的容错解析
+
+### Fixed
+- **支付流水"pending 与 paid 并存"**：渠道预建 pending 流水（Stripe intent / PayPal order）在 webhook 入账时就地升级为 paid（由模拟器真实回调链路暴露）
+- 模拟 LLM 分类器对 select 提示词的误判（上下文数据含 `titleEn` 字样，改用各 Agent 独有输出字段判别）
+
+### Verification
+- 单测 37/37（新增 PayPal 验签 R10 / 退款 R11 契约）
+- `smoke-providers` 13 步 ALL PASSED；常规 19 步冒烟与 compose 部署回归不受影响
+
+---
+
+## [1.3.0] — 2026-10-14
+
+技术债清算与现代化：类型安全基线、测试纵深、依赖升级、CI 强化。
+
+### Added
+- 双端 TypeScript strict 模式全量开启（服务端修复 32 处空值收窄/类型建模问题，客户端零存量问题）
+- 单元测试扩展至 30 例：订单状态机（合法/非法迁移矩阵）、Stripe webhook 验签（自签 HMAC：篡改/过期/轮换多签名/缺字段）、优惠券折扣口径（percent 舍入/fixed/封顶/浮点）
+- 覆盖率工具链（@vitest/coverage-v8），CI 上传 lcov 产物（纯逻辑模块 100%；数据库链路由 19 步端到端冒烟覆盖）
+- 优惠券批量生成端点（POST /api/coupons/generate-bulk，此前服务层方法无路由）
+- 端到端冒烟从 13 步扩到 19 步：优惠券闭环、取消订单库存/券量回补、非法状态迁移拒绝、游客下单（session 归属）、累计退款上限、全退款库存/销量/积分对账
+- i18n：买家端新增「运费/积分」文案补齐 zh/en/es/pt 四语；买家头部展示会员积分
+
+### Changed
+- 依赖升级：NestJS 10 → 12（Express 5）；@nestjs/{common,core,platform-express,jwt,throttler,axios} 全部升级至兼容最新版
+- 请求校验：cart（增改/迁移码）、reviews、payments、coupons（建/改/校验/批量）接入 class-validator DTO（配合全局 ValidationPipe 的 whitelist/forbidNonWhitelisted 真正生效）
+- 退款状态机：partially_refunded 订单允许继续申请剩余退款（申请与审批两端均执行累计上限校验，fail fast）
+- 订单状态迁移判定抽为纯模块 `order-status.ts`；优惠券折扣抽为纯模块 `coupon-discount.ts`
+- 优惠券/退款控制器客户端 IP 统一取 `req.ip`（反代场景由 TRUST_PROXY 控制），不再直接信任 XFF
+
+### Removed
+- 死依赖：@nestjs/swagger、@nestjs/config、@tanstack/react-query、pg、@types/pg（全库零引用）
+
+### Verification
+- `npm ci`（全新 lockfile）→ lint 0 错误 → 双端 strict typecheck 0 错误 → 30/30 单元测试 → 完整构建
+- 对全新数据库执行迁移后跑 19 步冒烟：ALL PASSED（Nest 12 / Express 5 运行时验证，含静态托管与中间件链路无回归）
+
+---
+
+## [1.2.0] — 2026-10-14
+
+全量重构：修复不可运行的生产路径，补齐支付/退款闭环，安全基线落地，文档与实现对齐。
+
+### Fixed（阻断级）
+- `npm ci` / `npm install` 干净检出即可安装（升级 react 19 不兼容的 Radix 老版本；lockfile 重建为公共 registry）
+- 编译产物启动路径修复（入口 `dist-server/server/main.js`；消除运行时无法解析的路径别名）
+- Docker 镜像可构建（`npm ci` 多阶段；Debian 基础镜像避免 bcrypt 原生编译问题）；容器同进程托管前端（SPA 回退）与 `/api/health`
+- 生产环境浏览器端 API 全部可用（统一单层 `/api` 前缀，移除 `/api/api` 双前缀；`VITE_API_BASE_URL` 语义修正）
+- 数据库迁移机制（`scripts/db/migrate.mjs` + `drizzle/` 迁移文件，启动时自动执行；不再依赖 `drizzle-kit push`）
+- `orders.user_id` 允许为空（游客结算此前必然违反非空约束）
+- 卖家看板裸 SQL 列名修复（`_created_at` → `created_at`，此前运行时必报错）
+- 退款申请查询 enum 列误用 ILIKE 修复；订单关键词搜索 uuid 列 ILIKE 修复
+
+### Added（真实性补齐）
+- Stripe webhook 端点（`/api/payments/stripe-webhook`）：时间戳容忍 + 恒定时间签名比较 + 幂等入账
+- PayPal 真实退款（`POST /v2/payments/captures/{id}/refunds`）；移除"伪造退款成功"的占位逻辑
+- 统一支付入账 `markOrderPaid`：demo / Stripe / PayPal / 卖家手动标记共用；按渠道流水号幂等；销量改为支付成功时累计
+- 运费接入结算：服务端按运费模板重算（重量/件数/满额包邮/特殊地区），买家结算页展示报价
+- AI 客服对话会话落库（卖家「咨询管理」可回看）；TrendAgent 报告落库 + 「AI 分析中心 → 历史报告」回看
+- 访客统计：`visits` 埋点 + 看板按浏览器会话去重（取代"咨询会话数"伪口径）
+- 会员积分：支付成功按 1 美元 1 分累计，退款按金额回滚，`/api/auth/me` 返回
+- pg_trgm GIN 索引（商品标题模糊搜索真正走索引）；翻译支持泰文（12 种语言与文档一致）
+- 演示数据种子（`SEED_DEMO_DATA=true`）：演示卖家/买家/商品/优惠码 TEST10 自动写入
+- 单元测试（Vitest）：订单金额、退款金额判定、运费规则；CI 增加真实端到端冒烟 job（Postgres service + 下单/支付/退款全链路断言）
+- `TRUST_PROXY`（反代下真实客户端 IP）、`COOKIE_DOMAIN`、`SELLER_REGISTRATION_CODE`（卖家注册邀请码；未配置则禁止卖家自助注册）、`CORS_ORIGINS` 生效
+
+### Changed
+- 安全：CSRF 中间件真正注册（webhook 白名单豁免）；登录/注册 5 次/分、AI 公开端点 10 次/分限流；移除可被 XFF 伪造绕过的内存限流；Google OAuth 增加 state 校验
+- 订单状态机：仅允许合法迁移（如 pending_payment → paid/shipped 之外一律拒绝）
+- 退款：部分退款必须向渠道传递明确金额（修复"按金额部分退款实际全额退"的账实不符）；累计退款不得超过支付金额；整单退款才回补库存
+- 认证 DTO（class-validator）：注册/登录与 AI 端点请求现在会被真实校验（此前 ValidationPipe 因缺少 DTO 类而形同虚设）
+- 配置加载：`dotenv` 在进程启动最早阶段加载；JWT 密钥校验延迟到依赖注入阶段（消除 `.env` 读取顺序问题）
+- ESLint：启用 react-hooks 规则；修复全部历史 lint 错误（仓库首次 `eslint .` 零错误）
+
+### Removed
+- 死代码：orders 内两套重复退款实现、Fulfillment/Notes 无路由方法（约 320 行）、`EMBEDDING_*` 残留配置、重复 axios 拦截器、未使用的 `@nestjs/config` 注入
+- 假路径：`drizzle-kit push` 启动脚本、"npx 在线拉取"占位
+
+### Migration Notes
+- 1.2.0 起数据库结构由 `drizzle/` 迁移管理：`npm run db:migrate`（或启动时自动执行）。此前用 `db:push` 管理的旧库请先备份；`sold` 销量口径改为"支付时累计"，历史数据不追溯。
+- 卖家自助注册默认关闭：维护演示环境请在 `.env` 配置 `SELLER_REGISTRATION_CODE` 或使用 `SEED_DEMO_DATA=true`。
+
+### Verification
+- `npm ci`（干净检出）→ `npm run lint`（0 错误）→ `npm run type:check`（双端 0 错误）→ `npm run test`（15/15 通过）→ `npm run build`（服务端 + 前端）
+- `docker build` 成功；`docker compose up` 后全链路冒烟通过（注册 → 运费报价 9.00 → 下单 39.00 → 演示支付 → 部分退款，13 项断言全部通过）
+
+---
+
 ## [1.1.1] — 2026-10-09
 
 死代码全量剥离 & 飞书依赖清除 — 每行代码经前向追踪，零无用声明残留。

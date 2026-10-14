@@ -1,12 +1,12 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc, count, gte, lt } from 'drizzle-orm';
-import { auditLogs } from '@server/database/schema';
-import type { AuditLog, AuditLogListResponse, AuditLogQuery } from '@shared/api.interface';
+import { auditLogs } from '../../database/schema';
+import type { AuditLog, AuditLogListResponse, AuditLogQuery } from '../../../shared/api.interface';
 
 export interface AuditLogParams {
   action: string;
-  entity?: string;
+  entity: string;
   entityId?: string;
   before?: Record<string, unknown>;
   after?: Record<string, unknown>;

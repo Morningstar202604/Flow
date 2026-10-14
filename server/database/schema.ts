@@ -1,6 +1,6 @@
 import {
   pgTable, uuid, varchar, text, integer,
-  decimal, timestamp, boolean, pgEnum, jsonb, uniqueIndex,
+  decimal, timestamp, boolean, pgEnum, uniqueIndex, index,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -101,7 +101,11 @@ export const products = pgTable('products', {
   updatedBy: uuid('updated_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // pg_trgm GIN 索引：支撑商品名 ILIKE '%kw%' 模糊搜索（需 pg_trgm 扩展，init.sql/迁移脚本创建）
+  titleEnTrgmIdx: index('products_title_en_trgm_idx').using('gin', sql`${t.titleEn} gin_trgm_ops`),
+  titleZhTrgmIdx: index('products_title_zh_trgm_idx').using('gin', sql`${t.titleZh} gin_trgm_ops`),
+}));
 
 // 商品变体表（SKU — 真实可售单元）
 export const productVariants = pgTable('product_variants', {
@@ -250,7 +254,8 @@ export const shippingTemplates = pgTable('shipping_templates', {
 export const orders = pgTable('orders', {
   id: uuid('id').primaryKey().defaultRandom(),
   orderNo: varchar('order_no', { length: 32 }).notNull().unique(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // 游客（未登录）下单时为空，归属通过 address_snapshot.sessionId 校验
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   sellerId: uuid('seller_id').references(() => users.id, { onDelete: 'set null' }),
   status: orderStatusEnum('status').notNull().default('pending_payment'),
   // 金额明细
@@ -371,7 +376,10 @@ export const payments = pgTable('payments', {
   rawResponse: text('raw_response'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // 渠道流水号唯一：webhook 重复投递时的幂等锚点
+  providerTxnIdx: uniqueIndex('payments_provider_txn_idx').on(t.provider, t.transactionId),
+}));
 
 export const logistics = pgTable('logistics', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -509,6 +517,59 @@ export const pointTransactions = pgTable('point_transactions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ==================== AI 报告（趋势/选品生成结果持久化） ====================
+
+export const aiReports = pgTable('ai_reports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  reportType: varchar('report_type', { length: 30 }).notNull(), // trend / select
+  title: varchar('title', { length: 200 }).notNull().default(''),
+  content: text('content').notNull(),
+  model: varchar('model', { length: 64 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ==================== AI 设置与自定义 Agent ====================
+
+// 模型配置（键值对：llm_base_url / llm_api_key / llm_model）。
+// 优先级：数据库（UI 设置）> 环境变量 > 未配置（诚实提示）。
+export const aiSettings = pgTable('ai_settings', {
+  key: varchar('key', { length: 50 }).primaryKey(),
+  value: text('value').notNull(),
+  updatedBy: uuid('updated_by'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// 自定义 AI Agent（内置 5 个由代码定义，不走此表）
+export const aiAgents = pgTable('ai_agents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slug: varchar('slug', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 100 }).notNull(),
+  description: varchar('description', { length: 500 }).notNull().default(''),
+  systemPrompt: text('system_prompt').notNull(),
+  // 用户提示词模板：{{input}} 占位符会被运行时的输入替换；缺占位符时输入追加在末尾
+  userPromptTemplate: text('user_prompt_template').notNull().default('{{input}}'),
+  responseFormat: varchar('response_format', { length: 10 }).notNull().default('text'), // text | json
+  temperature: decimal('temperature', { precision: 3, scale: 2 }).notNull().default('0.70'),
+  maxTokens: integer('max_tokens').notNull().default(2000),
+  enabled: boolean('enabled').notNull().default(true),
+  createdBy: uuid('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ==================== 页面访问（访客统计） ====================
+
+export const visits = pgTable('visits', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: varchar('session_id', { length: 64 }).notNull(),
+  path: varchar('path', { length: 200 }).notNull().default('/'),
+  userId: uuid('user_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  sessionIdx: index('visits_session_created_idx').on(t.sessionId, t.createdAt),
+}));
+
 // ==================== Relations ====================
 
 export const productRelations = relations(products, ({ one, many }) => ({
@@ -542,7 +603,7 @@ export const fulfillmentRelations = relations(orderFulfillments, ({ one, many })
   logistics: many(logistics),
 }));
 
-export const reviewRelations = relations(reviews, ({ one, many }) => ({
+export const reviewRelations = relations(reviews, ({ one }) => ({
   product: one(products, { fields: [reviews.productId], references: [products.id] }),
   user: one(users, { fields: [reviews.userId], references: [users.id] }),
 }));

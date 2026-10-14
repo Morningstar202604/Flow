@@ -1,5 +1,4 @@
-import { Logger, Inject } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
@@ -13,11 +12,10 @@ let cachedDb: Database | null = null;
 
 export const databaseProvider = {
   provide: DRIZZLE_DATABASE,
-  inject: [ConfigService],
-  useFactory: (config: ConfigService): Database => {
+  useFactory: (): Database => {
     if (cachedDb) return cachedDb;
 
-    const connectionString = config.get<string>('DATABASE_URL') ?? process.env.DATABASE_URL;
+    const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
       throw new Error('DATABASE_URL environment variable is not set');
     }

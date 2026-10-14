@@ -11,9 +11,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { IsString, IsOptional, IsInt, MinLength, MaxLength } from 'class-validator';
-import type { Category } from '@shared/api.interface';
+import type { Category } from '../../../shared/api.interface';
 import { CategoriesService } from './categories.service';
 
 class CreateCategoryDto {
@@ -69,7 +69,7 @@ class UpdateCategoryDto {
   sortOrder?: number;
 }
 
-@Controller('api/categories')
+@Controller('categories')
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 

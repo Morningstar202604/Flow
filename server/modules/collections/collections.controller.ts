@@ -12,7 +12,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import {
   IsString,
   IsOptional,
@@ -20,7 +20,6 @@ import {
   IsBoolean,
   IsArray,
   IsIn,
-  IsObject,
   Min,
   MinLength,
   MaxLength,
@@ -175,7 +174,7 @@ class ReorderProductsDto {
 
 // ==================== Controller ====================
 
-@Controller('api/collections')
+@Controller('collections')
 export class CollectionsController {
   constructor(private readonly collectionsService: CollectionsService) {}
 
@@ -184,6 +183,18 @@ export class CollectionsController {
   @Get('featured')
   async getFeatured() {
     return this.collectionsService.getFeatured();
+  }
+
+  /** 店铺楼层（买家首页）：精选集合 + 集合内完整商品 */
+  @Get('storefront')
+  async getStorefront() {
+    return this.collectionsService.getStorefront();
+  }
+
+  /** 集合详情（买家端公开，按 slug） */
+  @Get('by-slug/:slug')
+  async getBySlug(@Param('slug') slug: string) {
+    return this.collectionsService.getBySlug(slug);
   }
 
   // ── Seller endpoints ─────────────────────────

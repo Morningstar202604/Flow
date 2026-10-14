@@ -1,6 +1,6 @@
 import { Injectable, Inject, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { products, categories, productVariants, reviews, stockMovements } from '@server/database/schema';
+import { products, categories, productVariants, reviews, stockMovements } from '../../database/schema';
 import { eq, and, count, desc, asc, ilike, sql, inArray, type SQL } from 'drizzle-orm';
 import type {
   Product,
@@ -8,8 +8,9 @@ import type {
   ProductListParams,
   CreateProductRequest,
   UpdateProductRequest,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 import { AuditService } from '../audit/audit.service';
+import Papa from 'papaparse';
 
 export interface ImportFailure { row: number; reason: string; }
 export interface ImportResult { successCount: number; failCount: number; failures: ImportFailure[]; }
@@ -26,7 +27,7 @@ export interface ProductVariant {
 }
 
 export interface CreateVariantDto {
-  sku: string; optionValues: string[]; price: number; originalPrice?: number;
+  sku: string; optionValues?: string[]; price: number; originalPrice?: number;
   stock?: number; sold?: number; image?: string; status?: 'draft' | 'active' | 'inactive';
 }
 
@@ -217,6 +218,55 @@ export class ProductsService {
     return result;
   }
 
+  /**
+   * 按 ID 列表批量返回完整商品（保持传入顺序；一次查询商品 + 一次查询变体）。
+   * 供店铺楼层等聚合场景复用，避免逐个 findOne 造成 N+1。
+   */
+  async findByIds(ids: string[], onlyActive = true): Promise<Product[]> {
+    if (ids.length === 0) return [];
+
+    const rows = await this.db.select({
+      ...(products as any),
+      categoryNameZh: categories.nameZh,
+      categoryNameEn: categories.nameEn,
+    }).from(products)
+      .leftJoin(categories, eq(products.categoryId, categories.id))
+      .where(inArray(products.id, ids));
+
+    const productRows = (rows as unknown as ProductWithCategory[])
+      .filter((row) => !onlyActive || row.status === 'active');
+    const variantsMap = await this.fetchVariantsForProducts(productRows.map((row) => row.id));
+
+    const byId = new Map(productRows.map((row) => [row.id, row]));
+    const ordered = ids.map((id) => byId.get(id)).filter((row): row is ProductWithCategory => Boolean(row));
+
+    return ordered.map((row) => {
+      const variants = variantsMap.get(row.id) ?? [];
+      const activeVariants = variants.filter((v) => v.status === 'active');
+      const prices = activeVariants.map((v) => Number(v.price));
+      const minPrice = prices.length > 0 ? Math.min(...prices).toString() : '0';
+      return {
+        id: row.id,
+        titleZh: row.titleZh, titleEn: row.titleEn,
+        descZh: row.descZh ?? '', descEn: row.descEn ?? '',
+        longDescZh: row.longDescZh ?? '', longDescEn: row.longDescEn ?? '',
+        categoryId: row.categoryId ?? undefined,
+        categoryNameZh: row.categoryNameZh ?? undefined, categoryNameEn: row.categoryNameEn ?? undefined,
+        sellerId: row.sellerId, minPrice, maxPrice: activeVariants[0]?.originalPrice ?? minPrice,
+        totalStock: row.totalStock, totalSold: row.totalSold,
+        status: row.status as 'draft' | 'active' | 'inactive',
+        coverImage: row.coverImage ?? undefined, images: row.images ?? [],
+        optionNames: row.optionNames ?? [], seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
+        bulletPointsZh: row.bulletPointsZh ?? [], bulletPointsEn: row.bulletPointsEn ?? [],
+        weight: row.weight ? String(row.weight) : undefined,
+        avgRating: row.avgRating != null ? Number(row.avgRating) : 0,
+        reviewCount: row.reviewCount != null ? Number(row.reviewCount) : 0,
+        createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
+        variants,
+      };
+    });
+  }
+
   async getFeatured(): Promise<Array<Product>> {
     const rows = await this.db.select({
       ...(products as any),
@@ -270,16 +320,16 @@ export class ProductsService {
           sellerId: userId,
           titleZh: input.titleZh,
           titleEn: input.titleEn,
-          descZh: input.descZh ?? null,
-          descEn: input.descEn ?? null,
-          longDescZh: input.longDescZh ?? null,
-          longDescEn: input.longDescEn ?? null,
+          descZh: input.descZh ?? undefined,
+          descEn: input.descEn ?? undefined,
+          longDescZh: input.longDescZh ?? undefined,
+          longDescEn: input.longDescEn ?? undefined,
           categoryId: input.categoryId ?? null,
           status: input.status ?? 'draft',
-          coverImage: input.coverImage ?? null,
+          coverImage: input.coverImage ?? undefined,
           images: input.images ?? [],
-          seoKeywordsZh: input.seoKeywordsZh ?? null,
-          seoKeywordsEn: input.seoKeywordsEn ?? null,
+          seoKeywordsZh: input.seoKeywordsZh ?? undefined,
+          seoKeywordsEn: input.seoKeywordsEn ?? undefined,
           bulletPointsZh: input.bulletPointsZh ?? [],
           bulletPointsEn: input.bulletPointsEn ?? [],
           weight: input.weight !== undefined ? String(input.weight) : null,
@@ -308,6 +358,21 @@ export class ProductsService {
 
           const totalStock = variantRows.reduce((sum, v) => sum + v.stock, 0);
           await tx.update(products).set({ totalStock }).where(eq(products.id, productRow.id));
+        } else {
+          // 界面创建路径（只填价格/库存，不带变体）：自动生成默认变体，
+          // 与 CSV 导入口径一致，确保商品可加购、可下单。
+          const defaultSku = input.sku?.trim() || `SKU-${(productRow.id as string).slice(0, 8).toUpperCase()}`;
+          const stock = input.stock ?? 0;
+          await tx.insert(productVariants).values({
+            productId: productRow.id,
+            sku: defaultSku,
+            optionValues: [],
+            price: String(input.price),
+            originalPrice: input.originalPrice !== undefined ? String(input.originalPrice) : null,
+            stock,
+            status: 'active',
+          });
+          await tx.update(products).set({ totalStock: stock }).where(eq(products.id, productRow.id));
         }
 
         return productRow;
@@ -357,6 +422,41 @@ export class ProductsService {
     if (input.bulletPointsZh !== undefined) patch.bulletPointsZh = input.bulletPointsZh;
     if (input.bulletPointsEn !== undefined) patch.bulletPointsEn = input.bulletPointsEn;
     if (input.weight !== undefined) patch.weight = String(input.weight);
+
+    // 价格/库存同步（界面编辑路径）：
+    // - 无变体 → 用新价格/库存补建默认变体（修复历史商品）
+    // - 唯一变体 → 同步该变体并重算聚合库存
+    // - 多变体 → 忽略（由变体体系/批量导入管理）
+    const priceChanged = input.price !== undefined || input.originalPrice !== undefined || input.stock !== undefined;
+    if (priceChanged) {
+      const variantRows = await this.db
+        .select()
+        .from(productVariants)
+        .where(eq(productVariants.productId, id));
+
+      if (variantRows.length === 0 && input.price !== undefined) {
+        await this.db.insert(productVariants).values({
+          productId: id,
+          sku: `SKU-${id.slice(0, 8).toUpperCase()}`,
+          optionValues: [],
+          price: String(input.price),
+          originalPrice: input.originalPrice !== undefined ? String(input.originalPrice) : null,
+          stock: input.stock ?? 0,
+          status: 'active',
+        });
+        patch.totalStock = input.stock ?? 0;
+      } else if (variantRows.length === 1) {
+        const only = variantRows[0];
+        const variantPatch: Partial<typeof productVariants.$inferInsert> = { updatedAt: new Date() };
+        if (input.price !== undefined) variantPatch.price = String(input.price);
+        if (input.originalPrice !== undefined) variantPatch.originalPrice = String(input.originalPrice);
+        if (input.stock !== undefined) variantPatch.stock = input.stock;
+        await this.db.update(productVariants).set(variantPatch).where(eq(productVariants.id, only.id));
+        if (input.stock !== undefined) {
+          patch.totalStock = input.stock;
+        }
+      }
+    }
 
     if (Object.keys(patch).length > 0) {
       patch.updatedAt = new Date();
@@ -621,11 +721,11 @@ export class ProductsService {
         sellerId: userId,
         titleZh: row.nameZh.trim(),
         titleEn: row.nameEn.trim(),
-        descZh: row.descriptionZh || null,
-        descEn: row.descriptionEn || null,
+        descZh: row.descriptionZh || undefined,
+        descEn: row.descriptionEn || undefined,
         categoryId: categoryId ?? null,
         status: 'active',
-        coverImage: imageList[0] ?? null,
+        coverImage: imageList[0] ?? undefined,
         images: imageList,
         totalStock: Math.floor(stockNum),
         totalSold: 0,
@@ -673,7 +773,6 @@ export class ProductsService {
 
   // CSV 解析使用 papaparse（成熟开源库，正确处理 RFC 4180 转义、换行、BOM）
   private parseCsv(content: string): ParsedCsvRow[] {
-    const Papa = require('papaparse');
     const result = Papa.parse(content as any, { skipEmptyLines: true, header: false }) as { data: string[][] };
     if (result.data.length <= 1) return [];
     return result.data.slice(1).map((fields) => ({

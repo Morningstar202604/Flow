@@ -1,28 +1,30 @@
-FROM node:22-alpine AS base
+# syntax=docker/dockerfile:1
+
+# ---------- deps：安装完整依赖（含构建工具链） ----------
+FROM node:22-slim AS deps
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 
-FROM base AS deps
-COPY package.json ./
-RUN npm install --omit=dev
-
-FROM base AS build
-COPY package.json ./
-RUN npm install
+# ---------- build：编译服务端（tsc）与前端（vite） ----------
+FROM node:22-slim AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build:server
-RUN npm run build:client
+RUN npm run build:server && npm run build:client
 
-FROM base AS runtime
+# ---------- runtime：仅生产依赖 + 构建产物 ----------
+FROM node:22-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
-
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/dist-server ./dist-server
-COPY package.json ./
-COPY docker/postgres/init.sql ./docker/postgres/init.sql
-
-ENV PORT=3000
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/scripts/db ./scripts/db
+USER node
 EXPOSE 3000
-
-CMD ["sh", "-c", "npx drizzle-kit push --force 2>/dev/null || true; node dist-server/main.js"]
+HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=40s \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["sh", "-c", "node scripts/db/migrate.mjs && node dist-server/server/main.js"]

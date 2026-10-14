@@ -5,11 +5,15 @@ import { Decimal } from 'decimal.js';
 import { nanoid } from 'nanoid';
 
 import {
-  orders, orderItems, orderFulfillments, refunds, orderNotes,
+  orders, orderItems, orderFulfillments,
   products, productVariants, cartItems, coupons,
-} from '@server/database/schema';
+} from '../../database/schema';
 import { CouponsService } from '../coupons/coupons.service';
 import { AuditService } from '../audit/audit.service';
+import { ShippingService } from '../shipping/shipping.service';
+import { PaymentsService } from '../payments/payments.service';
+import { computeOrderPricing } from '../../common/pricing/order-pricing';
+import { canTransitionOrderStatus } from './order-status';
 import type {
   Order,
   OrderItem,
@@ -17,9 +21,7 @@ import type {
   OrderListResponse,
   CreateOrderRequest,
   OrderStatusUpdateRequest,
-} from '@shared/api.interface';
-
-const STATUS_ORDER: OrderStatus[] = ['pending_payment', 'paid', 'shipped', 'delivered', 'cancelled'];
+} from '../../../shared/api.interface';
 
 /** Shape of the addressSnapshot JSON stored on the order */
 interface AddressSnapshot {
@@ -41,6 +43,8 @@ export class OrdersService {
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly couponsService: CouponsService,
     private readonly auditService: AuditService,
+    private readonly shippingService: ShippingService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   private generateOrderNo(): string {
@@ -110,7 +114,7 @@ export class OrdersService {
     orderRow: {
       id: string;
       orderNo: string;
-      userId: string;
+      userId: string | null;
       subtotal: string;
       shippingFee: string;
       discountAmount: string;
@@ -139,7 +143,7 @@ export class OrdersService {
     return {
       id: orderRow.id,
       orderNo: orderRow.orderNo,
-      userId: orderRow.userId,
+      userId: orderRow.userId ?? undefined,
       buyerName: addr?.receiverName ?? '',
       buyerEmail: undefined,
       buyerPhone: addr?.phone,
@@ -232,7 +236,8 @@ export class OrdersService {
       const kw = `%${keyword.trim()}%`;
       whereConditions.push(or(
         ilike(orders.orderNo, kw),
-        ilike(orders.userId, kw),
+        // uuid 不能直接 ILIKE，需显式转文本
+        sql`${orders.userId}::text ILIKE ${kw}`,
       ));
     }
 
@@ -302,9 +307,11 @@ export class OrdersService {
     if (userId) {
       whereClause = eq(orders.userId, userId);
     } else if (sessionId) {
-      // Guest orders stored in addressSnapshot with a sessionId lookup is no longer supported
-      // Fall back to returning empty for guest sessions
-      return { items: [], total: 0, page, pageSize };
+      // 游客订单：通过地址快照中的 sessionId 关联（与支付/订单详情的归属校验一致）
+      whereClause = and(
+        sql`${orders.addressSnapshot} IS NOT NULL`,
+        sql`${orders.addressSnapshot}::jsonb ->> 'sessionId' = ${sessionId}`,
+      );
     } else {
       return { items: [], total: 0, page, pageSize };
     }
@@ -634,7 +641,6 @@ export class OrdersService {
     }
 
     const subtotalStr = subtotal.toFixed(2);
-    const shippingFee = new Decimal(0);
     let couponId: string | null = null;
     let couponCode: string | null = null;
     let discountAmount = new Decimal(0);
@@ -653,9 +659,25 @@ export class OrdersService {
       discountAmount = new Decimal(validation.discountAmount);
     }
 
-    const taxAmount = new Decimal(0);
-    const totalAmount = subtotal.plus(shippingFee).minus(discountAmount).plus(taxAmount);
-    const totalAmountStr = totalAmount.toFixed(2);
+    // 运费由服务端按运费模板重算（客户端传入的展示值一律忽略）；重量/件数从订单行汇总
+    const qtyTotal = dto.items.reduce((sum, item) => sum + item.quantity, 0);
+    const weightTotal = dto.items.reduce((sum, item) => {
+      const product = productMap.get(item.productId);
+      const weight = product?.weight ? Number(product.weight) : 0;
+      return sum + weight * item.quantity;
+    }, 0);
+    const shippingQuote = await this.shippingService.quoteForBuyer({
+      country: shippingCountry,
+      qtyTotal,
+      weightTotal,
+      subtotal: Number(subtotalStr),
+    });
+
+    const pricing = computeOrderPricing({
+      items: orderItemValues.map((item) => ({ unitPrice: item.unitPrice, quantity: item.quantity })),
+      shippingFee: shippingQuote.fee,
+      discountAmount: discountAmount.toFixed(2),
+    });
 
     // Build address snapshot
     const addressSnapshot: AddressSnapshot = {
@@ -678,11 +700,12 @@ export class OrdersService {
         .values({
           orderNo,
           userId: userId ?? null,
-          subtotal: subtotalStr,
-          shippingFee: shippingFee.toFixed(2),
-          discountAmount: discountAmount.toFixed(2),
-          taxAmount: taxAmount.toFixed(2),
-          totalAmount: totalAmountStr,
+          subtotal: pricing.subtotal,
+          shippingFee: pricing.shippingFee,
+          discountAmount: pricing.discountAmount,
+          taxAmount: pricing.taxAmount,
+          totalAmount: pricing.totalAmount,
+          shippingTemplateId: shippingQuote.templateId,
           status: 'pending_payment',
           paymentMethod: (dto.paymentMethod?.trim() || 'demo') as 'stripe' | 'paypal' | 'demo',
           couponId,
@@ -709,7 +732,7 @@ export class OrdersService {
         })),
       );
 
-      // Decrement variant stock and increment variant sold
+      // 下单即锁定库存；销量（sold）在支付成功入账时累计（见 PaymentsService.markOrderPaid）
       for (const item of dto.items) {
         const entry = itemVariantIds.find((e) => e.itemId === item.productId);
         const variantId = entry!.variantId;
@@ -717,7 +740,6 @@ export class OrdersService {
           .update(productVariants)
           .set({
             stock: sql`${productVariants.stock} - ${item.quantity}`,
-            sold: sql`${productVariants.sold} + ${item.quantity}`,
           })
           .where(and(
             eq(productVariants.id, variantId),
@@ -729,12 +751,11 @@ export class OrdersService {
           throw new ConflictException('库存不足，下单失败');
         }
 
-        // Also update product-level aggregates (totalStock, totalSold)
+        // Also update product-level aggregates (totalStock)
         await tx
           .update(products)
           .set({
             totalStock: sql`${products.totalStock} - ${item.quantity}`,
-            totalSold: sql`${products.totalSold} + ${item.quantity}`,
           })
           .where(eq(products.id, item.productId));
       }
@@ -823,8 +844,8 @@ export class OrdersService {
     const newStatus = dto.status;
     const orderNo = currentOrder.orderNo;
 
-    if (!STATUS_ORDER.includes(newStatus)) {
-      throw new BadRequestException(`无效的订单状态: ${newStatus}`);
+    if (!canTransitionOrderStatus(currentStatus, newStatus)) {
+      throw new BadRequestException(`不允许的订单状态变更: ${currentStatus} → ${newStatus}`);
     }
 
     if (newStatus === 'cancelled') {
@@ -847,8 +868,8 @@ export class OrdersService {
             await tx
               .update(productVariants)
               .set({
+                // 仅回补库存；销量在下单时未累计（支付入账时才累计）
                 stock: sql`${productVariants.stock} + ${item.quantity}`,
-                sold: sql`GREATEST(${productVariants.sold} - ${item.quantity}, 0)`,
               })
               .where(eq(productVariants.id, item.variantId));
 
@@ -858,7 +879,6 @@ export class OrdersService {
                 .update(products)
                 .set({
                   totalStock: sql`${products.totalStock} + ${item.quantity}`,
-                  totalSold: sql`GREATEST(${products.totalSold} - ${item.quantity}, 0)`,
                 })
                 .where(eq(products.id, item.productId));
             }
@@ -899,27 +919,36 @@ export class OrdersService {
       return updatedOrder;
     }
 
-    const updateData: Partial<typeof orders.$inferInsert> = {
-      status: newStatus,
-    };
-
-    const now = new Date();
     if (newStatus === 'paid') {
-      updateData.paidAt = now;
-    } else if (newStatus === 'shipped') {
-      updateData.shippedAt = now;
-      if (dto.trackingNumber !== undefined) {
-        updateData.trackingNumber = dto.trackingNumber;
-        updateData.carrier = dto.carrier ?? null;
-      }
-    } else if (newStatus === 'delivered') {
-      updateData.deliveredAt = now;
-    }
+      // 手动标记已支付（如线下转账）：走统一入账（记录渠道流水 + 累计销量 + 审计）
+      await this.paymentsService.markOrderPaid(id, {
+        provider: 'manual',
+        transactionId: `MANUAL_${Date.now().toString(36).toUpperCase()}_${nanoid(6).toUpperCase()}`,
+        amount: currentOrder.totalAmount as string,
+        actorUserId: userId,
+      });
+    } else {
+      const updateData: Partial<typeof orders.$inferInsert> = {
+        status: newStatus,
+        updatedAt: new Date(),
+      };
 
-    await this.db
-      .update(orders)
-      .set(updateData)
-      .where(eq(orders.id, id));
+      const now = new Date();
+      if (newStatus === 'shipped') {
+        updateData.shippedAt = now;
+        if (dto.trackingNumber !== undefined) {
+          updateData.trackingNumber = dto.trackingNumber;
+          updateData.carrier = dto.carrier ?? null;
+        }
+      } else if (newStatus === 'delivered') {
+        updateData.deliveredAt = now;
+      }
+
+      await this.db
+        .update(orders)
+        .set(updateData)
+        .where(eq(orders.id, id));
+    }
 
     const updatedOrder = await this.getOrderDetail(id, undefined, undefined, true);
 
@@ -942,320 +971,4 @@ export class OrdersService {
     return updatedOrder;
   }
 
-  // ==================== Refund Methods ====================
-
-  async requestRefund(
-    orderId: string,
-    userId: string,
-    dto: {
-      reason: string;
-      reasonDetail?: string;
-      items?: Array<{ orderItemId: string; quantity: number }>;
-      amount?: string;
-    },
-  ): Promise<{ id: string; refundNo: string; status: string }> {
-    const orderRows = await this.db.select().from(orders).where(eq(orders.id, orderId));
-    if (orderRows.length === 0) {
-      throw new NotFoundException('订单不存在');
-    }
-    const order = orderRows[0];
-
-    if (order.userId !== userId) {
-      throw new ForbiddenException('无权操作该订单');
-    }
-
-    if (!['paid', 'shipped', 'delivered'].includes(order.status)) {
-      throw new BadRequestException('当前订单状态不可申请退款');
-    }
-
-    // Check for existing pending refund
-    const existingRefunds = await this.db
-      .select({ id: refunds.id })
-      .from(refunds)
-      .where(and(eq(refunds.orderId, orderId), eq(refunds.status, 'requested')));
-    if (existingRefunds.length > 0) {
-      throw new ConflictException('已有待处理的退款申请');
-    }
-
-    let refundAmount: Decimal;
-    if (dto.amount) {
-      refundAmount = new Decimal(dto.amount);
-    } else if (dto.items && dto.items.length > 0) {
-      // Calculate from specified items
-      refundAmount = new Decimal(0);
-      for (const refundItem of dto.items) {
-        const itemRows = await this.db
-          .select({ unitPrice: orderItems.unitPrice, quantity: orderItems.quantity })
-          .from(orderItems)
-          .where(and(eq(orderItems.id, refundItem.orderItemId), eq(orderItems.orderId, orderId)));
-        if (itemRows.length === 0) continue;
-        const item = itemRows[0];
-        refundAmount = refundAmount.plus(new Decimal(item.unitPrice as string).mul(refundItem.quantity));
-      }
-    } else {
-      refundAmount = new Decimal(order.totalAmount as string);
-    }
-
-    if (refundAmount.lte(0)) {
-      throw new BadRequestException('退款金额必须大于 0');
-    }
-
-    const refundNo = `RF${Date.now().toString().toUpperCase()}${nanoid(6).toUpperCase()}`;
-
-    const inserted = await this.db
-      .insert(refunds)
-      .values({
-        orderId,
-        userId,
-        refundNo,
-        status: 'requested',
-        amount: refundAmount.toFixed(2),
-        reason: dto.reason,
-        reasonDetail: dto.reasonDetail ?? null,
-        items: dto.items ? JSON.stringify(dto.items) : null,
-        refundMethod: 'original',
-      })
-      .returning();
-
-    const refund = inserted[0];
-
-    try {
-      void this.auditService.log({
-        action: 'refund.request',
-        entity: 'refund',
-        entityId: refund.id,
-        after: { orderId, amount: refundAmount.toFixed(2), reason: dto.reason },
-        userId,
-        role: 'buyer',
-      });
-    } catch {
-      // Audit log failure must not affect main flow
-    }
-
-    return { id: refund.id, refundNo: refund.refundNo, status: refund.status };
-  }
-
-  async approveRefund(
-    refundId: string,
-    sellerId: string,
-    dto?: { sellerReply?: string },
-  ): Promise<{ id: string; status: string }> {
-    const refundRows = await this.db.select().from(refunds).where(eq(refunds.id, refundId));
-    if (refundRows.length === 0) {
-      throw new NotFoundException('退款记录不存在');
-    }
-    const refund = refundRows[0];
-
-    if (refund.status !== 'requested') {
-      throw new BadRequestException('仅待处理退款可审批');
-    }
-
-    const updated = await this.db
-      .update(refunds)
-      .set({
-        status: 'approved',
-        approvedAt: new Date(),
-        sellerReply: dto?.sellerReply ?? null,
-        updatedAt: new Date(),
-      })
-      .where(eq(refunds.id, refundId))
-      .returning();
-
-    try {
-      void this.auditService.log({
-        action: 'refund.approve',
-        entity: 'refund',
-        entityId: refundId,
-        after: { status: 'approved' },
-        userId: sellerId,
-        role: 'seller',
-      });
-    } catch {
-      // Audit log failure must not affect main flow
-    }
-
-    return { id: updated[0].id, status: updated[0].status };
-  }
-
-  async rejectRefund(
-    refundId: string,
-    sellerId: string,
-    dto: { sellerReply: string },
-  ): Promise<{ id: string; status: string }> {
-    const refundRows = await this.db.select().from(refunds).where(eq(refunds.id, refundId));
-    if (refundRows.length === 0) {
-      throw new NotFoundException('退款记录不存在');
-    }
-    const refund = refundRows[0];
-
-    if (refund.status !== 'requested') {
-      throw new BadRequestException('仅待处理退款可拒绝');
-    }
-
-    // Restore stock if previously deducted (on approval)
-    const orderId = refund.orderId;
-
-    const updated = await this.db
-      .update(refunds)
-      .set({
-        status: 'rejected',
-        sellerReply: dto.sellerReply,
-        updatedAt: new Date(),
-      })
-      .where(eq(refunds.id, refundId))
-      .returning();
-
-    try {
-      void this.auditService.log({
-        action: 'refund.reject',
-        entity: 'refund',
-        entityId: refundId,
-        before: { status: refund.status },
-        after: { status: 'rejected', reply: dto.sellerReply },
-        userId: sellerId,
-        role: 'seller',
-      });
-    } catch {
-      // Audit log failure must not affect main flow
-    }
-
-    void orderId;
-
-    return { id: updated[0].id, status: updated[0].status };
-  }
-
-  // ==================== Fulfillment Methods ====================
-
-  async createFulfillment(
-    orderId: string,
-    sellerId: string,
-    dto: {
-      carrier: string;
-      trackingNumber?: string;
-      trackingUrl?: string;
-      items?: Array<{ orderItemId: string; quantity: number }>;
-    },
-  ): Promise<{ id: string; status: string }> {
-    const orderRows = await this.db.select().from(orders).where(eq(orders.id, orderId));
-    if (orderRows.length === 0) {
-      throw new NotFoundException('订单不存在');
-    }
-    const order = orderRows[0];
-
-    if (!['paid', 'shipped'].includes(order.status)) {
-      throw new BadRequestException('订单状态不允许发货');
-    }
-
-    const inserted = await this.db
-      .insert(orderFulfillments)
-      .values({
-        orderId,
-        carrier: dto.carrier,
-        trackingNumber: dto.trackingNumber ?? null,
-        trackingUrl: dto.trackingUrl ?? null,
-        status: 'shipped',
-        shippedAt: new Date(),
-      })
-      .returning();
-
-    const fulfillment = inserted[0];
-
-    // If order is not yet shipped, update it
-    if (order.status === 'paid') {
-      await this.db
-        .update(orders)
-        .set({
-          status: 'shipped',
-          shippedAt: new Date(),
-          carrier: dto.carrier,
-          trackingNumber: dto.trackingNumber ?? order.trackingNumber,
-          updatedAt: new Date(),
-        })
-        .where(eq(orders.id, orderId));
-    }
-
-    try {
-      void this.auditService.log({
-        action: 'order.fulfill',
-        entity: 'order_fulfillment',
-        entityId: fulfillment.id,
-        after: { orderId, carrier: dto.carrier, trackingNumber: dto.trackingNumber },
-        userId: sellerId,
-        role: 'seller',
-      });
-    } catch {
-      // Audit log failure must not affect main flow
-    }
-
-    return { id: fulfillment.id, status: fulfillment.status };
-  }
-
-  // ==================== Order Notes ====================
-
-  async addOrderNote(
-    orderId: string,
-    authorId: string,
-    dto: { content: string; type?: 'customer' | 'staff' },
-  ): Promise<{ id: string; createdAt: string }> {
-    const orderRows = await this.db.select().from(orders).where(eq(orders.id, orderId));
-    if (orderRows.length === 0) {
-      throw new NotFoundException('订单不存在');
-    }
-
-    if (!dto.content?.trim()) {
-      throw new BadRequestException('备注内容不能为空');
-    }
-    if (dto.content.length > 1000) {
-      throw new BadRequestException('备注不能超过 1000 个字符');
-    }
-
-    const inserted = await this.db
-      .insert(orderNotes)
-      .values({
-        orderId,
-        authorId,
-        content: dto.content.trim(),
-        type: dto.type ?? 'staff',
-      })
-      .returning();
-
-    const note = inserted[0];
-
-    try {
-      void this.auditService.log({
-        action: 'order.note_add',
-        entity: 'order_note',
-        entityId: note.id,
-        after: { orderId, type: note.type },
-        userId: authorId,
-        role: 'seller',
-      });
-    } catch {
-      // Audit log failure must not affect main flow
-    }
-
-    return { id: note.id, createdAt: note.createdAt.toISOString() };
-  }
-
-  async getOrderNotes(orderId: string): Promise<Array<{
-    id: string;
-    authorId: string | null;
-    content: string;
-    type: string;
-    createdAt: string;
-  }>> {
-    const rows = await this.db
-      .select()
-      .from(orderNotes)
-      .where(eq(orderNotes.orderId, orderId))
-      .orderBy(desc(orderNotes.createdAt));
-
-    return rows.map((row) => ({
-      id: row.id,
-      authorId: row.authorId,
-      content: row.content,
-      type: row.type,
-      createdAt: row.createdAt.toISOString(),
-    }));
-  }
 }

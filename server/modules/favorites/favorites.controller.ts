@@ -10,11 +10,11 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { FavoritesService } from './favorites.service';
-import type { FavoriteProduct } from '@shared/api.interface';
+import type { FavoriteProduct } from '../../../shared/api.interface';
 
-@Controller('api/favorites')
+@Controller('favorites')
 export class FavoritesController {
   constructor(private readonly favoritesService: FavoritesService) {}
 

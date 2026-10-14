@@ -8,32 +8,25 @@ import {
   Param,
   Query,
   UseGuards,
-  BadRequestException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { CouponsService } from './coupons.service';
 import type {
   Coupon,
   CouponListResponse,
-  CreateCouponRequest,
-  UpdateCouponRequest,
-  ValidateCouponRequest,
   ValidateCouponResponse,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
+import { CreateCouponDto, GenerateBulkCodesDto, UpdateCouponDto, ValidateCouponDto } from './dto/coupons.dto';
 
-@Controller('api/coupons')
+@Controller('coupons')
 export class CouponsController {
   constructor(private readonly couponsService: CouponsService) {}
 
+  /** 客户端 IP：取 req.ip（反代场景由 TRUST_PROXY 控制可信来源），不直接信任 XFF */
   private getClientIp(req: Request): string {
-    const xff = req.headers['x-forwarded-for'];
-    if (typeof xff === 'string' && xff) {
-      return xff.split(',')[0].trim();
-    }
-    const ip = req.socket?.remoteAddress;
-    return ip || 'unknown';
+    return req.ip ?? 'unknown';
   }
 
   @Get()
@@ -50,7 +43,7 @@ export class CouponsController {
 
   @Post()
   @UseGuards(new RolesGuard(['seller', 'admin']))
-  async create(@Req() req: Request, @Body() body: CreateCouponRequest): Promise<Coupon> {
+  async create(@Req() req: Request, @Body() body: CreateCouponDto): Promise<Coupon> {
     const userId = req.user?.id;
     const role = req.user?.role;
     const ip = this.getClientIp(req);
@@ -65,19 +58,30 @@ export class CouponsController {
   @UseGuards(new RolesGuard(['seller', 'admin']))
   async update(
     @Param('id') id: string,
-    @Body() body: UpdateCouponRequest,
+    @Body() body: UpdateCouponDto,
   ): Promise<Coupon> {
     return this.couponsService.update(id, body);
   }
 
+  @Post('generate-bulk')
+  @UseGuards(new RolesGuard(['seller', 'admin']))
+  async generateBulk(
+    @Req() req: Request,
+    @Body() body: GenerateBulkCodesDto,
+  ): Promise<{ codes: string[] }> {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const ip = this.getClientIp(req);
+    const codes = await this.couponsService.generateBulkCodes(body.baseCode, body.count, {
+      userId,
+      role,
+      ip,
+    });
+    return { codes };
+  }
+
   @Post('validate')
-  async validate(@Body() body: ValidateCouponRequest): Promise<ValidateCouponResponse> {
-    if (!body.code) {
-      throw new BadRequestException('请输入优惠码');
-    }
-    if (body.orderAmount == null || isNaN(body.orderAmount)) {
-      throw new BadRequestException('订单金额无效');
-    }
+  async validate(@Body() body: ValidateCouponDto): Promise<ValidateCouponResponse> {
     return this.couponsService.validate(body.code, String(body.orderAmount));
   }
 }

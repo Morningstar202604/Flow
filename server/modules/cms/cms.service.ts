@@ -1,7 +1,7 @@
 import { Injectable, Inject, Logger, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { cmsPages } from '@server/database/schema';
-import { eq, and, desc, count, ilike } from 'drizzle-orm';
+import { cmsPages } from '../../database/schema';
+import { eq, and, desc, count, ilike, or } from 'drizzle-orm';
 
 interface CreateCmsPageInput {
   slug?: string;
@@ -30,6 +30,7 @@ interface UpdateCmsPageInput {
 }
 
 interface CmsPageListQuery {
+  keyword?: string;
   page?: number;
   pageSize?: number;
   isPublished?: boolean;
@@ -204,6 +205,14 @@ export class CmsService {
     }
     if (query.slug) {
       conditions.push(ilike(cmsPages.slug, `%${query.slug}%`));
+    }
+    if (query.keyword?.trim()) {
+      const kw = `%${query.keyword.trim()}%`;
+      conditions.push(or(
+        ilike(cmsPages.titleZh, kw),
+        ilike(cmsPages.titleEn, kw),
+        ilike(cmsPages.slug, kw),
+      ));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

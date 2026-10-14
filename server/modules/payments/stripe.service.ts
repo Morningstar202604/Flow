@@ -1,14 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
+
+/** webhook 时间戳容忍窗口（秒）：超过该窗口的签名视为重放攻击 */
+const SIGNATURE_TOLERANCE_SECONDS = 300;
 
 @Injectable()
 export class StripeService {
   private readonly logger = new Logger(StripeService.name);
   private readonly secretKey: string | undefined;
   private readonly webhookSecret: string | undefined;
-  private readonly baseUrl = 'https://api.stripe.com';
+  private readonly baseUrl: string;
 
   constructor() {
+    // STRIPE_API_BASE 用于对接 API 代理或联调环境；默认官方地址
+    this.baseUrl = process.env.STRIPE_API_BASE ?? 'https://api.stripe.com';
     this.secretKey = process.env.STRIPE_SECRET_KEY;
     this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!this.secretKey) {
@@ -58,34 +63,72 @@ export class StripeService {
     };
   }
 
-  constructEvent(
-    payload: string,
+  /**
+   * 校验并解析 Stripe webhook 事件：
+   * - 时间戳容忍窗口内（防重放）
+   * - 所有 v1 签名恒定时间比较（防时序侧信道，兼容端点密钥轮换期多签名）
+   * - 验签失败一律返回 null（fail closed）
+   */
+  verifyAndParse(
+    payload: Buffer | string,
     signature: string,
-  ): { type: string; data: unknown } | null {
+  ): { type: string; data: Record<string, unknown> } | null {
     if (!this.webhookSecret) {
+      this.logger.warn('Stripe webhook rejected: STRIPE_WEBHOOK_SECRET not configured');
       return null;
     }
 
     try {
-      const tHeader = signature
-        .split(',')
-        .find((elem: string) => elem.trim().startsWith('t='))
-        ?.split('=')[1];
-      const v1Signature = signature
-        .split(',')
-        .find((elem: string) => elem.trim().startsWith('v1='))
-        ?.split('=')[1];
+      const parts: Record<string, string[]> = {};
+      for (const element of signature.split(',')) {
+        const separatorIndex = element.indexOf('=');
+        if (separatorIndex <= 0) continue;
+        const key = element.slice(0, separatorIndex).trim();
+        const value = element.slice(separatorIndex + 1).trim();
+        if (!key || !value) continue;
+        (parts[key] ??= []).push(value);
+      }
 
-      if (!tHeader || !v1Signature) return null;
+      const timestamp = parts['t']?.[0];
+      const signatures = parts['v1'] ?? [];
+      if (!timestamp || signatures.length === 0) {
+        this.logger.warn('Stripe webhook rejected: missing t= or v1= in signature header');
+        return null;
+      }
 
-      const signedPayload = `${tHeader}.${payload}`;
-      const expectedSignature = this.signHmac(signedPayload, this.webhookSecret);
+      const ageSeconds = Math.abs(Date.now() / 1000 - Number(timestamp));
+      if (!Number.isFinite(ageSeconds) || ageSeconds > SIGNATURE_TOLERANCE_SECONDS) {
+        this.logger.warn(`Stripe webhook rejected: timestamp outside tolerance (${Math.round(ageSeconds)}s)`);
+        return null;
+      }
 
-      if (v1Signature !== expectedSignature) return null;
+      const payloadStr = typeof payload === 'string' ? payload : payload.toString('utf8');
+      const expected = createHmac('sha256', this.webhookSecret)
+        .update(`${timestamp}.${payloadStr}`)
+        .digest();
 
-      const event = JSON.parse(payload);
-      return { type: event.type, data: event.data?.object };
-    } catch {
+      const matched = signatures.some((candidate) => {
+        let provided: Buffer;
+        try {
+          provided = Buffer.from(candidate, 'hex');
+        } catch {
+          return false;
+        }
+        return provided.length === expected.length && timingSafeEqual(provided, expected);
+      });
+
+      if (!matched) {
+        this.logger.warn('Stripe webhook rejected: signature mismatch');
+        return null;
+      }
+
+      const event = JSON.parse(payloadStr) as {
+        type?: string;
+        data?: { object?: Record<string, unknown> };
+      };
+      return { type: event.type ?? 'UNKNOWN', data: event.data?.object ?? {} };
+    } catch (err) {
+      this.logger.warn('Stripe webhook rejected: parse failure', (err as Error).message);
       return null;
     }
   }
@@ -119,9 +162,5 @@ export class StripeService {
     }
 
     return { refundId: data.id ?? '' };
-  }
-
-  private signHmac(message: string, secret: string): string {
-    return createHmac('sha256', secret).update(message).digest('hex');
   }
 }

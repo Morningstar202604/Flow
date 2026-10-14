@@ -2,9 +2,9 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Req, UseGuards } from 
 import type { Request } from 'express';
 
 import { ShippingService } from './shipping.service';
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
-@Controller('api/shipping-templates')
+@Controller('shipping-templates')
 @UseGuards(new RolesGuard(['seller', 'admin']))
 export class ShippingController {
   constructor(private readonly shippingService: ShippingService) {}

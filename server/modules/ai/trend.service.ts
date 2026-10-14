@@ -2,8 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { eq, and, desc, gte, sql, sum, count } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService } from './ai-gateway.service';
-import { products, productVariants, categories, orders, orderItems } from '@server/database/schema';
-import type { AITrendReport } from '@shared/api.interface';
+import { products, productVariants, categories, orders, orderItems, aiReports } from '../../database/schema';
+import type { AITrendReport } from '../../../shared/api.interface';
 
 @Injectable()
 export class TrendService {
@@ -58,13 +58,26 @@ ${dataContext}
       { temperature: 0.7, maxTokens: 3000, agent: 'trend', userId },
     );
 
+    // 落库：报告可在「AI 分析中心 → 历史报告」回看（docs 承诺的真实实现）
+    const model = await this.aiGateway.getModel();
+    const inserted = await this.db
+      .insert(aiReports)
+      .values({
+        userId,
+        reportType: 'trend',
+        title: '市场趋势分析报告',
+        content,
+        model,
+      })
+      .returning({ id: aiReports.id, createdAt: aiReports.createdAt });
+
     return {
-      id: `trend-${Date.now()}`,
+      id: inserted[0].id,
       reportType: 'trend',
       title: '市场趋势分析报告',
       content,
       status: 'completed',
-      createdAt: new Date().toISOString(),
+      createdAt: inserted[0].createdAt.toISOString(),
     };
   }
 

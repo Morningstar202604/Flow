@@ -7,7 +7,6 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc, count, ilike, or, sql } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
@@ -16,9 +15,11 @@ import { nanoid } from 'nanoid';
 import {
   payments, refunds, orders, orderItems,
   products, productVariants, stockMovements,
-} from '@server/database/schema';
+  pointTransactions, users,
+} from '../../database/schema';
 import { AuditService } from '../audit/audit.service';
 import { PaymentsService } from '../payments/payments.service';
+import { resolveProviderRefundAmount } from '../payments/refund-amount';
 
 /** Parsed shape of the refunds.items JSON field */
 interface RefundItemEntry {
@@ -26,6 +27,11 @@ interface RefundItemEntry {
   quantity: number;
 }
 
+interface RestoreItem {
+  variantId: string | null;
+  productId: string;
+  quantity: number;
+}
 
 @Injectable()
 export class RefundsService {
@@ -34,7 +40,7 @@ export class RefundsService {
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly auditService: AuditService,
-    private readonly moduleRef: ModuleRef,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   // ==================== Helpers ====================
@@ -50,10 +56,6 @@ export class RefundsService {
     } catch {
       return undefined;
     }
-  }
-
-  private getPaymentsService(): PaymentsService {
-    return this.moduleRef.get(PaymentsService, { strict: false });
   }
 
   private mapRefund(row: typeof refunds.$inferSelect) {
@@ -111,7 +113,8 @@ export class RefundsService {
       throw new ForbiddenException('无权操作该订单');
     }
 
-    const refundableStatuses = ['paid', 'shipped', 'delivered'];
+    // partially_refunded 允许继续申请（余额由 approve 阶段的累计上限校验把控）
+    const refundableStatuses = ['paid', 'shipped', 'delivered', 'partially_refunded'];
     if (!refundableStatuses.includes(order.status)) {
       throw new BadRequestException('当前订单状态不可申请退款');
     }
@@ -122,7 +125,7 @@ export class RefundsService {
       .from(refunds)
       .where(and(
         eq(refunds.orderId, orderId),
-        ilike(refunds.status, 'requested'),
+        eq(refunds.status, 'requested'),
       ));
     if (existingRefundsRows.length > 0) {
       throw new ConflictException('已有待处理的退款申请');
@@ -156,9 +159,16 @@ export class RefundsService {
       throw new BadRequestException('退款金额必须大于 0');
     }
 
-    const orderTotal = new Decimal(order.totalAmount as string);
-    if (refundAmount.gt(orderTotal)) {
-      throw new BadRequestException('退款金额不能超过订单总额');
+    // 申请时即做累计校验（fail fast）：剩余可退 = 订单总额 - 已完成退款合计。
+    // 审批时还会再做一次同样的校验兜底（处理并发/状态变化）。
+    const completedRows = await this.db
+      .select({ total: sql<string>`COALESCE(SUM(${refunds.amount}), 0)::text` })
+      .from(refunds)
+      .where(and(eq(refunds.orderId, orderId), eq(refunds.status, 'completed')));
+    const completedTotal = new Decimal(completedRows[0]?.total ?? 0);
+    const remaining = new Decimal(order.totalAmount as string).minus(completedTotal);
+    if (refundAmount.gt(remaining)) {
+      throw new BadRequestException(`退款金额不能超过剩余可退金额 $${remaining.toFixed(2)}`);
     }
 
     const refundNo = this.generateRefundNo();
@@ -215,26 +225,38 @@ export class RefundsService {
 
     const order = await this.loadOrder(refund.orderId);
     const refundAmount = new Decimal(refund.amount as string);
+    const orderTotal = new Decimal(order.totalAmount as string);
 
-    // Process payment refund through PaymentsService
-    // Need to find the payment record's internal UUID by orderId
+    // 累计退款上限：已完成退款 + 本次 <= 订单总额（fail closed，防重复/超额退款）
+    const completedRows = await this.db
+      .select({ total: sql<string>`COALESCE(SUM(${refunds.amount}), 0)::text` })
+      .from(refunds)
+      .where(and(eq(refunds.orderId, order.id), eq(refunds.status, 'completed')));
+    const completedTotal = new Decimal(completedRows[0]?.total ?? 0);
+    const remaining = orderTotal.minus(completedTotal);
+    if (refundAmount.gt(remaining)) {
+      throw new BadRequestException(`可退余额不足：剩余可退 $${remaining.toFixed(2)}`);
+    }
+
+    // 找到本订单的已支付流水（用于渠道退款）
     const paymentRows = await this.db
-      .select({ id: payments.id })
+      .select({ id: payments.id, amount: payments.amount })
       .from(payments)
       .where(and(eq(payments.orderId, order.id), eq(payments.status, 'paid')))
       .orderBy(desc(payments.createdAt))
       .limit(1);
 
+    let providerRefundId: string | null = null;
     if (paymentRows.length > 0) {
-      try {
-        const paymentsService = this.getPaymentsService();
-        const refundItems = this.parseRefundItems(refund.items);
-        const isPartialRefund = refundItems !== undefined && refundItems.length > 0;
+      const paidAmount = new Decimal(paymentRows[0].amount as string);
+      // 部分退款必须向渠道传递明确金额；仅当"首次且全额"时传 undefined（渠道按全额退回）
+      const providerAmount = completedTotal.eq(0)
+        ? resolveProviderRefundAmount(paidAmount.toString(), refundAmount.toString())
+        : Number(refundAmount.toFixed(2));
 
-        await paymentsService.processRefund(
-          paymentRows[0].id,
-          isPartialRefund ? Number(refundAmount.toFixed(2)) : undefined,
-        );
+      try {
+        const result = await this.paymentsService.processRefund(paymentRows[0].id, providerAmount);
+        providerRefundId = result.providerRefundId;
       } catch (err) {
         const msg = (err as Error).message;
         this.logger.error(`Payment refund failed for refund ${refundId}: ${msg}`);
@@ -242,7 +264,7 @@ export class RefundsService {
       }
     }
 
-    // Update refund status and restore stock
+    // 更新退款状态 + 库存/销量回滚 + 订单状态
     const now = new Date();
     const result = await this.db.transaction(async (tx) => {
       const updatedRefundRows = await tx
@@ -257,63 +279,101 @@ export class RefundsService {
         .where(eq(refunds.id, refundId))
         .returning();
 
-      // Restore stock if partial refund with specific items
+      // 库存/销量回滚：
+      // - 指定行项 → 只回滚这些行项（无论金额）
+      // - 未指定行项且累计达到全额 → 回滚整单
+      // - 未指定行项的金额部分退款 → 不回滚（无法确定对应商品，由卖家人工处理库存）
       const refundItemsList = this.parseRefundItems(refund.items);
+      const cumulative = completedTotal.plus(refundAmount);
+      const isFullyRefunded = cumulative.gte(orderTotal);
+
+      let itemsToRestore: RestoreItem[] = [];
       if (refundItemsList && refundItemsList.length > 0) {
         for (const refundItem of refundItemsList) {
           const itemRows = await tx
             .select({ variantId: orderItems.variantId, productId: orderItems.productId })
             .from(orderItems)
-            .where(eq(orderItems.id, refundItem.orderItemId));
-
+            .where(and(eq(orderItems.id, refundItem.orderItemId), eq(orderItems.orderId, order.id)));
           if (itemRows.length > 0) {
-            const { variantId, productId } = itemRows[0];
-            if (variantId) {
-              await tx
-                .update(productVariants)
-                .set({
-                  stock: sql`${productVariants.stock} + ${refundItem.quantity}`,
-                  sold: sql`GREATEST(${productVariants.sold} - ${refundItem.quantity}, 0)`,
-                  updatedAt: now,
-                })
-                .where(eq(productVariants.id, variantId));
-
-              // Record stock movement
-              await tx.insert(stockMovements).values({
-                variantId,
-                quantity: refundItem.quantity,
-                reason: 'refund_return',
-                referenceId: refundId,
-                note: `Refund approved: ${refund.refundNo}`,
-                createdBy: sellerId,
-              });
-            }
-            if (productId) {
-              await tx
-                .update(products)
-                .set({
-                  totalStock: sql`${products.totalStock} + ${refundItem.quantity}`,
-                  totalSold: sql`GREATEST(${products.totalSold} - ${refundItem.quantity}, 0)`,
-                  updatedAt: now,
-                })
-                .where(eq(products.id, productId));
-            }
+            itemsToRestore.push({ ...itemRows[0], quantity: refundItem.quantity });
           }
+        }
+      } else if (isFullyRefunded) {
+        itemsToRestore = await tx
+          .select({
+            variantId: orderItems.variantId,
+            productId: orderItems.productId,
+            quantity: orderItems.quantity,
+          })
+          .from(orderItems)
+          .where(eq(orderItems.orderId, order.id));
+      }
+
+      for (const item of itemsToRestore) {
+        if (item.variantId) {
+          await tx
+            .update(productVariants)
+            .set({
+              stock: sql`${productVariants.stock} + ${item.quantity}`,
+              sold: sql`GREATEST(${productVariants.sold} - ${item.quantity}, 0)`,
+              updatedAt: now,
+            })
+            .where(eq(productVariants.id, item.variantId));
+
+          await tx.insert(stockMovements).values({
+            variantId: item.variantId,
+            quantity: item.quantity,
+            reason: 'refund_return',
+            referenceId: refundId,
+            note: `Refund approved: ${refund.refundNo}`,
+            createdBy: sellerId,
+          });
+        }
+        await tx
+          .update(products)
+          .set({
+            totalStock: sql`${products.totalStock} + ${item.quantity}`,
+            totalSold: sql`GREATEST(${products.totalSold} - ${item.quantity}, 0)`,
+            updatedAt: now,
+          })
+          .where(eq(products.id, item.productId));
+      }
+
+      // 积分回滚：按退款金额扣减（与入账口径一致：1 美元 = 1 分）
+      if (order.userId) {
+        const pointsToDeduct = Math.floor(Number(refundAmount.toFixed(2)));
+        if (pointsToDeduct > 0) {
+          await tx.insert(pointTransactions).values({
+            userId: order.userId,
+            amount: -pointsToDeduct,
+            type: 'refund',
+            source: 'refund',
+            referenceId: refundId,
+            note: `Refund ${refund.refundNo}`,
+          });
+          await tx
+            .update(users)
+            .set({ points: sql`GREATEST(${users.points} - ${pointsToDeduct}, 0)` })
+            .where(eq(users.id, order.userId));
         }
       }
 
-      // Determine if this is a partial or full refund
-      const orderTotal = new Decimal(order.totalAmount as string);
-      const isPartialRefund = refundAmount.lt(orderTotal);
-
-      // Update order status
+      // 订单状态按累计口径判定：累计退款 >= 订单总额 → refunded，否则 partially_refunded
       await tx
         .update(orders)
         .set({
-          status: isPartialRefund ? 'partially_refunded' : 'refunded',
+          status: isFullyRefunded ? 'refunded' : 'partially_refunded',
           updatedAt: now,
         })
         .where(eq(orders.id, refund.orderId));
+
+      // 累计补齐全额时，同步支付行状态（单笔全额时 processRefund 已处理）
+      if (isFullyRefunded && paymentRows.length > 0) {
+        await tx
+          .update(payments)
+          .set({ status: 'refunded', updatedAt: now })
+          .where(eq(payments.id, paymentRows[0].id));
+      }
 
       return updatedRefundRows[0];
     });
@@ -324,7 +384,12 @@ export class RefundsService {
         entity: 'refund',
         entityId: refundId,
         before: { status: refund.status },
-        after: { status: 'completed', approvedAt: now.toISOString() },
+        after: {
+          status: 'completed',
+          amount: refundAmount.toFixed(2),
+          providerRefundId,
+          approvedAt: now.toISOString(),
+        },
         userId: sellerId,
         role: 'seller',
       });
@@ -386,6 +451,7 @@ export class RefundsService {
     sellerId: string,
     query: { status?: string; page?: string; pageSize?: string; keyword?: string },
   ) {
+    void sellerId;
     const whereConditions = [];
 
     // Filter by status

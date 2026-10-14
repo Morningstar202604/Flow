@@ -4,14 +4,14 @@ import { DRIZZLE_DATABASE, type Database,
 import { sql } from 'drizzle-orm';
 import {
   products,
-  inquirySessions,
-} from '@server/database/schema';
+  visits,
+} from '../../database/schema';
 import type {
   DashboardData,
   DashboardStats,
   SalesTrendItem,
   CategorySalesItem,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 
 @Injectable()
 export class DashboardService {
@@ -39,7 +39,7 @@ export class DashboardService {
     const todayStart = this.getTodayStartIso();
     const windowStart = this.getDaysAgoStartIso(90);
 
-    const result = await this.db.execute(sql<{
+    const result = await this.db.execute<{
       gmv: string;
       order_count: string;
       visitor_count: string;
@@ -47,17 +47,17 @@ export class DashboardService {
       today_gmv: string;
       today_orders: string;
       pending_orders: string;
-    }>`
+    }>(sql`
       SELECT
         COALESCE(SUM(CASE WHEN o.status IN ('paid', 'shipped', 'delivered') THEN o.total_amount ELSE 0 END), 0)::text AS gmv,
         COALESCE(COUNT(o.id), 0)::text AS order_count,
-        (SELECT COUNT(DISTINCT ${inquirySessions.sessionId}) FROM ${inquirySessions} WHERE ${inquirySessions.createdAt} >= ${windowStart}::timestamptz)::text AS visitor_count,
+        (SELECT COUNT(DISTINCT ${visits.sessionId}) FROM ${visits} WHERE ${visits.createdAt} >= ${windowStart}::timestamptz)::text AS visitor_count,
         (SELECT COUNT(${products.id}) FROM ${products})::text AS product_count,
-        COALESCE(SUM(CASE WHEN o.status IN ('paid', 'shipped', 'delivered') AND o._created_at >= ${todayStart}::timestamptz THEN o.total_amount ELSE 0 END), 0)::text AS today_gmv,
-        COALESCE(COUNT(CASE WHEN o._created_at >= ${todayStart}::timestamptz THEN 1 END), 0)::text AS today_orders,
+        COALESCE(SUM(CASE WHEN o.status IN ('paid', 'shipped', 'delivered') AND o.created_at >= ${todayStart}::timestamptz THEN o.total_amount ELSE 0 END), 0)::text AS today_gmv,
+        COALESCE(COUNT(CASE WHEN o.created_at >= ${todayStart}::timestamptz THEN 1 END), 0)::text AS today_orders,
         COALESCE(COUNT(CASE WHEN o.status = 'paid' THEN 1 END), 0)::text AS pending_orders
       FROM orders o
-      WHERE o._created_at >= ${windowStart}::timestamptz
+      WHERE o.created_at >= ${windowStart}::timestamptz
     `);
 
     const row = result[0] as {
@@ -93,11 +93,11 @@ export class DashboardService {
   }
 
   private async getSalesTrend(): Promise<SalesTrendItem[]> {
-    const result = await this.db.execute(sql<{
+    const result = await this.db.execute<{
       date: string;
       amount: string;
       orders: string;
-    }>`
+    }>(sql`
       SELECT
         to_char(d.day, 'YYYY-MM-DD') AS date,
         COALESCE(SUM(o.total_amount), 0)::text AS amount,
@@ -110,9 +110,9 @@ export class DashboardService {
         ) AS day
       ) d
        LEFT JOIN orders o
-         ON DATE(o._created_at AT TIME ZONE 'Asia/Shanghai') = d.day
+         ON DATE(o.created_at AT TIME ZONE 'Asia/Shanghai') = d.day
          AND o.status IN ('paid', 'shipped', 'delivered')
-         AND o._created_at >= (CURRENT_DATE - INTERVAL '29 days')
+         AND o.created_at >= (CURRENT_DATE - INTERVAL '29 days')
        GROUP BY d.day
       ORDER BY d.day ASC
     `);
@@ -125,10 +125,10 @@ export class DashboardService {
   }
 
   private async getCategorySales(): Promise<CategorySalesItem[]> {
-    const result = await this.db.execute(sql<{
+    const result = await this.db.execute<{
       name: string;
       amount: string;
-    }>`
+    }>(sql`
       SELECT
         COALESCE(c.name_zh, '未分类') AS name,
         SUM(oi.subtotal)::text AS amount
@@ -137,7 +137,7 @@ export class DashboardService {
       LEFT JOIN products p ON oi.product_id = p.id
       LEFT JOIN categories c ON p.category_id = c.id
       WHERE o.status IN ('paid', 'shipped', 'delivered')
-        AND o._created_at >= (CURRENT_DATE - INTERVAL '89 days')
+        AND o.created_at >= (CURRENT_DATE - INTERVAL '89 days')
       GROUP BY c.name_zh
       ORDER BY SUM(oi.subtotal) DESC
     `);

@@ -18,6 +18,23 @@ const DEFAULT_RESOLUTIONS: number[] = [
   3840,
 ];
 
+/** 优雅的图片占位：空 src 或加载失败时展示，避免出现破图图标 */
+const ImagePlaceholder: React.FC<{ className?: string }> = ({ className }) => (
+  <span
+    aria-hidden="true"
+    className={cn(
+      'flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200',
+      className,
+    )}
+  >
+    <svg viewBox="0 0 24 24" fill="none" className="h-1/3 w-1/3 text-slate-300" strokeWidth={1.5} stroke="currentColor">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="M21 15l-5-5L5 21" />
+    </svg>
+  </span>
+);
+
 const SRC_ALLOWLIST = [
   '/runtime/api/v1/storage/object/',
   '/aily/api/v1/feisuda/attachments/',
@@ -62,7 +79,7 @@ function supportWebp() {
         .toDataURL('image/webp')
         .indexOf('data:image/webp') === 0
     );
-  } catch (err) {
+  } catch {
     return false;
   }
 }
@@ -111,10 +128,15 @@ export const Image = React.forwardRef<HTMLImageElement, ImageProps>(
     },
     ref,
   ) => {
+    const [failed, setFailed] = React.useState(false);
     const defaultFormat = React.useMemo(
       () => (supportWebp() ? 'webp' : undefined),
       [],
     );
+
+    if (!src || failed) {
+      return <ImagePlaceholder className={className} />;
+    }
 
     // 当 src 不在白名单时，直接渲染原生 img，保留所有原生属性
     if (typeof src !== 'string' || !isTargetSrc(src)) {
@@ -122,6 +144,7 @@ export const Image = React.forwardRef<HTMLImageElement, ImageProps>(
         <img
           {...rest}
           ref={ref}
+          onError={() => setFailed(true)}
           src={src}
           width={width}
           height={height}
@@ -162,6 +185,7 @@ export const Image = React.forwardRef<HTMLImageElement, ImageProps>(
       <img
         {...rest}
         ref={ref}
+        onError={() => setFailed(true)}
         src={baseSrc}
         width={width}
         height={height}

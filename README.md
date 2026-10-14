@@ -15,7 +15,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 [![GitHub](https://img.shields.io/badge/GitHub-X33834%2FGlobalEcom--AI-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![Gitee](https://img.shields.io/badge/Gitee-badhope%2FGlobalEcom--AI-C71D23?style=flat-square&logo=gitee&logoColor=white)](https://gitee.com/badhope/GlobalEcom-AI)
 [![GitCode](https://img.shields.io/badge/GitCode-badhope%2FGlobalEcom--AI-2F6BFF?style=flat-square&logo=git&logoColor=white)](https://gitcode.com/badhope/GlobalEcom-AI)
-[![Version](https://img.shields.io/badge/version-v1.1.1-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.1.1)
+[![Version](https://img.shields.io/badge/version-v1.7.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.7.0)
 [![Stars](https://img.shields.io/github/stars/X33834/GlobalEcom-AI?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![CI](https://img.shields.io/github/actions/workflow/status/X33834/GlobalEcom-AI/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/X33834/GlobalEcom-AI/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -33,7 +33,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 - **品牌定位 / Positioning**：AI 原生跨境出货台 · AI-Native Cross-Border Commerce Platform
 - **主传播语 / Tagline**：AI 让跨境生意更简单 · Make Cross-Border Business Simpler with AI
 - **主色 / Brand Colors**：深海军蓝 `#0B1F3A` + 科技青 `#00C2B8`
-- **当前版本 / Version**：v1.1.1（[CHANGELOG.md](CHANGELOG.md)）
+- **当前版本 / Version**：v1.7.0（[CHANGELOG.md](CHANGELOG.md)）
 
 ---
 
@@ -58,7 +58,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 
 ### 买家商城（B2C）· Buyer Storefront
 
-- **浏览与搜索**：首页推荐、人工运营楼层（Collection）、分类导航、筛选/排序/分页、关键词搜索（`pg_trgm`）
+- **浏览与搜索**：首页推荐、**人工运营楼层**（精选集合自动成为首页楼层，可点进集合详情页）、分类导航、筛选/排序/分页、关键词搜索（`pg_trgm`）
 - **商品详情**：图片画廊、多规格选择（颜色/尺码等 SPU→SKU 变体体系）、加购/立即购买
 - **购物车**：增删改、数量调整、价格实时计算；匿名购物车支持**跨设备迁移码恢复**
 - **下单与支付**：收货地址簿、**运费模板**（按重量/件数/地区/满额包邮）、优惠券核销、Stripe / PayPal / Demo
@@ -84,7 +84,12 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 
 ---
 
-## 5 个 AI Agent · All Real, No Fake
+## AI Agent：内置 5 个 + 自定义无限个 · All Real, No Fake
+
+**模型配置由卖家自己填**：登录卖家工作台 →「AI 分析中心 → 模型设置」填写 Base URL / API Key / 模型名，保存即生效（无需重启）；
+环境变量 `LLM_*` 仅作为无界面部署的引导默认值，**界面设置优先级更高**。未配置期间所有 AI 功能统一提示「请填写模型」，绝不返回假数据。
+
+内置 5 个专业 Agent（只读），另可在「我的 Agent」中创建任意数量的自定义 Agent（系统提示词 + `{{input}}` 模板 + 文本/JSON 输出 + temperature/maxTokens），保存后即刻试跑，用量独立计入统计。
 
 所有 Agent 均为**真实 LLM 调用**（OpenAI 兼容协议），统一经 `ai-gateway` 收口；未配 key 时诚实报错 400，**绝不返回假数据**。
 
@@ -95,6 +100,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 | **TrendAgent** | 趋势分析报告 | DeepSeek-reasoner | SQL 聚合近 30 天销售数据 + LLM 解读，落库可回看 |
 | **SelectAgent** | 选品建议 | DeepSeek-chat | 类目 + Top 20 热销 + 趋势摘要 → JSON 推荐 |
 | **TranslationAgent** | 多语言翻译 | DeepSeek-chat | 支持 **12 种语言**（zh/en/es/pt/fr/de/it/ja/ko/ru/ar/th） |
+| **自定义 Agent** | 用户自建（任意数量） | 同左 | 「AI 分析中心 → 我的 Agent」：提示词模板 / 文本或 JSON 输出 / 即时试跑 / 独立用量 |
 
 > 详细输入输出、降级行为与环境变量说明见 [docs/AI-AGENTS.md](docs/AI-AGENTS.md)。
 
@@ -105,7 +111,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 | 层 · Layer | 技术 · Technology |
 |---|---|
 | 前端 Frontend | React 19 · TypeScript · Vite · Tailwind CSS · shadcn/ui · React Router v6 · ECharts |
-| 后端 Backend | NestJS 10 · TypeScript · Drizzle ORM |
+| 后端 Backend | NestJS 12（Express 5）· TypeScript strict · Drizzle ORM |
 | 数据库 Database | PostgreSQL 16（`pg_trgm` 模糊搜索扩展） |
 | AI 调用 AI | OpenAI 兼容协议（DeepSeek / 火山方舟 / OpenAI / 通义 / 智谱等） |
 | 认证 Auth | JWT（HttpOnly Cookie）+ bcrypt + Google OAuth + CSRF 头校验 |
@@ -126,7 +132,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 └────────────┼───────────────────────────┼────────────────────┘
              ▼                           ▼
 ┌────────────────────────────────────────────────────────────┐
-│               NestJS 10 API 网关（单一 Node 进程）            │
+│               NestJS 12 API 网关（单一 Node 进程）            │
 │  middleware: jwt-auth → csrf-header → rate-limit            │
 │  guards: RolesGuard (buyer/seller) · filter: 异常脱敏         │
 │  modules: auth products categories cart orders payments      │
@@ -163,11 +169,12 @@ cd GlobalEcom-AI
 
 # 2. 复制环境变量模板并填入密钥
 cp .env.example .env        # 至少设置 JWT_SECRET；其余未配自动进入演示模式
+# 可选：在 .env 中设置 SEED_DEMO_DATA=true，首次启动自动写入演示账号 / 商品 / 优惠券
 
-# 3. 启动全部服务（postgres 自动建库 + pg_trgm 扩展）
+# 3. 启动全部服务（自动执行数据库迁移 + pg_trgm 扩展；单进程同源托管前端与 API）
 docker compose up -d --build
 
-# 4. 访问
+# 4. 访问（前端由服务端同源托管，无需另起静态服务器）
 #    买家商城   http://localhost:3000/
 #    卖家工作台 http://localhost:3000/seller/dashboard
 ```
@@ -179,14 +186,40 @@ docker compose up -d --build
 | 角色 Role | 账号 | 密码 |
 |---|---|---|
 | 卖家 Seller | `seller@example.com` | `seller123` |
+| 买家 Buyer | `buyer@example.com` | `buyer123` |
 | 优惠码 Coupon | `TEST10` | 九折 |
+
+> 以上演示数据由 `SEED_DEMO_DATA=true` 在空库首次启动时自动写入。
+
+### 渠道联调 / 集成测试（无需真实凭据）· Integration Testing without Real Keys
+
+仓库内置**本地渠道模拟器**（`scripts/mock-providers.mjs`）：一个进程同时扮演 Stripe、PayPal 与 OpenAI 兼容 LLM，并能以**真实签名**回调应用的 webhook。AI 五个 Agent 与支付/退款链路因此可以全链路实测：
+
+```bash
+# 1. 启动本地渠道模拟器（监听 4880）
+npm run mock:providers
+
+# 2. 带模拟端点启动应用（或写入 .env；base 覆盖仅用于代理/联调，默认走官方地址）
+LLM_BASE_URL=http://127.0.0.1:4880/llm LLM_API_KEY=mock-key STRIPE_SECRET_KEY=sk_test_mock STRIPE_WEBHOOK_SECRET=whsec_mock STRIPE_API_BASE=http://127.0.0.1:4880/stripe PAYPAL_CLIENT_ID=mock-cid PAYPAL_CLIENT_SECRET=mock-sec PAYPAL_WEBHOOK_ID=mock-wh PAYPAL_API_BASE=http://127.0.0.1:4880/paypal DATABASE_URL=postgres://... SELLER_REGISTRATION_CODE=smoke-secret NODE_ENV=development npm run dev:server
+
+# 3. 全链路断言：AI 五 Agent（含落库回看/用量统计）+ Stripe 签名 webhook 入账 + Stripe/PayPal 退款
+DATABASE_URL=postgres://... SMOKE_BASE=http://127.0.0.1:3000 MOCK_BASE=http://127.0.0.1:4880 npm run smoke:providers
+```
+
+> 接了真实凭据时只需把 `LLM_* / STRIPE_* / PAYPAL_*` 换成真值并移除 `*_API_BASE`，同一套链路即走官方 API；CI 中它们作为独立 job 每次提交自动执行。
+>
+> **不填 Key 也完全可用**：`npm run smoke:degraded` 验证无凭据实例上——AI 端点统一诚实提示「请填写模型」、设置与 Agent 管理照常可用、下单/支付/退款等全部核心功能正常运行（CI 中与 19 步业务冒烟跑同一实例）。
 
 ### 本地开发 · Local Development
 
 ```bash
-npm install          # 安装依赖（含 postinstall 钩子初始化）
+cp .env.example .env # 本地开发至少设置 DATABASE_URL 与 JWT_SECRET（NODE_ENV=development）
+npm install          # 安装依赖
+npm run db:migrate   # 初始化 / 升级数据库结构（Drizzle 迁移）
 npm run dev          # 同时启动前端 (Vite) 与后端 (NestJS watch)
-npm run lint         # ESLint + Stylelint
+npm run test         # 单元测试（Vitest：金额/退款/运费/状态机/验签，30 例）
+npm run test:coverage# 单元测试 + 覆盖率报告
+npm run lint         # ESLint
 npm run type:check   # 前后端 TypeScript 类型检查
 ```
 
@@ -203,6 +236,12 @@ npm run type:check   # 前后端 TypeScript 类型检查
 | [CHANGELOG.md](CHANGELOG.md) | 版本变更历史（Keep a Changelog 格式） |
 | [docs/cleanup-v1.1.md](docs/cleanup-v1.1.md) | v1.1.0 死代码清理与飞书依赖剥离记录 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献指南：环境、规范、提交与 PR 流程 |
+| `scripts/smoke.mjs` | 端到端冒烟（19 步）：注册→下单→支付→退款 |
+| `scripts/smoke-workflows.mjs` | 全工作流冒烟（16 步，零凭据）：浏览→搜索→购物车→合并→下单→发货→评价→集合→CMS→咨询→看板 |
+| `scripts/smoke-ai-degraded.mjs` | 无模型 Key 降级验证：AI 诚实提示，其余功能正常 |
+| `scripts/smoke-providers.mjs` | 渠道全链路：AI 五 Agent + Stripe/PayPal 支付退款 |
+| `scripts/mock-providers.mjs` | 本地渠道模拟器：Stripe / PayPal / LLM（含签名 webhook 回打），联调与 CI 专用 |
+| `scripts/smoke-providers.mjs` | 渠道全链路冒烟：AI 五 Agent + Stripe/PayPal 支付退款断言 |
 | [SECURITY.md](SECURITY.md) | 安全策略：漏洞报告与处理流程 |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | 社区行为准则 |
 
@@ -235,7 +274,7 @@ If you find this project useful, please give it a **Star** ⭐ so more cross-bor
 
 ## 安全 · Security
 
-本项目重视安全。我们已完成 P0 致命 14 项 + P1 重要 16 项 + P2 加固 4 项的修复（详见 [docs/audit-summary.md](docs/audit-summary.md)）。发现安全问题请通过 [SECURITY.md](SECURITY.md) 中说明的方式私密报告，请勿在公开 Issue 中披露。
+本项目重视安全。历史修复见 [docs/audit-summary.md](docs/audit-summary.md)；v1.2.0 完成一轮全量重构：支付闭环（Stripe webhook 验签 + 幂等入账）、真实退款（Stripe/PayPal）、CSRF 生效、按端点限流、卖家注册邀请码门禁、OAuth state 校验、CI 含真实端到端冒烟测试（详见 [CHANGELOG.md](CHANGELOG.md)）。发现安全问题请通过 [SECURITY.md](SECURITY.md) 中说明的方式私密报告，请勿在公开 Issue 中披露。
 
 ---
 

@@ -4,78 +4,59 @@ import {
   Get,
   Body,
   Req,
-  UseGuards,
-  Query,
   Res,
+  Query,
+  UseGuards,
   Logger,
-   BadRequestException,
-   HttpException,
-   HttpStatus,
-   Inject,
-   UnauthorizedException,
- } from '@nestjs/common';
+  BadRequestException,
+  Inject,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 
 import { AuthService } from './auth.service';
-import { RolesGuard } from '@server/common/guards/roles.guard';
-import { JWT_COOKIE_NAME } from '@server/common/middleware/jwt-auth.middleware';
-import { users } from '@server/database/schema';
+import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { JWT_COOKIE_NAME } from '../../common/middleware/jwt-auth.middleware';
+import { users } from '../../database/schema';
 import type {
   User,
-  RegisterRequest,
-  LoginRequest,
   GoogleAuthStatus,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 
- const RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const RATE_LIMIT_MAX = 5;
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const OAUTH_STATE_COOKIE_NAME = 'globalecom_oauth_state';
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
-function getClientIp(req: Request): string {
-  const xff = req.headers['x-forwarded-for'];
-  if (typeof xff === 'string' && xff) {
-    return xff.split(',')[0].trim();
-  }
-  const ip = req.socket?.remoteAddress;
-  return ip || 'unknown';
-}
-
-function checkRateLimit(ip: string, key: string): void {
-  const now = Date.now();
-  const mapKey = `${ip}:${key}`;
-  const entry = rateLimitMap.get(mapKey);
-
-  if (!entry || entry.resetAt <= now) {
-    rateLimitMap.set(mapKey, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return;
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX) {
-    throw new HttpException('请求过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  entry.count += 1;
-}
+/** 登录/注册限流：每 IP 每 60 秒 5 次（全局 100/min 之外的额外收口） */
+const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
 
 function setAuthCookie(res: Response, token: string): void {
   const isProd = process.env.NODE_ENV === 'production';
+  const cookieDomain = process.env.COOKIE_DOMAIN;
   res.cookie(JWT_COOKIE_NAME, token, {
     httpOnly: true,
     secure: isProd,
     sameSite: isProd ? 'strict' : 'lax',
     path: '/',
     maxAge: 2 * 60 * 60 * 1000,
+    ...(cookieDomain ? { domain: cookieDomain } : {}),
   });
 }
 
 function clearAuthCookie(res: Response): void {
-  res.clearCookie(JWT_COOKIE_NAME, { path: '/' });
+  const cookieDomain = process.env.COOKIE_DOMAIN;
+  res.clearCookie(JWT_COOKIE_NAME, {
+    path: '/',
+    ...(cookieDomain ? { domain: cookieDomain } : {}),
+  });
 }
 
-@Controller('api/auth')
+@Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
   private readonly googleClientId: string | undefined;
@@ -94,27 +75,23 @@ export class AuthController {
     }
   }
 
+  @Throttle(AUTH_THROTTLE)
   @Post('register')
   async register(
-    @Body() dto: RegisterRequest,
-    @Req() req: Request,
+    @Body() dto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ user: User }> {
-    const ip = getClientIp(req);
-    checkRateLimit(ip, `register:${dto.email}`);
     const result = await this.authService.register(dto);
     setAuthCookie(res, result.token);
     return { user: result.user };
   }
 
+  @Throttle(AUTH_THROTTLE)
   @Post('login')
   async login(
-    @Body() dto: LoginRequest,
-    @Req() req: Request,
+    @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ user: User }> {
-    const ip = getClientIp(req);
-    checkRateLimit(ip, `login:${dto.email}`);
     const result = await this.authService.login(dto);
     setAuthCookie(res, result.token);
     return { user: result.user };
@@ -160,24 +137,48 @@ export class AuthController {
         'Google 登录未配置，请设置 GOOGLE_CLIENT_ID 和 GOOGLE_CLIENT_SECRET 环境变量',
       );
     }
+
+    // state 防登录 CSRF：随机值写入短期 Cookie，回调时校验一致
+    const state = crypto.randomBytes(16).toString('hex');
+    res.cookie(OAUTH_STATE_COOKIE_NAME, state, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      // 跨站回调需要 lax（strict 会导致回调时 Cookie 不携带）
+      sameSite: 'lax',
+      path: '/',
+      maxAge: OAUTH_STATE_TTL_MS,
+    });
+
     const redirectUri = `${process.env.APP_URL || ''}/api/auth/google/callback`;
     const googleAuthUrl =
       `https://accounts.google.com/o/oauth2/v2/auth` +
       `?client_id=${this.googleClientId}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&response_type=code` +
-      `&scope=email%20profile`;
+      `&scope=email%20profile` +
+      `&state=${state}`;
     res.redirect(googleAuthUrl);
   }
 
   @Get('google/callback')
   async googleCallback(
+    @Req() req: Request,
     @Query('code') code: string,
+    @Query('state') state: string,
     @Query('error') error: string,
     @Res() res: Response,
   ): Promise<void> {
     if (!this.googleClientId || !this.googleClientSecret) {
       res.redirect('/login?google_error=not_configured');
+      return;
+    }
+
+    // 校验 OAuth state（防登录 CSRF）
+    const expectedState = req.cookies?.[OAUTH_STATE_COOKIE_NAME];
+    res.clearCookie(OAUTH_STATE_COOKIE_NAME, { path: '/' });
+    if (!state || !expectedState || state !== expectedState) {
+      this.logger.warn('Google OAuth state mismatch');
+      res.redirect('/login?google_error=state_mismatch');
       return;
     }
 
@@ -252,7 +253,7 @@ export class AuthController {
       if (existingRows.length > 0) {
         userRow = existingRows[0];
       } else {
-        const randomPw = await bcrypt.hash(Math.random().toString(36).slice(2), 10);
+        const randomPw = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
         const inserted = await this.db
           .insert(users)
           .values({

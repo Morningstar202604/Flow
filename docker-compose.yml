@@ -1,8 +1,6 @@
-version: "3.9"
-
 # GlobalEcom AI — 部署编排
-# 使用: docker-compose up -d
-# 首次启动会自动创建表 (db:push)
+# 使用: docker compose up -d --build
+# 启动时自动执行 drizzle 迁移（scripts/db/migrate.mjs），PG 首次初始化时创建 pg_trgm 扩展
 
 services:
   postgres:
@@ -40,11 +38,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health')"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
 
 volumes:
   postgres_data:

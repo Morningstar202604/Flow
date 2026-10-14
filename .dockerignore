@@ -1,0 +1,27 @@
+# 构建上下文瘦身 + 防止宿主平台产物污染容器依赖（bcrypt 等原生模块）
+node_modules
+*/node_modules
+**/node_modules
+
+# 构建产物（镜像内由 build 阶段重新生成）
+dist
+dist-server
+client/dist
+out
+
+# 本地环境与凭据
+.env
+.env.*
+!.env.example
+
+# 版本控制与 CI
+.git
+.github
+
+# 文档与截图（不参与镜像构建）
+docs
+
+# 其他
+*.log
+coverage
+.aqg

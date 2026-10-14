@@ -11,11 +11,11 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { AddressesService } from './addresses.service';
 import type { CreateAddressDto, UpdateAddressDto } from './addresses.service';
 
-@Controller('api/addresses')
+@Controller('addresses')
 export class AddressesController {
   constructor(private readonly addressesService: AddressesService) {}
 

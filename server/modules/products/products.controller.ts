@@ -14,7 +14,7 @@ import {
   PayloadTooLargeException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { RolesGuard } from '@server/common/guards/roles.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import {
   IsString,
   IsOptional,
@@ -24,6 +24,9 @@ import {
   IsObject,
   IsIn,
   Min,
+  MinLength,
+  MaxLength,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import type {
@@ -32,7 +35,7 @@ import type {
   CreateProductRequest,
   UpdateProductRequest,
   ProductListParams,
-} from '@shared/api.interface';
+} from '../../../shared/api.interface';
 import { ProductsService } from './products.service';
 
 const PRODUCT_SORT_BY = ['price_asc', 'price_desc', 'sold_desc', 'newest'] as const;
@@ -164,6 +167,46 @@ class CreateProductDto implements CreateProductRequest {
   @Type(() => Number)
   @IsNumber()
   weight?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateVariantDto)
+  variants?: CreateVariantDto[];
+}
+
+class CreateVariantDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  sku!: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  optionValues?: string[];
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  price!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  originalPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  stock?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['active', 'inactive'])
+  status?: 'active' | 'inactive';
 }
 
 class UpdateProductDto implements UpdateProductRequest {
@@ -256,7 +299,7 @@ class UpdateProductDto implements UpdateProductRequest {
   weight?: number;
 }
 
-@Controller('api/products')
+@Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
@@ -288,6 +331,14 @@ export class ProductsController {
       'attachment; filename="products-import-template.csv"',
     );
     res.send(csv);
+  }
+
+  /** 批量按 ID 查询（买家端集合/楼层等聚合场景；仅返回上架商品） */
+  @Get('by-ids')
+  async findByIds(@Query('ids') ids?: string): Promise<Product[]> {
+    const list = (ids ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 60);
+    if (list.length === 0) return [];
+    return this.productsService.findByIds(list, true);
   }
 
   @Get(':id')

@@ -1,11 +1,13 @@
 import { Module, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
-import { databaseProvider } from './database/database.provider';
+import { DatabaseModule } from './database/database.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { CmsModule } from './modules/cms/cms.module';
+import { CollectionsModule } from './modules/collections/collections.module';
 import { CartModule } from './modules/cart/cart.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { PaymentsModule } from './modules/payments/payments.module';
@@ -20,9 +22,13 @@ import { InquiryModule } from './modules/inquiry/inquiry.module';
 import { LogisticsModule } from './modules/logistics/logistics.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
+import { HealthModule } from './modules/health/health.module';
+import { SeedModule } from './modules/seed/seed.module';
 import { JwtAuthMiddleware } from './common/middleware/jwt-auth.middleware';
+import { CsrfHeaderMiddleware } from './common/middleware/csrf-header.middleware';
 
 const businessModules = [
+  AnalyticsModule,
   AuthModule,
   AddressesModule,
   AiModule,
@@ -30,15 +36,18 @@ const businessModules = [
   CartModule,
   CategoriesModule,
   CmsModule,
+  CollectionsModule,
   CouponsModule,
   DashboardModule,
   FavoritesModule,
+  HealthModule,
   InquiryModule,
   LogisticsModule,
   OrdersModule,
   PaymentsModule,
   ProductsModule,
   RefundsModule,
+  SeedModule,
   ReviewsModule,
   ShippingModule,
 ];
@@ -49,10 +58,10 @@ const businessModules = [
       ttl: 60000,
       limit: 100,
     }]),
+    DatabaseModule,
     ...businessModules,
   ],
   providers: [
-    databaseProvider,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
@@ -63,6 +72,9 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer
       .apply(JwtAuthMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
+    consumer
+      .apply(CsrfHeaderMiddleware)
       .forRoutes({ path: '*', method: RequestMethod.ALL });
   }
 }

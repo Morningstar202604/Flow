@@ -52,12 +52,6 @@ import { toast } from 'sonner';
 
 const PAGE_SIZE = 10;
 
-const statusMeta: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  draft: { label: '草稿', variant: 'secondary' as const },
-  published: { label: '已发布', variant: 'default' as const },
-  archived: { label: '已归档', variant: 'outline' as const },
-};
-
 const CmsPagesPage: React.FC = () => {
   const [pages, setPages] = useState<CmsPage[]>([]);
   const [total, setTotal] = useState(0);
@@ -70,8 +64,11 @@ const CmsPagesPage: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<CreateCmsPageRequest>({
     slug: '',
-    title: '',
-    content: '',
+    titleZh: '',
+    titleEn: '',
+    contentZh: '',
+    contentEn: '',
+    isPublished: false,
   });
   const [formLoading, setFormLoading] = useState(false);
 
@@ -104,7 +101,7 @@ const CmsPagesPage: React.FC = () => {
 
   const handleCreate = () => {
     setEditingId(null);
-    setForm({ slug: '', title: '', content: '', status: 'draft' });
+    setForm({ slug: '', titleZh: '', titleEn: '', contentZh: '', contentEn: '', isPublished: false });
     setDialogOpen(true);
   };
 
@@ -115,15 +112,15 @@ const CmsPagesPage: React.FC = () => {
       const detail = await getCmsPageDetail(cmsPage.id);
       setForm({
         slug: detail.slug,
-        title: detail.title,
-        content: detail.content,
-        excerpt: detail.excerpt,
-        metaTitle: detail.metaTitle,
-        metaDescription: detail.metaDescription,
-        coverImage: detail.coverImage,
-        status: detail.status,
-        isPublic: detail.isPublic,
-        sortOrder: detail.sortOrder,
+        titleZh: detail.titleZh,
+        titleEn: detail.titleEn,
+        contentZh: detail.contentZh,
+        contentEn: detail.contentEn,
+        metaTitleZh: detail.metaTitleZh,
+        metaTitleEn: detail.metaTitleEn,
+        metaDescZh: detail.metaDescZh,
+        metaDescEn: detail.metaDescEn,
+        isPublished: detail.isPublished,
       });
       setDialogOpen(true);
     } catch {
@@ -145,8 +142,12 @@ const CmsPagesPage: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (!form.title.trim()) {
-      toast.error('请输入页面标题');
+    if (!form.titleZh.trim()) {
+      toast.error('请输入页面中文标题');
+      return;
+    }
+    if (!form.titleEn.trim()) {
+      toast.error('请输入页面英文标题');
       return;
     }
     if (!form.slug.trim()) {
@@ -170,10 +171,10 @@ const CmsPagesPage: React.FC = () => {
   };
 
   const handleTogglePublish = async (cmsPage: CmsPage) => {
-    const newStatus = cmsPage.status === 'published' ? 'draft' : 'published';
+    const next = !cmsPage.isPublished;
     try {
-      await updateCmsPage(cmsPage.id, { status: newStatus });
-      toast.success(newStatus === 'published' ? '页面已发布' : '已设为草稿');
+      await updateCmsPage(cmsPage.id, { isPublished: next });
+      toast.success(next ? '页面已发布' : '已设为草稿');
       fetchPages();
     } catch {
       toast.error('操作失败');
@@ -258,33 +259,32 @@ const CmsPagesPage: React.FC = () => {
               {!loading &&
                 pages.map((cmsPage) => (
                   <TableRow key={cmsPage.id}>
-                    <TableCell className="font-medium text-slate-900">{cmsPage.title}</TableCell>
+                    <TableCell className="font-medium text-slate-900">{cmsPage.titleZh}</TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">/{cmsPage.slug}</TableCell>
                     <TableCell>
-                      <Badge variant={statusMeta[cmsPage.status]?.variant || 'secondary'}>
-                        {statusMeta[cmsPage.status]?.label || cmsPage.status}
+                      <Badge variant={cmsPage.isPublished ? 'default' : 'secondary'}>
+                        {cmsPage.isPublished ? '已发布' : '草稿'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {cmsPage.isPublic ? (
+                      {cmsPage.isPublished ? (
                         <Eye className="h-4 w-4 text-emerald-500" />
                       ) : (
                         <EyeOff className="h-4 w-4 text-slate-300" />
                       )}
                     </TableCell>
-                    <TableCell className="text-sm">{cmsPage.viewCount}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {cmsPage.updatedAt ? new Date(cmsPage.updatedAt).toLocaleDateString('zh-CN') : '-'}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="sm" onClick={() => handleTogglePublish(cmsPage)}>
-                          {cmsPage.status === 'published' ? (
+                          {cmsPage.isPublished ? (
                             <EyeOff className="mr-1 h-3 w-3" />
                           ) : (
                             <Eye className="mr-1 h-3 w-3" />
                           )}
-                          {cmsPage.status === 'published' ? '取消发布' : '发布'}
+                          {cmsPage.isPublished ? '取消发布' : '发布'}
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => handleEdit(cmsPage)}>
                           <Edit className="mr-1 h-3 w-3" />
@@ -330,11 +330,20 @@ const CmsPagesPage: React.FC = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>页面标题 *</Label>
+                  <Label>页面标题（中文）*</Label>
                   <Input
                     placeholder="如：关于我们"
-                    value={form.title}
-                    onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+                    value={form.titleZh}
+                    onChange={(e) => setForm((prev) => ({ ...prev, titleZh: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>页面标题（英文）*</Label>
+                  <Input
+                    placeholder="如：About Us"
+                    value={form.titleEn}
+                    onChange={(e) => setForm((prev) => ({ ...prev, titleEn: e.target.value }))}
                     className="mt-1"
                   />
                 </div>
@@ -354,91 +363,79 @@ const CmsPagesPage: React.FC = () => {
 
               {/* Rich Text Editor */}
               <div>
-                <Label>页面内容 *</Label>
+                <Label>页面内容（中文）</Label>
                 <div className="mt-1">
                   <RichTextEditor
-                    value={form.content}
-                    onChange={(html) => setForm((prev) => ({ ...prev, content: html }))}
+                    value={form.contentZh || ''}
+                    onChange={(html) => setForm((prev) => ({ ...prev, contentZh: html }))}
                     placeholder="在此输入页面内容..."
                   />
                 </div>
               </div>
 
               <div>
-                <Label>摘要</Label>
-                <Textarea
-                  placeholder="页面摘要（选填，用于SEO和列表展示）"
-                  value={form.excerpt || ''}
-                  onChange={(e) => setForm((prev) => ({ ...prev, excerpt: e.target.value }))}
-                  rows={2}
-                  className="mt-1"
-                />
+                <Label>页面内容（英文）</Label>
+                <div className="mt-1">
+                  <RichTextEditor
+                    value={form.contentEn || ''}
+                    onChange={(html) => setForm((prev) => ({ ...prev, contentEn: html }))}
+                    placeholder="English content here..."
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>SEO 标题</Label>
+                  <Label>SEO 标题（中文）</Label>
                   <Input
                     placeholder="留空则使用页面标题"
-                    value={form.metaTitle || ''}
-                    onChange={(e) => setForm((prev) => ({ ...prev, metaTitle: e.target.value }))}
+                    value={form.metaTitleZh || ''}
+                    onChange={(e) => setForm((prev) => ({ ...prev, metaTitleZh: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>SEO 标题（英文）</Label>
+                  <Input
+                    placeholder="Optional, defaults to title"
+                    value={form.metaTitleEn || ''}
+                    onChange={(e) => setForm((prev) => ({ ...prev, metaTitleEn: e.target.value }))}
                     className="mt-1"
                   />
                 </div>
                 <div>
                   <Label>状态</Label>
-                  <Select value={form.status} onValueChange={(v) => setForm((prev) => ({ ...prev, status: v as CmsPage['status'] }))}>
+                  <Select value={form.isPublished ? 'published' : 'draft'} onValueChange={(v) => setForm((prev) => ({ ...prev, isPublished: v === 'published' }))}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="draft">草稿</SelectItem>
                       <SelectItem value="published">已发布</SelectItem>
-                      <SelectItem value="archived">已归档</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <div>
-                <Label>SEO 描述</Label>
-                <Textarea
-                  placeholder="SEO meta description（选填）"
-                  value={form.metaDescription || ''}
-                  onChange={(e) => setForm((prev) => ({ ...prev, metaDescription: e.target.value }))}
-                  rows={2}
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label>封面图片 URL</Label>
-                <Input
-                  placeholder="https://..."
-                  value={form.coverImage || ''}
-                  onChange={(e) => setForm((prev) => ({ ...prev, coverImage: e.target.value }))}
-                  className="mt-1"
-                />
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="is-public"
-                    checked={form.isPublic || false}
-                    onChange={(e) => setForm((prev) => ({ ...prev, isPublic: e.target.checked }))}
-                    className="rounded border-slate-300"
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>SEO 描述（中文）</Label>
+                  <Textarea
+                    placeholder="SEO meta description（选填）"
+                    value={form.metaDescZh || ''}
+                    onChange={(e) => setForm((prev) => ({ ...prev, metaDescZh: e.target.value }))}
+                    rows={2}
+                    className="mt-1"
                   />
-                  <Label htmlFor="is-public" className="mb-0 cursor-pointer">公开访问（无需登录）</Label>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Label className="mb-0">排序：</Label>
-                  <Input
-                    type="number"
-                    value={form.sortOrder || 0}
-                    onChange={(e) => setForm((prev) => ({ ...prev, sortOrder: Number(e.target.value) }))}
-                    className="w-20"
+                <div>
+                  <Label>SEO 描述（英文）</Label>
+                  <Textarea
+                    placeholder="Optional meta description"
+                    value={form.metaDescEn || ''}
+                    onChange={(e) => setForm((prev) => ({ ...prev, metaDescEn: e.target.value }))}
+                    rows={2}
+                    className="mt-1"
                   />
                 </div>
               </div>

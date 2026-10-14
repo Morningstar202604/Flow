@@ -1,5 +1,4 @@
 import { http } from '../lib/http';
-import { getSessionId } from '@/utils/session';
 import type {
   InquiryMessage,
   InquirySession,
