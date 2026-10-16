@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="client/src/assets/branding/logo-main.png" alt="GlobalEcom AI Logo" width="220" />
+<img src="client/src/assets/branding/logo-main.png" alt="Flow Logo" width="220" />
 
-# GlobalEcom AI
+# Flow
 
-### AI 原生跨境出货台 · AI-Native Cross-Border Commerce Platform
+### 让跨境生意更简单 · Cross-Border Commerce, Simplified
 
-#### *AI 让跨境生意更简单 · Make Cross-Border Business Simpler with AI*
+#### *一个简洁的出口电商平台 · One clean platform for cross-border selling*
 
 买家商城 + 卖家 AI 工作台双端一体，5 个 AI Agent 真实驱动商品文案、智能客服、趋势分析、选品建议与多语言翻译。
 
@@ -15,7 +15,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 [![GitHub](https://img.shields.io/badge/GitHub-X33834%2FGlobalEcom--AI-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![Gitee](https://img.shields.io/badge/Gitee-badhope%2FGlobalEcom--AI-C71D23?style=flat-square&logo=gitee&logoColor=white)](https://gitee.com/badhope/GlobalEcom-AI)
 [![GitCode](https://img.shields.io/badge/GitCode-badhope%2FGlobalEcom--AI-2F6BFF?style=flat-square&logo=git&logoColor=white)](https://gitcode.com/badhope/GlobalEcom-AI)
-[![Version](https://img.shields.io/badge/version-v1.7.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.7.0)
+[![Version](https://img.shields.io/badge/version-v1.9.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.9.0)
 [![Stars](https://img.shields.io/github/stars/X33834/GlobalEcom-AI?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![CI](https://img.shields.io/github/actions/workflow/status/X33834/GlobalEcom-AI/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/X33834/GlobalEcom-AI/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -26,14 +26,25 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 
 ---
 
-**GlobalEcom AI** 是一套 **AI 原生的出口电商全栈平台**，面向跨境卖家提供"开店 → 上架 → 获客 → 成交 → 客服 → 复盘"的完整闭环。平台采用买家商城（B2C）与卖家 AI 工作台双端同仓架构，内置 **5 个真实调用大模型的 AI Agent**，帮助卖家以更低成本完成商品文案生成、多语言翻译、智能客服、趋势分析与选品决策。
+**Flow** 是一套 **AI 原生的出口电商全栈平台**，面向跨境卖家提供"开店 → 上架 → 获客 → 成交 → 客服 → 复盘"的完整闭环。平台采用买家商城（B2C）与卖家 AI 工作台双端同仓架构，内置 **5 个真实调用大模型的 AI Agent**，帮助卖家以更低成本完成商品文案生成、多语言翻译、智能客服、趋势分析与选品决策。
 
-**GlobalEcom AI** is a full-stack, AI-native cross-border e-commerce platform delivering the complete loop: *launch → list → attract → convert → support → review*. With a buyer storefront and a seller AI workbench in one monorepo, its 5 AI Agents help sellers cut cost and effort in copywriting, translation, customer support, trend analysis and product selection.
+**Flow** is a full-stack, AI-native cross-border e-commerce platform delivering the complete loop: *launch → list → attract → convert → support → review*. With a buyer storefront and a seller AI workbench in one monorepo, its 5 AI Agents help sellers cut cost and effort in copywriting, translation, customer support, trend analysis and product selection.
 
-- **品牌定位 / Positioning**：AI 原生跨境出货台 · AI-Native Cross-Border Commerce Platform
-- **主传播语 / Tagline**：AI 让跨境生意更简单 · Make Cross-Border Business Simpler with AI
+- **品牌定位 / Positioning**：出口电商平台 · Cross-Border Commerce Platform
+- **主传播语 / Tagline**：让跨境生意更简单 · Cross-Border Commerce, Simplified
 - **主色 / Brand Colors**：深海军蓝 `#0B1F3A` + 科技青 `#00C2B8`
-- **当前版本 / Version**：v1.7.0（[CHANGELOG.md](CHANGELOG.md)）
+- **当前版本 / Version**：v1.9.0（[CHANGELOG.md](CHANGELOG.md)）
+
+---
+
+## 演示 · Demo
+
+**[▶ 观看 90 秒使用演示（docs/video/demo.mp4）](docs/video/demo.mp4)** — 买家浏览下单全流程 + 卖家 AI 工作台操作
+
+![演示动图](docs/video/demo.gif)
+
+> 视频由 `npm run capture:video` 自动录制（CDP 抓帧 + ffmpeg 合成，无需人工剪辑）；
+> 截图由 `npm run capture` 自动生成（Puppeteer 全页截图，含真实演示数据）。
 
 ---
 
@@ -41,16 +52,18 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 
 | 买家商城 Buyer Storefront | 卖家 AI 工作台 Seller AI Workbench |
 |:---:|:---:|
-| ![买家首页](docs/screenshots/01-homepage-zh.png) | ![卖家数据看板](docs/screenshots/09-seller-dashboard-zh.png) |
-| 首页推荐 · 分类导航 · 多语言（zh / en / es / pt） | GMV / 订单量 / 访客数，SQL 真实聚合 + ECharts |
-| ![商品列表](docs/screenshots/03-product-list.png) | ![AI 分析中心](docs/screenshots/14-ai-center.png) |
-| 筛选 · 排序 · 分页 · 关键词搜索（pg_trgm） | 5 个 AI Agent 入口 + 调用用量统计 |
-| ![结算下单](docs/screenshots/07-checkout.png) | ![AI 商品文案](docs/screenshots/15-ai-copywriting.png) |
-| Stripe / PayPal 演示接入 · 优惠券 · 金额后端重算 | CopywriterAgent 生成标题 / 卖点 / SEO 关键词 |
-| ![订单跟踪](docs/screenshots/08-orders.png) | ![AI 客服对话](docs/screenshots/16-ai-support-chat.png) |
-| 订单列表 · 物流时间线（17TRACK 接入点） | SupportAgent 三层 RAG 智能客服 |
+| ![买家首页](docs/screenshots/01-homepage-zh.png) | ![卖家数据看板](docs/screenshots/16-seller-dashboard-zh.png) |
+| 运营楼层 · 分类导航 · 多语言（zh / en / es / pt） | GMV / 订单量 / 访客数，SQL 真实聚合 + ECharts |
+| ![运营楼层](docs/screenshots/11-collection-floor.png) | ![AI 分析中心](docs/screenshots/22-ai-center.png) |
+| 卖家标记「首页推荐」的集合自动成为楼层 | 模型设置（5 家一键预填）· 用量统计 · 我的 Agent |
+| ![集合详情](docs/screenshots/12-collection-detail.png) | ![商品管理](docs/screenshots/18-seller-products.png) |
+| 集合内全部上架商品，可点进详情 | 变体 SKU · 库存 · CSV 批量导入 · 上下架 |
+| ![结算下单](docs/screenshots/07-checkout.png) | ![退款审批](docs/screenshots/20-seller-refunds.png) |
+| 地址簿预填 · 运费报价 · 优惠券 · 服务端重算金额 | 审批退款 · 原路退回 · 库存/销量/积分回补 |
+| ![订单跟踪](docs/screenshots/08-orders.png) | ![咨询管理](docs/screenshots/21-seller-inquiries.png) |
+| 订单列表 · 物流时间线 · 退款申请 | 买家会话与 AI 回复，卖家可直接接管 |
 
-> 全部 16 张页面截图见 [`docs/screenshots/`](docs/screenshots/)。
+> 全部 **27 张**页面截图（买家 15 + 卖家 12）见 [`docs/screenshots/`](docs/screenshots/)。
 
 ---
 
@@ -242,6 +255,9 @@ npm run type:check   # 前后端 TypeScript 类型检查
 | `scripts/smoke-providers.mjs` | 渠道全链路：AI 五 Agent + Stripe/PayPal 支付退款 |
 | `scripts/mock-providers.mjs` | 本地渠道模拟器：Stripe / PayPal / LLM（含签名 webhook 回打），联调与 CI 专用 |
 | `scripts/smoke-providers.mjs` | 渠道全链路冒烟：AI 五 Agent + Stripe/PayPal 支付退款断言 |
+| `scripts/capture/screenshots.mjs` | 自动截图（Puppeteer 全页，`npm run capture`） |
+| `scripts/capture/record-demo.mjs` | 自动录屏（CDP + ffmpeg，`npm run capture:video`） |
+| `scripts/capture/seed-demo.mjs` | 截图/录屏用演示数据（商品带图、订单、集合、优惠券、CMS、咨询） |
 | [SECURITY.md](SECURITY.md) | 安全策略：漏洞报告与处理流程 |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | 社区行为准则 |
 
@@ -282,5 +298,5 @@ If you find this project useful, please give it a **Star** ⭐ so more cross-bor
 
 本项目采用 **MIT License** 开源，详见 [LICENSE](LICENSE)。
 
-版权所有 © 2026 GlobalEcom AI. All rights reserved.
+版权所有 © 2026 Flow. All rights reserved.
 

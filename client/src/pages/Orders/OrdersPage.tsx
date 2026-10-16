@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Package,
@@ -27,6 +27,8 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { getBuyerOrders, getOrderDetail } from '@/api/orders';
 import { getLogistics } from '@/api/logistics';
 import type { Order, OrderStatus, LogisticsTracking } from '@shared/api.interface';
+import { notifyError } from '@/lib/error-feedback';
+import { toast } from 'sonner';
 
 const STATUS_STEPS: OrderStatus[] = [
   'pending_payment',
@@ -52,6 +54,8 @@ const OrdersPage: React.FC = () => {
   const [logisticsData, setLogisticsData] = useState<LogisticsTracking | null>(null);
   const [logisticsLoading, setLogisticsLoading] = useState<boolean>(false);
   const { t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [refundModalOpen, setRefundModalOpen] = useState(false);
 
   const initialOrderId: string = searchParams.get('order') || '';
@@ -74,7 +78,7 @@ const OrdersPage: React.FC = () => {
         setSelectedOrder(data.items[0]);
       }
     } catch (error: unknown) {
-      console.error('[orders] list error', error);
+      notifyError(error, tRef.current.common.error);
     } finally {
       setLoading(false);
     }
@@ -103,7 +107,7 @@ const OrdersPage: React.FC = () => {
           setLogisticsLoading(false);
         });
     } catch (error: unknown) {
-      console.error('[orders] detail error', error);
+      notifyError(error, tRef.current.common.error);
     } finally {
       setDetailLoading(false);
     }
@@ -525,18 +529,20 @@ const OrdersPage: React.FC = () => {
                   </div>
                 </Card>
 
-                {/* Refund Button */}
-                <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setRefundModalOpen(true)}
-                    className="border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
-                  >
-                    <RotateCcw className="mr-1 h-3 w-3" />
-                    申请退款
-                  </Button>
-                </div>
+                {/* Refund Button：仅已支付/已发货/已送达可申请 */}
+                {['paid', 'shipped', 'delivered', 'partially_refunded'].includes(selectedOrder.status) && (
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRefundModalOpen(true)}
+                      className="border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                    >
+                      <RotateCcw className="mr-1 h-3 w-3" />
+                      {t.orders.requestRefund}
+                    </Button>
+                  </div>
+                )}
               </>
             ) : (
               <Card className="rounded-xl bg-white p-12 text-center text-slate-500">
@@ -554,6 +560,7 @@ const OrdersPage: React.FC = () => {
           open={refundModalOpen}
           onClose={() => setRefundModalOpen(false)}
           onSuccess={() => {
+            toast.success(t.orders.refundSubmitted);
             void fetchOrders();
           }}
         />

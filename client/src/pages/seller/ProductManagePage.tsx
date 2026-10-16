@@ -62,6 +62,7 @@ import type {
   ImportFailure,
 } from '@shared/api.interface';
 import { toast } from 'sonner';
+import { notifyError } from '@/lib/error-feedback';
 
 const productSchema = z.object({
   titleZh: z.string().min(1, '中文标题必填'),
@@ -178,7 +179,7 @@ const ProductManagePage: React.FC = () => {
         setProducts(result.items);
         setTotal(result.total);
       } catch (err) {
-        console.error('获取商品列表失败', err);
+        notifyError(err, '获取商品列表失败，请重试');
       } finally {
         setLoading(false);
       }
@@ -191,7 +192,7 @@ const ProductManagePage: React.FC = () => {
       const result = await categoriesApi.listCategories();
       setCategories(result);
     } catch (err) {
-      console.error('获取分类失败', err);
+      notifyError(err, '获取分类失败');
     }
   }, []);
 
@@ -253,7 +254,7 @@ const ProductManagePage: React.FC = () => {
       await productsApi.deleteProduct(id);
       fetchProducts();
     } catch (err) {
-      console.error('删除商品失败', err);
+      notifyError(err, '删除商品失败，请重试');
     }
   };
 

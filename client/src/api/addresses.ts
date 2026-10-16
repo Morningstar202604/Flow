@@ -7,8 +7,10 @@ import type {
 } from '@shared/api.interface';
 
 export async function getAddresses(): Promise<Address[]> {
-  const { data } = await http.get<AddressListResponse>('/api/addresses');
-  return data.items;
+  const { data } = await http.get<Address[] | AddressListResponse>('/api/addresses');
+  // 后端返回裸数组；兼容历史/未来可能的分页包装（{ items }），避免下游拿到 undefined
+  if (Array.isArray(data)) return data;
+  return Array.isArray(data?.items) ? data.items : [];
 }
 
 export async function getAddressDetail(id: string): Promise<Address> {

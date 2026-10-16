@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Minus, Plus, Trash2, ArrowRight, Copy, RefreshCw, Download, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ import { getCart, updateCartItem, removeCartItem, exportRecoveryCode, importReco
 import { toast } from 'sonner';
 import type { CartResponse, CartItem } from '@shared/api.interface';
 import { getProductTitle } from '@/utils/product-i18n';
+import { notifyError } from '@/lib/error-feedback';
 
 const CartPage: React.FC = () => {
   const [cart, setCart] = useState<CartResponse | null>(null);
@@ -45,6 +46,8 @@ const CartPage: React.FC = () => {
   const [importCode, setImportCode] = useState<string>('');
   const [importing, setImporting] = useState<boolean>(false);
   const { language, t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
   const navigate = useNavigate();
 
   const fetchCart = useCallback(async (): Promise<void> => {
@@ -53,7 +56,7 @@ const CartPage: React.FC = () => {
       const data = await getCart();
       setCart(data);
     } catch (error: unknown) {
-      console.error('[cart] fetch error', error);
+      notifyError(error, tRef.current.common.error);
     } finally {
       setLoading(false);
     }
@@ -73,7 +76,7 @@ const CartPage: React.FC = () => {
       const data = await updateCartItem(itemId, newQty);
       setCart(data);
     } catch (error: unknown) {
-      console.error('[cart] update error', error);
+      notifyError(error, tRef.current.common.error);
       toast.error(t.common.error);
     } finally {
       setUpdating(null);
@@ -87,7 +90,7 @@ const CartPage: React.FC = () => {
       setCart(data);
       toast.success(t.cart.remove);
     } catch (error: unknown) {
-      console.error('[cart] remove error', error);
+      notifyError(error, tRef.current.common.error);
       toast.error(t.common.error);
     } finally {
       setUpdating(null);

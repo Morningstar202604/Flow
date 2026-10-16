@@ -1,6 +1,6 @@
 # 安全策略 · Security Policy
 
-**GlobalEcom AI** 重视安全问题。感谢你负责任地披露漏洞，帮助我们保护所有使用者。
+**Flow** 重视安全问题。感谢你负责任地披露漏洞，帮助我们保护所有使用者。
 
 ## 支持的版本 · Supported Versions
 

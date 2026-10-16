@@ -50,6 +50,7 @@ import type {
   UpdateAiSettingsRequest,
 } from '@shared/api.interface';
 import { toast } from 'sonner';
+import { notifyError } from '@/lib/error-feedback';
 
 const PROVIDER_PRESETS: Array<{ label: string; baseUrl: string; model: string }> = [
   { label: 'DeepSeek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
@@ -128,7 +129,7 @@ const AICenterPage: React.FC = () => {
         const result = await aiApi.getAIStatus();
         setStatus(result);
       } catch (err) {
-        console.error('获取 AI 状态失败', err);
+        notifyError(err, '获取 AI 状态失败');
         setStatus({ configured: false });
       } finally {
         setLoadingStatus(false);
@@ -146,7 +147,7 @@ const AICenterPage: React.FC = () => {
       const result = await aiApi.getAIReports('trend');
       setReports(result);
     } catch (err) {
-      console.error('获取历史报告失败', err);
+      notifyError(err, '获取历史报告失败');
     }
   };
 
@@ -155,8 +156,7 @@ const AICenterPage: React.FC = () => {
       const detail = await aiApi.getAIReport(id);
       setActiveReport(detail);
     } catch (err) {
-      console.error('读取报告失败', err);
-      toast('读取报告失败');
+      notifyError(err, '读取报告失败');
     }
   };
 
@@ -170,7 +170,7 @@ const AICenterPage: React.FC = () => {
         model: prev.model || result.model || '',
       }));
     } catch (err) {
-      console.error('获取模型设置失败', err);
+      notifyError(err, '获取模型设置失败');
     }
   };
 
@@ -178,7 +178,7 @@ const AICenterPage: React.FC = () => {
     try {
       setAgents(await aiApi.listAiAgents());
     } catch (err) {
-      console.error('获取 Agent 列表失败', err);
+      notifyError(err, '获取 Agent 列表失败');
     }
   };
 
@@ -325,7 +325,7 @@ const AICenterPage: React.FC = () => {
       const result = await aiApi.getUsageStats();
       setUsageStats(result);
     } catch (err) {
-      console.error('获取 AI 用量统计失败', err);
+      notifyError(err, '获取 AI 用量统计失败');
     } finally {
       setUsageLoading(false);
     }
@@ -959,7 +959,7 @@ const AICenterPage: React.FC = () => {
       )}
       {/* Agent 新建/编辑对话框 */}
       <Dialog open={agentDialogOpen} onOpenChange={setAgentDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingAgent ? '编辑 Agent' : '新建 Agent'}</DialogTitle>
             <DialogDescription>

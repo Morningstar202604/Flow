@@ -1,4 +1,4 @@
-# GlobalEcom AI 出口电商平台
+# Flow 出口电商平台
 
 ## 项目概览
 
@@ -7,7 +7,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 ## 技术架构
 
 - 前端：React 19 + TypeScript + Tailwind CSS + shadcn/ui
-- 后端：NestJS 10 + TypeScript + Drizzle ORM
+- 后端：NestJS 12（Express 5）+ TypeScript strict + Drizzle ORM
 - 数据库：PostgreSQL
 - AI：统一 AI Gateway（OpenAI 兼容协议）
 
@@ -55,38 +55,50 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 ## 模块划分
 
 ### 买家端（/）
-- 首页 `/` - Banner、分类、热销、推荐
+- 首页 `/` - Banner、分类、**运营楼层（精选集合）**、热销、新品
 - 商品列表 `/products` - 筛选、排序、分页、搜索
 - 商品详情 `/products/:id` - 多图、规格、加购
-- 购物车 `/cart` - 列表、增减、结算
-- 结算 `/checkout` - 收货信息、支付
-- 订单 `/orders` - 列表、详情、物流
+- 购物车 `/cart` - 列表、增减、跨设备迁移码、结算
+- 结算 `/checkout` - 收货信息、运费报价、优惠券、支付
+- 订单 `/orders` - 列表、详情、物流、退款申请
+- 集合详情 `/collections/:slug` - 集合内全部商品（买家公开）
+- CMS 页面 `/page/:slug` - 自定义页面（About / FAQ 等）
 
 ### 卖家端（/seller）
-- 数据看板 `/seller/dashboard` - GMV、订单、趋势图
-- 商品管理 `/seller/products` - CRUD、上下架
-- 订单管理 `/seller/orders` - 列表、状态流转
+- 数据看板 `/seller/dashboard` - GMV、订单、访客、趋势图
+- 商品管理 `/seller/products` - CRUD、上下架、变体、CSV 批量导入、AI 文案
+- 订单管理 `/seller/orders` - 列表、状态流转、发货、物流
+- 退款管理 `/seller/refunds` - 审批、拒绝、库存回补
 - 咨询管理 `/seller/inquiries` - 会话、AI/人工回复
-- AI 分析中心 `/seller/ai-center` - 4个AI功能入口
+- AI 分析中心 `/seller/ai-center` - **模型设置**、用量统计、历史报告、**我的 Agent（自定义）**
+- 优惠券 / 运费模板 / 集合 / CMS 页面 / 审计日志
 
-## 数据库表
+## 数据库表（共 35 张，以 `server/database/schema.ts` 为准）
 
-- `products` - 商品表（含多语言字段）
-- `product_images` - 商品图片表
-- `categories` - 分类表
-- `orders` - 订单表
-- `order_items` - 订单明细表
-- `cart_items` - 购物车表
-- `inquiry_sessions` - 咨询会话表
-- `inquiry_messages` - 咨询消息表
-- `ai_reports` - AI 报告表
-- `shop_settings` - 店铺设置表
+- 用户与地址：`users` `addresses`
+- 商品：`categories` `products` `productVariants` `stockMovements`
+- 交易：`orders` `orderItems` `orderFulfillments` `fulfillmentItems` `payments` `refunds` `orderNotes`
+- 营销：`coupons` `couponUsage` `collections` `collectionProducts` `shippingTemplates` `reviews` `reviewHelpfulVotes` `favorites`
+- 购物车：`cartItems` `cartRecoveryCodes`
+- 内容与咨询：`cmsPages` `redirects` `inquirySessions` `inquiryMessages`
+- AI 与运营：`aiSettings` `aiAgents` `aiReports` `aiUsageLog` `pointTransactions` `visits` `auditLogs`
 
 ## AI Agent
 
-统一通过 `ai-gateway.service.ts` 调用 LLM，环境变量：
-- `LLM_BASE_URL` - API base URL
-- `LLM_API_KEY` - API key
-- `LLM_MODEL` - 模型名称
+统一通过 `ai-gateway.service.ts` 调用 LLM（OpenAI 兼容协议）。
 
-5个 Agent：Copywriter、Support、Trend、Select、Translation
+**配置优先级**：界面设置（`ai_settings` 表，卖家在「AI 分析中心 → 模型设置」填写）> 环境变量 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`。
+**未配置时**：所有 AI 端点返回统一的"请填写模型"提示，绝不返回假数据；AI 以外的功能一律正常运行。
+
+内置 5 个 Agent（代码定义、只读）：Copywriter、Support、Trend、Select、Translation。
+另有**自定义 Agent**（`ai_agents` 表，数量不限）：系统提示词 + `{{input}}` 模板 + 文本/JSON 输出 + temperature/maxTokens，用量按 `custom:<slug>` 独立计量。
+
+**模型适配要点**：兼容任意 OpenAI 协议端点（Base URL 支持 `/v1`、`/v3`、`/v4`、`/compatible-mode/v1`，自动拼 `/chat/completions`）；
+思考型模型（reasoner / u2 / *-thinking）的 token 预算自动提升至 ≥6000（否则思维链占满预算导致正文被截断）；
+响应正文可能出现在 `content` / `reasoning_content` / `output_text` / `text`，网关按序容错取值。
+
+## 验证入口
+
+- `npm run lint` / `npm run type:check` / `npm test`（52 例单测）/ `npm run build`
+- `npm run smoke:workflows`（16 步全业务工作流）/ `npm run smoke:degraded`（无 Key 降级）/ `npm run smoke`（19 步交易闭环）
+- `npm run mock:providers` + `npm run smoke:providers`（渠道模拟器：AI 五 Agent + Stripe/PayPal 全链路）

@@ -1,23 +1,23 @@
-# GlobalEcom AI — 部署编排
+# Flow — 部署编排
 # 使用: docker compose up -d --build
 # 启动时自动执行 drizzle 迁移（scripts/db/migrate.mjs），PG 首次初始化时创建 pg_trgm 扩展
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: globalecom-postgres
+    container_name: flow-postgres
     restart: unless-stopped
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-globalecom}
-      POSTGRES_USER: ${POSTGRES_USER:-globalecom}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-globalecom_pass_2024}
+      POSTGRES_DB: ${POSTGRES_DB:-flow}
+      POSTGRES_USER: ${POSTGRES_USER:-flow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flow_pass_2024}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-globalecom} -d ${POSTGRES_DB:-globalecom}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flow} -d ${POSTGRES_DB:-flow}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,7 +26,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: globalecom-server
+    container_name: flow-server
     restart: unless-stopped
     ports:
       - "${PORT:-3000}:3000"
@@ -34,7 +34,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgres://${POSTGRES_USER:-globalecom}:${POSTGRES_PASSWORD:-globalecom_pass_2024}@postgres:5432/${POSTGRES_DB:-globalecom}
+      DATABASE_URL: postgres://${POSTGRES_USER:-flow}:${POSTGRES_PASSWORD:-flow_pass_2024}@postgres:5432/${POSTGRES_DB:-flow}
     depends_on:
       postgres:
         condition: service_healthy

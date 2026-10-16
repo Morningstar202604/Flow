@@ -31,6 +31,7 @@ import { ordersApi } from '@/api';
 import { createLogistics } from '@/api/logistics';
 import type { Order, OrderStatus, OrderListParams } from '@shared/api.interface';
 import { toast } from 'sonner';
+import { notifyError } from '@/lib/error-feedback';
 
 const STATUS_MAP: Record<OrderStatus, { label: string; variant: string; color: string }> = {
   pending_payment: { label: '待付款', variant: 'secondary', color: 'text-amber-600' },
@@ -72,7 +73,7 @@ const OrderManagePage: React.FC = () => {
         setOrders(result.items);
         setTotal(result.total);
       } catch (err) {
-        console.error('获取订单列表失败', err);
+        notifyError(err, '获取订单列表失败，请重试');
       } finally {
         setLoading(false);
       }
@@ -95,7 +96,7 @@ const OrderManagePage: React.FC = () => {
       setSelectedOrder(detail);
       setDetailOpen(true);
     } catch (err) {
-      console.error('获取订单详情失败', err);
+      notifyError(err, '获取订单详情失败');
       setSelectedOrder(order);
       setDetailOpen(true);
     }
@@ -136,8 +137,7 @@ const OrderManagePage: React.FC = () => {
         handleViewDetail(shippingOrder);
       }
     } catch (err) {
-      console.error('发货失败', err);
-      toast('发货失败');
+      notifyError(err, '发货失败，请重试');
     }
   };
 
@@ -152,7 +152,7 @@ const OrderManagePage: React.FC = () => {
         handleViewDetail(order);
       }
     } catch (err) {
-      console.error('标记完成失败', err);
+      notifyError(err, '标记完成失败，请重试');
     }
   };
 

@@ -37,6 +37,7 @@ import {
 import { getSellerRefunds, approveRefund, rejectRefund } from '@/api/refunds';
 import type { Refund, RefundListParams } from '@shared/api.interface';
 import { toast } from 'sonner';
+import { notifyError } from '@/lib/error-feedback';
 
 type RefundStatus = Refund['status'];
 
@@ -90,7 +91,7 @@ const RefundsManagePage: React.FC = () => {
         setRefunds(result.items);
         setTotal(result.total);
       } catch (err) {
-        console.error('获取退款列表失败', err);
+        notifyError(err, '获取退款列表失败，请重试');
       } finally {
         setLoading(false);
       }

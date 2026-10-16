@@ -18,7 +18,7 @@ import {
 } from '@/api/auth';
 import type { User, LoginRequest, RegisterRequest } from '@shared/api.interface';
 
-const SESSION_ID_KEY = 'globalecom_session_id';
+const SESSION_ID_KEY = 'flow_session_id';
 
 function getSessionId(): string {
   const existing = localStorage.getItem(SESSION_ID_KEY);

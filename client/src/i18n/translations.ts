@@ -120,6 +120,8 @@ export interface Translations {
       demoLogisticsNote: string;
       carrier: string;
       trackingNumber: string;
+      requestRefund: string;
+      refundSubmitted: string;
     };
   common: {
     loading: string;
@@ -141,6 +143,7 @@ export interface Translations {
     apply: string;
     results: string;
     noResults: string;
+    lastUpdated: string;
   };
   status: {
     pending_payment: string;
@@ -156,6 +159,54 @@ export interface Translations {
     typing: string;
     welcome: string;
     unavailable: string;
+  };
+  address: {
+    title: string;
+    add: string;
+    addNew: string;
+    empty: string;
+    emptyHint: string;
+    default: string;
+    setDefault: string;
+    edit: string;
+    delete: string;
+    label: string;
+    labelHome: string;
+    labelOffice: string;
+    labelOther: string;
+    receiver: string;
+    receiverPlaceholder: string;
+    phone: string;
+    phonePlaceholder: string;
+    detail: string;
+    detailPlaceholder: string;
+    detail2: string;
+    detail2Placeholder: string;
+    city: string;
+    cityPlaceholder: string;
+    state: string;
+    statePlaceholder: string;
+    zip: string;
+    zipPlaceholder: string;
+    country: string;
+    countryPlaceholder: string;
+    setAsDefault: string;
+    create: string;
+    loadFailed: string;
+    deleteFailed: string;
+    setDefaultFailed: string;
+    createFailed: string;
+    updateFailed: string;
+    deleted: string;
+    updated: string;
+    created: string;
+    defaultSet: string;
+    deleteConfirm: string;
+    needReceiver: string;
+    needPhone: string;
+    needDetail: string;
+    needCity: string;
+    needCountry: string;
   };
   auth: {
     signIn: string;
@@ -351,6 +402,8 @@ export const translations: Record<Language, Translations> = {
       demoLogisticsNote: '演示物流轨迹 — 配置 17TRACK_API_KEY 后接入真实物流',
       carrier: '承运商',
       trackingNumber: '运单号',
+      requestRefund: '申请退款',
+      refundSubmitted: '退款申请已提交，请等待卖家处理',
     },
     common: {
       loading: '加载中...',
@@ -372,6 +425,7 @@ export const translations: Record<Language, Translations> = {
       apply: '应用',
       results: '个结果',
       noResults: '没有找到相关商品',
+      lastUpdated: '最后更新',
     },
     status: {
       pending_payment: '待付款',
@@ -387,6 +441,54 @@ export const translations: Record<Language, Translations> = {
       typing: '正在输入...',
       welcome: '您好！我是智能客服，有什么可以帮您的吗？',
       unavailable: '智能客服暂未开放',
+    },
+    address: {
+      title: '收货地址',
+      add: '添加地址',
+      addNew: '添加新地址',
+      empty: '暂无收货地址',
+      emptyHint: '添加收货地址，下单时快速选择',
+      default: '默认',
+      setDefault: '设为默认',
+      edit: '编辑',
+      delete: '删除',
+      label: '地址标签',
+      labelHome: '家',
+      labelOffice: '公司',
+      labelOther: '其他',
+      receiver: '收件人 *',
+      receiverPlaceholder: '收件人姓名',
+      phone: '联系电话 *',
+      phonePlaceholder: '电话号码',
+      detail: '详细地址 *',
+      detailPlaceholder: '街道、门牌号等',
+      detail2: '地址补充',
+      detail2Placeholder: '公寓、楼层等（选填）',
+      city: '城市 *',
+      cityPlaceholder: '城市',
+      state: '州/省',
+      statePlaceholder: '州/省（选填）',
+      zip: '邮编',
+      zipPlaceholder: '邮政编码（选填）',
+      country: '国家 *',
+      countryPlaceholder: '如：CN, US, UK',
+      setAsDefault: '设为默认地址',
+      create: '创建',
+      loadFailed: '加载地址列表失败',
+      deleteFailed: '删除失败',
+      setDefaultFailed: '设置失败',
+      createFailed: '创建失败',
+      updateFailed: '更新失败',
+      deleted: '地址已删除',
+      updated: '地址更新成功',
+      created: '地址创建成功',
+      defaultSet: '已设为默认地址',
+      deleteConfirm: '确认删除该收货地址？',
+      needReceiver: '请输入收件人姓名',
+      needPhone: '请输入联系电话',
+      needDetail: '请输入详细地址',
+      needCity: '请输入城市',
+      needCountry: '请输入国家',
     },
     auth: {
       signIn: '登录',
@@ -581,6 +683,8 @@ export const translations: Record<Language, Translations> = {
         'Demo tracking — configure 17TRACK_API_KEY for real-time logistics',
       carrier: 'Carrier',
       trackingNumber: 'Tracking Number',
+      requestRefund: 'Request refund',
+      refundSubmitted: 'Refund request submitted, awaiting seller review',
     },
     common: {
       loading: 'Loading...',
@@ -602,6 +706,7 @@ export const translations: Record<Language, Translations> = {
       apply: 'Apply',
       results: 'results',
       noResults: 'No products found',
+      lastUpdated: 'Last updated',
     },
     status: {
       pending_payment: 'Pending Payment',
@@ -617,6 +722,54 @@ export const translations: Record<Language, Translations> = {
       typing: 'Typing...',
       welcome: 'Hello! I am your AI assistant. How can I help you today?',
       unavailable: 'AI support is not available yet',
+    },
+    address: {
+      title: 'Addresses',
+      add: 'Add address',
+      addNew: 'Add new address',
+      empty: 'No addresses yet',
+      emptyHint: 'Add an address to check out faster',
+      default: 'Default',
+      setDefault: 'Set as default',
+      edit: 'Edit',
+      delete: 'Delete',
+      label: 'Label',
+      labelHome: 'Home',
+      labelOffice: 'Office',
+      labelOther: 'Other',
+      receiver: 'Recipient *',
+      receiverPlaceholder: 'Recipient name',
+      phone: 'Phone *',
+      phonePlaceholder: 'Phone number',
+      detail: 'Street address *',
+      detailPlaceholder: 'Street, building number, etc.',
+      detail2: 'Address line 2',
+      detail2Placeholder: 'Apartment, floor, etc. (optional)',
+      city: 'City *',
+      cityPlaceholder: 'City',
+      state: 'State/Province',
+      statePlaceholder: 'State or province (optional)',
+      zip: 'Postal code',
+      zipPlaceholder: 'Postal code (optional)',
+      country: 'Country *',
+      countryPlaceholder: 'e.g. US, CN, UK',
+      setAsDefault: 'Set as default address',
+      create: 'Create',
+      loadFailed: 'Failed to load addresses',
+      deleteFailed: 'Delete failed',
+      setDefaultFailed: 'Failed to set default',
+      createFailed: 'Create failed',
+      updateFailed: 'Update failed',
+      deleted: 'Address deleted',
+      updated: 'Address updated',
+      created: 'Address created',
+      defaultSet: 'Set as default address',
+      deleteConfirm: 'Delete this address?',
+      needReceiver: 'Please enter the recipient name',
+      needPhone: 'Please enter the phone number',
+      needDetail: 'Please enter the street address',
+      needCity: 'Please enter the city',
+      needCountry: 'Please enter the country',
     },
     auth: {
       signIn: 'Sign In',
@@ -812,6 +965,8 @@ export const translations: Record<Language, Translations> = {
         'Seguimiento de demostración — configura 17TRACK_API_KEY para datos reales',
       carrier: 'Transportista',
       trackingNumber: 'Número de Seguimiento',
+      requestRefund: 'Solicitar reembolso',
+      refundSubmitted: 'Solicitud enviada, esperando al vendedor',
     },
     common: {
       loading: 'Cargando...',
@@ -833,6 +988,7 @@ export const translations: Record<Language, Translations> = {
       apply: 'Aplicar',
       results: 'resultados',
       noResults: 'No se encontraron productos',
+      lastUpdated: 'Última actualización',
     },
     status: {
       pending_payment: 'Pendiente de Pago',
@@ -849,6 +1005,54 @@ export const translations: Record<Language, Translations> = {
       welcome:
         '¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?',
       unavailable: 'El soporte de IA aún no está disponible',
+    },
+    address: {
+      title: 'Direcciones',
+      add: 'Añadir dirección',
+      addNew: 'Añadir nueva dirección',
+      empty: 'Sin direcciones',
+      emptyHint: 'Añade una dirección para pagar más rápido',
+      default: 'Predeterminada',
+      setDefault: 'Predeterminada',
+      edit: 'Editar',
+      delete: 'Eliminar',
+      label: 'Etiqueta',
+      labelHome: 'Casa',
+      labelOffice: 'Oficina',
+      labelOther: 'Otra',
+      receiver: 'Destinatario *',
+      receiverPlaceholder: 'Nombre del destinatario',
+      phone: 'Teléfono *',
+      phonePlaceholder: 'Número de teléfono',
+      detail: 'Dirección *',
+      detailPlaceholder: 'Calle, número, etc.',
+      detail2: 'Dirección 2',
+      detail2Placeholder: 'Apartamento, piso, etc. (opcional)',
+      city: 'Ciudad *',
+      cityPlaceholder: 'Ciudad',
+      state: 'Estado/Provincia',
+      statePlaceholder: 'Estado o provincia (opcional)',
+      zip: 'Código postal',
+      zipPlaceholder: 'Código postal (opcional)',
+      country: 'País *',
+      countryPlaceholder: 'p. ej. US, CN, UK',
+      setAsDefault: 'Marcar como predeterminada',
+      create: 'Crear',
+      loadFailed: 'No se pudieron cargar las direcciones',
+      deleteFailed: 'Error al eliminar',
+      setDefaultFailed: 'Error al establecer predeterminada',
+      createFailed: 'Error al crear',
+      updateFailed: 'Error al actualizar',
+      deleted: 'Dirección eliminada',
+      updated: 'Dirección actualizada',
+      created: 'Dirección creada',
+      defaultSet: 'Marcada como predeterminada',
+      deleteConfirm: '¿Eliminar esta dirección?',
+      needReceiver: 'Introduce el nombre del destinatario',
+      needPhone: 'Introduce el teléfono',
+      needDetail: 'Introduce la dirección',
+      needCity: 'Introduce la ciudad',
+      needCountry: 'Introduce el país',
     },
     auth: {
       signIn: 'Iniciar Sesión',
@@ -1045,6 +1249,8 @@ export const translations: Record<Language, Translations> = {
         'Rastreamento de demonstração — configure 17TRACK_API_KEY para dados reais',
       carrier: 'Transportadora',
       trackingNumber: 'Número de Rastreamento',
+      requestRefund: 'Solicitar reembolso',
+      refundSubmitted: 'Solicitação enviada, aguardando o vendedor',
     },
     common: {
       loading: 'Carregando...',
@@ -1066,6 +1272,7 @@ export const translations: Record<Language, Translations> = {
       apply: 'Aplicar',
       results: 'resultados',
       noResults: 'Nenhum produto encontrado',
+      lastUpdated: 'Última atualização',
     },
     status: {
       pending_payment: 'Aguardando Pagamento',
@@ -1082,6 +1289,54 @@ export const translations: Record<Language, Translations> = {
       welcome:
         'Olá! Sou seu assistente virtual. Como posso ajudar hoje?',
       unavailable: 'O suporte de IA ainda não está disponível',
+    },
+    address: {
+      title: 'Endereços',
+      add: 'Adicionar endereço',
+      addNew: 'Adicionar novo endereço',
+      empty: 'Nenhum endereço',
+      emptyHint: 'Adicione um endereço para finalizar mais rápido',
+      default: 'Padrão',
+      setDefault: 'Definir padrão',
+      edit: 'Editar',
+      delete: 'Excluir',
+      label: 'Rótulo',
+      labelHome: 'Casa',
+      labelOffice: 'Escritório',
+      labelOther: 'Outro',
+      receiver: 'Destinatário *',
+      receiverPlaceholder: 'Nome do destinatário',
+      phone: 'Telefone *',
+      phonePlaceholder: 'Número de telefone',
+      detail: 'Endereço *',
+      detailPlaceholder: 'Rua, número, etc.',
+      detail2: 'Complemento',
+      detail2Placeholder: 'Apto, andar, etc. (opcional)',
+      city: 'Cidade *',
+      cityPlaceholder: 'Cidade',
+      state: 'Estado/Província',
+      statePlaceholder: 'Estado ou província (opcional)',
+      zip: 'CEP',
+      zipPlaceholder: 'CEP (opcional)',
+      country: 'País *',
+      countryPlaceholder: 'ex.: US, CN, UK',
+      setAsDefault: 'Definir como padrão',
+      create: 'Criar',
+      loadFailed: 'Falha ao carregar endereços',
+      deleteFailed: 'Falha ao excluir',
+      setDefaultFailed: 'Falha ao definir padrão',
+      createFailed: 'Falha ao criar',
+      updateFailed: 'Falha ao atualizar',
+      deleted: 'Endereço excluído',
+      updated: 'Endereço atualizado',
+      created: 'Endereço criado',
+      defaultSet: 'Definido como padrão',
+      deleteConfirm: 'Excluir este endereço?',
+      needReceiver: 'Informe o nome do destinatário',
+      needPhone: 'Informe o telefone',
+      needDetail: 'Informe o endereço',
+      needCity: 'Informe a cidade',
+      needCountry: 'Informe o país',
     },
     auth: {
       signIn: 'Entrar',

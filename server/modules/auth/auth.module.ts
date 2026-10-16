@@ -4,7 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 
-const DEFAULT_DEV_SECRET = 'globalecom-dev-jwt-secret-change-in-production';
+const DEFAULT_DEV_SECRET = 'flow-dev-jwt-secret-change-in-production';
 
 function resolveJwtSecret(): string {
   const envSecret = process.env.JWT_SECRET;

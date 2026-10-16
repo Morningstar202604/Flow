@@ -25,10 +25,11 @@ const ChatWidget: React.FC = () => {
   const { language, t } = useLanguage();
   const chatText = t.chat;
 
+  const bottomRef = React.useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    // ScrollArea 的真实滚动容器是其 viewport，直接设 scrollTop 无效 → 用 scrollIntoView
+    bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, isTyping, isOpen]);
 
   const handleSend = async (): Promise<void> => {
@@ -153,6 +154,7 @@ const ChatWidget: React.FC = () => {
                 </div>
               </div>
             ))}
+            <div ref={bottomRef} />
             {isTyping && (
               <div className="flex justify-start">
                 <div className="max-w-[80%] px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-500">

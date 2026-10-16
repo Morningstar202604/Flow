@@ -22,7 +22,7 @@ declare global {
   }
 }
 
-export const JWT_COOKIE_NAME = 'globalecom_auth';
+export const JWT_COOKIE_NAME = 'flow_auth';
 
 @Injectable()
 export class JwtAuthMiddleware implements NestMiddleware {

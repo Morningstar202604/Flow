@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import type {
   Category,
   ProductListParams,
 } from '@shared/api.interface';
+import { notifyError } from '@/lib/error-feedback';
 
 type SortBy = 'newest' | 'price_asc' | 'price_desc' | 'sold_desc';
 
@@ -37,6 +38,8 @@ const ProductListPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { language, t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -94,7 +97,7 @@ const ProductListPage: React.FC = () => {
          }
        }
      } catch (error: unknown) {
-      console.error('[productList] fetch error', error);
+      notifyError(error, tRef.current.common.error);
     } finally {
       setLoading(false);
     }
@@ -106,7 +109,7 @@ const ProductListPage: React.FC = () => {
         const cats = await listCategories();
         setCategories(cats);
       } catch (error: unknown) {
-        console.error('[productList] categories error', error);
+        notifyError(error, tRef.current.common.error);
       }
     };
     void load();

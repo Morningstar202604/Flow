@@ -1,8 +1,8 @@
-# GlobalEcom AI 出口电商平台 — 部署指南
+# Flow 出口电商平台 — 部署指南
 
 | 项 | 内容 |
 |---|---|
-| 应用 | GlobalEcom AI（AI 原生跨境出货台） |
+| 应用 | Flow（出口电商平台） |
 | 技术栈 | React 19 + NestJS 12（Express 5）+ Drizzle ORM + PostgreSQL 16（pg_trgm） |
 | 文档版本 | v1.3.0 / 2026-10-14 |
 
@@ -96,10 +96,10 @@ docker compose ps
 git pull && docker compose up -d --build
 
 # 数据库备份
-docker compose exec postgres pg_dump -U postgres globalecom > backup_$(date +%F).sql
+docker compose exec postgres pg_dump -U flow flow > backup_$(date +%F).sql
 
 # 数据库恢复
-docker compose exec -T postgres psql -U postgres globalecom < backup_2026-09-30.sql
+docker compose exec -T postgres psql -U flow flow < backup_2026-09-30.sql
 ```
 
 ---

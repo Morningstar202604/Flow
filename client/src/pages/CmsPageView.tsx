@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { formatDateTime } from '@/utils/locale';
 import { ArrowLeft, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getPageBySlug } from '@/api/cms';
@@ -9,7 +10,7 @@ import DOMPurify from 'dompurify';
 
 const CmsPageView: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [page, setPage] = useState<CmsPage | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -56,13 +57,13 @@ const CmsPageView: React.FC = () => {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center max-w-md">
           <FileText className="size-12 text-slate-300 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-slate-900 mb-2">页面不存在</h1>
-          <p className="text-sm text-slate-500 mb-6">您访问的页面可能已被删除或不存在</p>
+          <h1 className="text-xl font-bold text-slate-900 mb-2">{t.common.noResults}</h1>
+          <p className="text-sm text-slate-500 mb-6">{t.common.error}</p>
           <Button variant="outline" asChild>
-            <a href="/">
+            <Link to="/">
               <ArrowLeft className="mr-1 h-4 w-4" />
-              返回首页
-            </a>
+              {t.common.back}
+            </Link>
           </Button>
         </div>
       </div>
@@ -109,13 +110,13 @@ const CmsPageView: React.FC = () => {
         {/* Footer */}
         <div className="mt-12 pt-8 border-t border-slate-200 flex items-center justify-between">
           <div className="text-xs text-slate-400">
-            最后更新：{page.updatedAt ? new Date(page.updatedAt).toLocaleString('zh-CN') : '-'}
+            {t.common.lastUpdated}: {formatDateTime(page.updatedAt, language)}
           </div>
           <Button variant="outline" size="sm" asChild>
-            <a href="/">
+            <Link to="/">
               <ArrowLeft className="mr-1 h-3 w-3" />
-              返回首页
-            </a>
+              {t.common.back}
+            </Link>
           </Button>
         </div>
       </div>

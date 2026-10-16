@@ -12,6 +12,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { dashboardApi } from '@/api';
 import type { DashboardData } from '@shared/api.interface';
+import { notifyError } from '@/lib/error-feedback';
 
 const DashboardPage: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -25,7 +26,7 @@ const DashboardPage: React.FC = () => {
         const result = await dashboardApi.getDashboardStats();
         setData(result);
       } catch (err) {
-        console.error('获取看板数据失败', err);
+        notifyError(err, '获取看板数据失败，请重试');
         setError('数据加载失败');
       } finally {
         setLoading(false);

@@ -1,8 +1,8 @@
-# GlobalEcom AI — 架构说明
+# Flow — 架构说明
 
 | 项 | 内容 |
 |---|---|
-| 应用 | GlobalEcom AI 出口电商平台（AI 原生跨境出货台） |
+| 应用 | Flow 出口电商平台（AI 原生跨境出货台） |
 | 版本 | v1.0.0 / 2026-09-30 |
 | 仓库形态 | Monorepo（client + server + shared + scripts） |
 

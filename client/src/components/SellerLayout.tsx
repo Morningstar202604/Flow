@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Truck,
   Layers,
+  Menu,
 } from 'lucide-react';
 import logoWhite from '@/assets/branding/logo-white.png';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { Language } from '@shared/api.interface';
 import { Image } from '@/components/ui/image';
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 
 const SellerLayout: React.FC = () => {
   const location = useLocation();
@@ -104,6 +111,8 @@ const SellerLayout: React.FC = () => {
     },
   ];
 
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+
   const getPageTitle = (): string => {
     const item = navItems.find((nav) => location.pathname.startsWith(nav.to));
     return item?.label ?? '卖家中心';
@@ -112,16 +121,16 @@ const SellerLayout: React.FC = () => {
   return (
     <div className="flex h-screen w-full bg-slate-100">
       {/* 左侧侧边栏 */}
-      <aside className="flex w-60 flex-col bg-[#0B1F3A] text-slate-200">
+      <aside className="hidden w-60 flex-col bg-[#0B1F3A] text-slate-200 lg:flex">
         {/* Logo 区域 */}
         <div className="flex items-center gap-3 border-b border-[#1a3a5c] px-5 py-5">
           <Image
             src={logoWhite}
-            alt="GlobalEcom AI"
+            alt="Flow"
             className="h-9 w-9 object-contain"
           />
           <div>
-            <div className="text-base font-bold text-white">GlobalEcom AI</div>
+            <div className="text-base font-bold text-white">Flow</div>
             <div className="text-xs text-slate-400">卖家中心</div>
           </div>
         </div>
@@ -164,9 +173,44 @@ const SellerLayout: React.FC = () => {
       {/* 右侧内容区 */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* 顶部栏 */}
-        <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-6">
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-slate-900">
+        <header className="flex h-14 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 lg:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="sm" className="lg:hidden">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-64 border-0 bg-[#0B1F3A] p-0 text-slate-200">
+                <SheetTitle className="flex items-center gap-3 border-b border-[#1a3a5c] px-5 py-4 text-left">
+                  <Image src={logoWhite} alt="Flow" className="h-8 w-8 object-contain" />
+                  <span className="text-base font-bold text-white">Flow</span>
+                </SheetTitle>
+                <nav className="space-y-1 px-3 py-4">
+                  {navItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setMobileNavOpen(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                            isActive
+                              ? 'bg-[#00C2B8] text-white shadow-sm'
+                              : 'text-slate-300 hover:bg-[#1a3a5c] hover:text-white'
+                          }`
+                        }
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                      </NavLink>
+                    );
+                  })}
+                </nav>
+              </SheetContent>
+            </Sheet>
+            <h1 className="truncate text-base font-semibold text-slate-900 lg:text-lg">
               {getPageTitle()}
             </h1>
           </div>
@@ -215,7 +259,7 @@ const SellerLayout: React.FC = () => {
         </div>
 
         {/* 页面内容 */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           <Outlet />
         </main>
       </div>

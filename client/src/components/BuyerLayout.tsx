@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Store, Globe, Search, User, LogOut, Heart, ChevronDown } from 'lucide-react';
+import { ShoppingCart, Store, Globe, Search, User, LogOut, Heart, ChevronDown, Menu, MapPin } from 'lucide-react';
 import logoHorizontal from '@/assets/branding/logo-horizontal.png';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Language } from '@shared/api.interface';
@@ -20,6 +27,7 @@ const BuyerLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
 
   const handleLanguageSelect = (lang: Language): void => {
     setLanguage(lang);
@@ -49,11 +57,104 @@ const BuyerLayout: React.FC = () => {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 gap-4">
-            <div className="flex items-center gap-8">
+            <div className="flex items-center gap-3 md:gap-8">
+              <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="sm" className="md:hidden" title={t.nav.home}>
+                    <Menu className="w-5 h-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-72 p-0">
+                  <SheetHeader className="border-b px-4 py-3">
+                    <SheetTitle className="text-left">
+                      <Image src={logoHorizontal} alt="Flow" className="h-7 w-auto object-contain" />
+                    </SheetTitle>
+                  </SheetHeader>
+                  <div className="flex flex-col gap-1 p-3">
+                    <form onSubmit={(e) => { handleSearch(e); setMobileNavOpen(false); }} className="relative mb-2">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Input
+                        type="text"
+                        placeholder={t.nav.searchPlaceholder}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9 pr-4 w-full bg-slate-50 border-slate-200"
+                      />
+                    </form>
+                    <NavLink
+                      to="/"
+                      end
+                      onClick={() => setMobileNavOpen(false)}
+                      className={({ isActive }) =>
+                        `rounded-md px-3 py-2 text-sm font-medium ${
+                          isActive ? 'bg-slate-100 text-[#0B1F3A]' : 'text-slate-600'
+                        }`
+                      }
+                    >
+                      {t.nav.home}
+                    </NavLink>
+                    <NavLink
+                      to="/products"
+                      onClick={() => setMobileNavOpen(false)}
+                      className={({ isActive }) =>
+                        `rounded-md px-3 py-2 text-sm font-medium ${
+                          isActive ? 'bg-slate-100 text-[#0B1F3A]' : 'text-slate-600'
+                        }`
+                      }
+                    >
+                      {t.nav.products}
+                    </NavLink>
+                    <NavLink
+                      to="/favorites"
+                      onClick={() => setMobileNavOpen(false)}
+                      className={({ isActive }) =>
+                        `rounded-md px-3 py-2 text-sm font-medium ${
+                          isActive ? 'bg-slate-100 text-[#0B1F3A]' : 'text-slate-600'
+                        }`
+                      }
+                    >
+                      {t.nav.favorites}
+                    </NavLink>
+                    <NavLink
+                      to="/orders"
+                      onClick={() => setMobileNavOpen(false)}
+                      className={({ isActive }) =>
+                        `rounded-md px-3 py-2 text-sm font-medium ${
+                          isActive ? 'bg-slate-100 text-[#0B1F3A]' : 'text-slate-600'
+                        }`
+                      }
+                    >
+                      {t.nav.orders}
+                    </NavLink>
+                    {user && (
+                      <NavLink
+                        to="/addresses"
+                        onClick={() => setMobileNavOpen(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
+                            isActive ? 'bg-slate-100 text-[#0B1F3A]' : 'text-slate-600'
+                          }`
+                        }
+                      >
+                        <MapPin className="w-4 h-4" />
+                        {t.address?.title ?? 'Addresses'}
+                      </NavLink>
+                    )}
+                    <Link
+                      to="/seller/dashboard"
+                      onClick={() => setMobileNavOpen(false)}
+                      className="mt-1 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-600"
+                    >
+                      <Store className="w-4 h-4" />
+                      {t.nav.sellerCenter}
+                    </Link>
+                  </div>
+                </SheetContent>
+              </Sheet>
               <Link to="/" className="flex items-center gap-2">
                 <Image
                   src={logoHorizontal}
-                  alt="GlobalEcom AI"
+                  alt="Flow"
                   className="h-9 w-auto object-contain"
                 />
               </Link>
@@ -134,6 +235,11 @@ const BuyerLayout: React.FC = () => {
                 </Link>
                 {user ? (
                   <div className="flex items-center gap-2">
+                    <Link to="/addresses" className="hidden sm:block">
+                      <Button variant="ghost" size="sm" title={t.address?.title ?? 'Addresses'}>
+                        <MapPin className="w-5 h-5" />
+                      </Button>
+                    </Link>
                     <Link to="/orders">
                       <Button variant="ghost" size="sm" className="flex items-center gap-1">
                         <User className="w-4 h-4" />
@@ -192,7 +298,7 @@ const BuyerLayout: React.FC = () => {
               <div className="flex items-center gap-2 mb-4">
                 <Image
                   src={logoHorizontal}
-                  alt="GlobalEcom AI"
+                  alt="Flow"
                   className="h-8 w-auto object-contain brightness-0 invert"
                 />
               </div>
@@ -232,15 +338,15 @@ const BuyerLayout: React.FC = () => {
                   {language === 'zh' ? '关于我们' : language === 'es' ? 'Sobre Nosotros' : language === 'pt' ? 'Sobre Nós' : 'About Us'}
                </h4>
                <ul className="space-y-2 text-sm">
-                 <li>{language === 'zh' ? '公司介绍' : language === 'es' ? 'Sobre GlobalEcom' : language === 'pt' ? 'Sobre a GlobalEcom' : 'About GlobalEcom'}</li>
-                 <li>{language === 'zh' ? '卖家入驻' : language === 'es' ? 'Vender en GlobalEcom' : language === 'pt' ? 'Vender na GlobalEcom' : 'Sell on GlobalEcom'}</li>
+                 <li>{language === 'zh' ? '公司介绍' : language === 'es' ? 'About Flow' : language === 'pt' ? 'Sobre a Flow' : 'About Flow'}</li>
+                 <li>{language === 'zh' ? '卖家入驻' : language === 'es' ? 'Sell on Flow' : language === 'pt' ? 'Sell on Flow' : 'Sell on Flow'}</li>
                  <li>{language === 'zh' ? '隐私政策' : language === 'es' ? 'Política de Privacidad' : language === 'pt' ? 'Política de Privacidade' : 'Privacy Policy'}</li>
                  <li>{language === 'zh' ? '服务条款' : language === 'es' ? 'Términos de Servicio' : language === 'pt' ? 'Termos de Serviço' : 'Terms of Service'}</li>
                </ul>
              </div>
           </div>
            <div className="border-t border-[#1a3a5c] mt-8 pt-8 text-center text-sm">
-              © 2024 GlobalEcom AI. {language === 'zh' ? '保留所有权利。' : language === 'es' ? 'Todos los derechos reservados.' : language === 'pt' ? 'Todos os direitos reservados.' : 'All rights reserved.'}
+              © 2024 Flow. {language === 'zh' ? '保留所有权利。' : language === 'es' ? 'Todos los derechos reservados.' : language === 'pt' ? 'Todos os direitos reservados.' : 'All rights reserved.'}
             </div>
         </div>
       </footer>

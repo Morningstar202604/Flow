@@ -81,3 +81,15 @@ docker/postgres/data/
 # ===== Agent 本地文件 =====
 .agent/
 .githooks/
+
+# ===== Agent / 工具本地产物 =====
+.serena/
+.chrome-shot-profile*/
+chrome-shot-profile*/
+
+# ===== 本地验证残留（截图等）=====
+shots/
+*.shot.png
+
+# 品牌资源原始备份（本地保留，不入仓）
+client/src/assets/branding/_orig/

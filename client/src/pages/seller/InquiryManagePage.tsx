@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { inquiryApi } from '@/api';
 import type { InquirySession, InquiryMessage } from '@shared/api.interface';
 import { toast } from 'sonner';
+import { notifyError } from '@/lib/error-feedback';
 
 const InquiryManagePage: React.FC = () => {
   const [sessions, setSessions] = useState<InquirySession[]>([]);
@@ -35,7 +36,7 @@ const InquiryManagePage: React.FC = () => {
         setSelectedSessionId(items[0].sessionId);
       }
     } catch (err) {
-      console.error('获取会话列表失败', err);
+      notifyError(err, '获取会话列表失败');
     } finally {
       setLoadingSessions(false);
     }
@@ -47,7 +48,7 @@ const InquiryManagePage: React.FC = () => {
       const result = await inquiryApi.getSellerMessageList(sessionId);
       setMessages(result);
     } catch (err) {
-      console.error('获取消息列表失败', err);
+      notifyError(err, '获取消息列表失败');
     } finally {
       setLoadingMessages(false);
     }
@@ -99,7 +100,7 @@ const InquiryManagePage: React.FC = () => {
         )
       );
     } catch (err) {
-      console.error('发送消息失败', err);
+      notifyError(err, '发送消息失败，请重试');
       toast('发送失败');
       setMessages((prev) =>
         prev.filter((m) => !m.id.startsWith('temp_'))

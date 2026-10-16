@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingBag, Sparkles, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { getStorefront } from '@/api/collections';
 import { checkFavoriteBatch } from '@/api/favorites';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Product, Category, StorefrontSection } from '@shared/api.interface';
+import { notifyError } from '@/lib/error-feedback';
 
 const HomePage: React.FC = () => {
   const { user } = useAuth();
@@ -23,6 +24,8 @@ const HomePage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const { language, t } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -51,7 +54,7 @@ const HomePage: React.FC = () => {
            }
          }
       } catch (error: unknown) {
-        console.error('[home] load error', error);
+        notifyError(error, tRef.current.common.error);
       } finally {
         setLoading(false);
       }
@@ -70,7 +73,7 @@ const HomePage: React.FC = () => {
           <div className="max-w-2xl text-white">
             <Badge className="mb-4 bg-white/20 text-white border-white/30 hover:bg-white/30">
               <Sparkles className="size-4 mr-1" />
-              GlobalEcom
+              Flow
             </Badge>
             <h1 className="text-4xl sm:text-5xl font-bold mb-4 leading-tight">
               {t.home.heroTitle}

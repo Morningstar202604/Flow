@@ -105,10 +105,16 @@ export class AiGatewayService {
     }
 
     const temperature = options?.temperature ?? 0.7;
-    const maxTokens = options?.maxTokens ?? 2000;
     const responseFormat = options?.responseFormat === 'json'
       ? { type: 'json_object' as const }
       : undefined;
+
+    // 思考型/推理模型（reasoner、u2、*-thinking 等）会先输出大段思维链，
+    // 预算过小时正文尚未开始即被截断（实测云知声 u2-flash: finish_reason=length 且 content 为空）。
+    // 这里按模型名自动扩容思考预算，各 Agent 只声明"答案需要多少 token"。
+    const requestedTokens = options?.maxTokens ?? 2000;
+    const isThinkingModel = /reason|thinking|-r1|u2|o[13]/i.test(config.model);
+    const maxTokens = isThinkingModel ? Math.max(requestedTokens, 6000) : requestedTokens;
 
     const body = {
       model: config.model,
@@ -134,9 +140,31 @@ export class AiGatewayService {
       if (!choices || choices.length === 0) {
         throw new InternalServerErrorException('LLM 返回为空');
       }
-      const content: string = choices[0]?.message?.content ?? '';
+
+      // 不同服务商的字段差异容错（真实测试中已遇到）：
+      // - 思考型模型（如云知声 u2-flash / DeepSeek-reasoner）可能把正文放在 reasoning_content
+      // - 少数网关用 output_text / text 承载正文
+      const message = choices[0]?.message ?? {};
+      const content: string = (
+        message.content
+        || message.reasoning_content
+        || message.output_text
+        || message.text
+        || ''
+      ).trim();
+
       if (!content) {
-        throw new InternalServerErrorException('LLM 返回内容为空');
+        const truncated = choices[0]?.finish_reason === 'length';
+        throw new InternalServerErrorException(
+          truncated
+            ? `LLM 输出被 max_tokens 截断（模型 ${config.model} 为思考型，建议提高预算或改用非思考模型）`
+            : 'LLM 返回内容为空，请重试或检查模型设置',
+        );
+      }
+
+      const truncated = choices[0]?.finish_reason === 'length';
+      if (truncated) {
+        this.logger.warn(`LLM 输出达到 max_tokens 上限（模型 ${config.model}），内容可能不完整`);
       }
 
       const usageRaw = response.data?.usage;

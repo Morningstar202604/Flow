@@ -1,4 +1,4 @@
-const SESSION_KEY = 'globalecom_session_id';
+const SESSION_KEY = 'flow_session_id';
 
 function generateUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {

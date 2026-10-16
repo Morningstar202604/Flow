@@ -1,7 +1,7 @@
 import { http } from './http';
 
-const SESSION_ID_KEY = 'globalecom_session_id';
-const VISIT_KEY = 'globalecom_last_visit_date';
+const SESSION_ID_KEY = 'flow_session_id';
+const VISIT_KEY = 'flow_last_visit_date';
 
 function getSessionId(): string {
   const existing = localStorage.getItem(SESSION_ID_KEY);

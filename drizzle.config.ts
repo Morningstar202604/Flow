@@ -5,7 +5,7 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL || 'postgres://globalecom:globalecom_pass@localhost:5432/globalecom',
+    url: process.env.DATABASE_URL || 'postgres://flow:flow_pass@localhost:5432/flow',
   },
   verbose: true,
   strict: false,

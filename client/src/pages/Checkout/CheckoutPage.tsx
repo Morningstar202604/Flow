@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   useForm,
   type SubmitHandler,
@@ -24,6 +24,8 @@ import { Image } from '@/components/ui/image';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getCart } from '@/api/cart';
+import { getAddresses } from '@/api/addresses';
+import { useAuth } from '@/contexts/AuthContext';
 import { createOrder } from '@/api/orders';
 import { payForOrder, getPaymentConfig } from '@/api/payments';
 import { validateCoupon } from '@/api/coupons';
@@ -31,10 +33,12 @@ import { getShippingQuote } from '@/api/shipping';
 import { toast } from 'sonner';
 import { getProductTitle } from '@/utils/product-i18n';
 import type {
+  Address,
   CartResponse,
   CreateOrderRequest,
   PaymentProvider,
 } from '@shared/api.interface';
+import { notifyError } from '@/lib/error-feedback';
 
 const CheckoutPage: React.FC = () => {
   const [cart, setCart] = useState<CartResponse | null>(null);
@@ -54,7 +58,12 @@ const CheckoutPage: React.FC = () => {
   const [couponMessage, setCouponMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState<boolean>(false);
   const [shippingFee, setShippingFee] = useState<number>(0);
+  const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const { language, t } = useLanguage();
+  const { user } = useAuth();
+  const tRef = useRef(t);
+  tRef.current = t;
   const navigate = useNavigate();
 
 
@@ -131,13 +140,51 @@ const CheckoutPage: React.FC = () => {
           navigate('/cart');
         }
       } catch (error: unknown) {
-        console.error('[checkout] load error', error);
+        notifyError(error, tRef.current.common.error);
       } finally {
         setLoading(false);
       }
     };
     void load();
   }, [navigate, t.cart.empty]);
+
+  // 登录用户：载入地址簿并预填默认地址（下单更快）
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await getAddresses();
+        if (cancelled) return;
+        setSavedAddresses(list);
+        const preferred = list.find((a) => a.isDefault) ?? list[0];
+        if (preferred) {
+          setSelectedAddressId(preferred.id);
+          form.setValue('buyerName', preferred.receiverName);
+          form.setValue('buyerPhone', preferred.phone ?? '');
+          form.setValue('shippingAddress', preferred.addressLine1);
+          form.setValue('shippingCity', preferred.city);
+          form.setValue('shippingZip', preferred.zipCode ?? '');
+          form.setValue('shippingCountry', preferred.country);
+        }
+      } catch {
+        // 地址簿不可用不阻塞结算（用户可手填）
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, form]);
+
+  const applyAddress = (address: Address): void => {
+    setSelectedAddressId(address.id);
+    form.setValue('buyerName', address.receiverName);
+    form.setValue('buyerPhone', address.phone ?? '');
+    form.setValue('shippingAddress', address.addressLine1);
+    form.setValue('shippingCity', address.city);
+    form.setValue('shippingZip', address.zipCode ?? '');
+    form.setValue('shippingCountry', address.country);
+  };
 
   const subtotal: number = Number(cart?.total || 0);
   const qtyTotal: number = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
@@ -195,8 +242,7 @@ const CheckoutPage: React.FC = () => {
       setOrderId(order.id);
       await handlePay(order.id);
     } catch (error: unknown) {
-      console.error('[checkout] submit error', error);
-      toast.error(t.common.error);
+      notifyError(error, tRef.current.common.error);
     } finally {
       setSubmitting(false);
     }
@@ -309,6 +355,43 @@ const CheckoutPage: React.FC = () => {
                   }}
                   className="p-4 space-y-4"
                 >
+                  {savedAddresses.length > 0 && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-700">
+                          {t.address.title}
+                        </span>
+                        <Link to="/addresses" className="text-xs text-blue-600 hover:underline">
+                          {t.address.edit}
+                        </Link>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {savedAddresses.map((address) => (
+                          <button
+                            key={address.id}
+                            type="button"
+                            onClick={() => applyAddress(address)}
+                            className={`max-w-full rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                              selectedAddressId === address.id
+                                ? 'border-blue-500 bg-white ring-1 ring-blue-500'
+                                : 'border-slate-200 bg-white hover:border-blue-300'
+                            }`}
+                          >
+                            <span className="font-medium text-slate-800">{address.receiverName}</span>
+                            {address.isDefault && (
+                              <span className="ml-1 rounded bg-blue-100 px-1 text-[10px] text-blue-700">
+                                {t.address.default}
+                              </span>
+                            )}
+                            <span className="block truncate text-slate-500">
+                              {[address.city, address.country].filter(Boolean).join(', ')}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}

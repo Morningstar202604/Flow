@@ -6,6 +6,7 @@ module.exports = tseslint.config(
     ignores: [
       'dist',
       'dist-server',
+      'coverage',
       'node_modules',
       'client/src/api/gen',
       '**/*.d.ts',

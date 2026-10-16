@@ -60,18 +60,18 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: globalecom
-          POSTGRES_USER: globalecom
-          POSTGRES_PASSWORD: globalecom_pass_2024
+          POSTGRES_DB: flow
+          POSTGRES_USER: flow
+          POSTGRES_PASSWORD: flow_pass_2024
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U globalecom -d globalecom"
+          --health-cmd "pg_isready -U flow -d flow"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgres://globalecom:globalecom_pass_2024@127.0.0.1:5432/globalecom
+      DATABASE_URL: postgres://flow:flow_pass_2024@127.0.0.1:5432/flow
       NODE_ENV: development
       PORT: '3000'
       SELLER_REGISTRATION_CODE: smoke-secret
@@ -122,18 +122,18 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: globalecom
-          POSTGRES_USER: globalecom
-          POSTGRES_PASSWORD: globalecom_pass_2024
+          POSTGRES_DB: flow
+          POSTGRES_USER: flow
+          POSTGRES_PASSWORD: flow_pass_2024
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U globalecom -d globalecom"
+          --health-cmd "pg_isready -U flow -d flow"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgres://globalecom:globalecom_pass_2024@127.0.0.1:5432/globalecom
+      DATABASE_URL: postgres://flow:flow_pass_2024@127.0.0.1:5432/flow
       NODE_ENV: development
       PORT: '3130'
       SELLER_REGISTRATION_CODE: smoke-secret

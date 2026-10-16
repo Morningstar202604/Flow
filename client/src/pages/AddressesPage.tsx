@@ -32,10 +32,14 @@ import type {
   UpdateAddressRequest,
 } from '@shared/api.interface';
 import { toast } from 'sonner';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { notifyError } from '@/lib/error-feedback';
 
 const AddressesPage: React.FC = () => {
+  const { t } = useLanguage();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -57,14 +61,16 @@ const AddressesPage: React.FC = () => {
   const fetchAddresses = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadFailed(false);
       const items = await getAddresses();
       setAddresses(items);
-    } catch {
-      toast.error('加载地址列表失败');
+    } catch (err) {
+      setLoadFailed(true);
+      notifyError(err, t.address.loadFailed);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t.address.loadFailed]);
 
   useEffect(() => {
     fetchAddresses();
@@ -94,45 +100,45 @@ const AddressesPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('确认删除该收货地址？')) return;
+    if (!window.confirm(t.address.deleteConfirm)) return;
     try {
       await deleteAddress(id);
-      toast.success('地址已删除');
+      toast.success(t.address.deleted);
       fetchAddresses();
     } catch {
-      toast.error('删除失败');
+      toast.error(t.address.deleteFailed);
     }
   };
 
   const handleSetDefault = async (id: string) => {
     try {
       await setDefaultAddress(id);
-      toast.success('已设为默认地址');
+      toast.success(t.address.defaultSet);
       fetchAddresses();
     } catch {
-      toast.error('设置失败');
+      toast.error(t.address.setDefaultFailed);
     }
   };
 
   const handleSubmit = async () => {
     if (!form.receiverName.trim()) {
-      toast.error('请输入收件人姓名');
+      toast.error(t.address.needReceiver);
       return;
     }
     if (!form.phone.trim()) {
-      toast.error('请输入联系电话');
+      toast.error(t.address.needPhone);
       return;
     }
     if (!form.addressLine1.trim()) {
-      toast.error('请输入详细地址');
+      toast.error(t.address.needDetail);
       return;
     }
     if (!form.city.trim()) {
-      toast.error('请输入城市');
+      toast.error(t.address.needCity);
       return;
     }
     if (!form.country.trim()) {
-      toast.error('请输入国家');
+      toast.error(t.address.needCountry);
       return;
     }
 
@@ -141,29 +147,42 @@ const AddressesPage: React.FC = () => {
         const updatePayload: UpdateAddressRequest = { ...form };
         delete updatePayload.isDefault;
         await updateAddress(editingId, updatePayload);
-        toast.success('地址更新成功');
+        toast.success(t.address.updated);
       } else {
         await createAddress(form);
-        toast.success('地址创建成功');
+        toast.success(t.address.created);
       }
       setDialogOpen(false);
       fetchAddresses();
     } catch {
-      toast.error(editingId ? '更新失败' : '创建失败');
+      toast.error(editingId ? t.address.updateFailed : t.address.createFailed);
     }
   };
 
   const getLabelIcon = (label?: string) => {
     const l = label?.toLowerCase() || '';
-    if (l.includes('home') || l === '家' || l === '住宅') return <Home className="h-4 w-4" />;
-    if (l.includes('office') || l === '公司' || l === '办公') return <Building className="h-4 w-4" />;
+    const homeWords = ['home', 'casa', '家', '住宅'];
+    const officeWords = ['office', 'oficina', 'escritório', '公司', '办公'];
+    if (homeWords.some((w) => l.includes(w))) return <Home className="h-4 w-4" />;
+    if (officeWords.some((w) => l.includes(w))) return <Building className="h-4 w-4" />;
     return <MapPin className="h-4 w-4" />;
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500">
-        加载中...
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">
+        {t.common.loading}
+      </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <Card className="rounded-xl bg-white p-8 text-center">
+          <p className="mb-4 text-slate-600">{t.address.loadFailed}</p>
+          <Button onClick={() => void fetchAddresses()}>{t.common.submit}</Button>
+        </Card>
       </div>
     );
   }
@@ -174,11 +193,11 @@ const AddressesPage: React.FC = () => {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <MapPin className="h-6 w-6 text-blue-600" />
-            <h1 className="text-2xl font-bold text-slate-900">收货地址</h1>
+            <h1 className="text-2xl font-bold text-slate-900">{t.address.title}</h1>
           </div>
           <Button onClick={handleCreate}>
             <Plus className="mr-1 h-4 w-4" />
-            添加地址
+            {t.address.add}
           </Button>
         </div>
 
@@ -187,13 +206,13 @@ const AddressesPage: React.FC = () => {
             <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon"><MapPin className="size-6" /></EmptyMedia>
-                <EmptyTitle>暂无收货地址</EmptyTitle>
-                <EmptyDescription>添加收货地址，下单时快速选择</EmptyDescription>
+                <EmptyTitle>{t.address.empty}</EmptyTitle>
+                <EmptyDescription>{t.address.emptyHint}</EmptyDescription>
               </EmptyHeader>
               <div className="mt-4">
                 <Button onClick={handleCreate}>
                   <Plus className="mr-1 h-4 w-4" />
-                  添加地址
+                  {t.address.add}
                 </Button>
               </div>
             </Empty>
@@ -213,12 +232,12 @@ const AddressesPage: React.FC = () => {
                     <div className="flex items-center gap-2">
                       {getLabelIcon(address.label)}
                       <span className="text-sm font-medium text-slate-700">
-                        {address.label || '收货地址'}
+                        {address.label || t.address.title}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
                       {address.isDefault && (
-                        <Badge variant="default" className="text-xs">默认</Badge>
+                        <Badge variant="default" className="text-xs">{t.address.default}</Badge>
                       )}
                     </div>
                   </div>
@@ -250,7 +269,7 @@ const AddressesPage: React.FC = () => {
                         onClick={() => handleEdit(address)}
                       >
                         <Edit className="mr-1 h-3 w-3" />
-                        编辑
+                        {t.address.edit}
                       </Button>
                       <Button
                         variant="ghost"
@@ -259,7 +278,7 @@ const AddressesPage: React.FC = () => {
                         onClick={() => handleDelete(address.id)}
                       >
                         <Trash2 className="mr-1 h-3 w-3" />
-                        删除
+                        {t.address.delete}
                       </Button>
                     </div>
                     {!address.isDefault && (
@@ -269,7 +288,7 @@ const AddressesPage: React.FC = () => {
                         onClick={() => handleSetDefault(address.id)}
                       >
                         <Star className="mr-1 h-3 w-3" />
-                        设为默认
+                        {t.address.setDefault}
                       </Button>
                     )}
                   </div>
@@ -283,7 +302,7 @@ const AddressesPage: React.FC = () => {
             >
               <CardContent className="text-center py-6">
                 <Plus className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                <div className="text-sm text-slate-400">添加新地址</div>
+                <div className="text-sm text-slate-400">{t.address.addNew}</div>
               </CardContent>
             </Card>
           </div>
@@ -294,13 +313,13 @@ const AddressesPage: React.FC = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? '编辑地址' : '添加地址'}</DialogTitle>
+            <DialogTitle>{editingId ? t.address.edit : t.address.add}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>地址标签</Label>
+              <Label>{t.address.label}</Label>
               <div className="flex gap-2 mt-1">
-                {['家', '公司', '其他'].map((label) => (
+                {[t.address.labelHome, t.address.labelOffice, t.address.labelOther].map((label) => (
                   <Button
                     key={label}
                     type="button"
@@ -316,18 +335,18 @@ const AddressesPage: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>收件人 *</Label>
+                <Label>{t.address.receiver}</Label>
                 <Input
-                  placeholder="收件人姓名"
+                  placeholder={t.address.receiverPlaceholder}
                   value={form.receiverName}
                   onChange={(e) => setForm((prev) => ({ ...prev, receiverName: e.target.value }))}
                   className="mt-1"
                 />
               </div>
               <div>
-                <Label>联系电话 *</Label>
+                <Label>{t.address.phone}</Label>
                 <Input
-                  placeholder="电话号码"
+                  placeholder={t.address.phonePlaceholder}
                   value={form.phone}
                   onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
                   className="mt-1"
@@ -336,9 +355,9 @@ const AddressesPage: React.FC = () => {
             </div>
 
             <div>
-              <Label>详细地址 *</Label>
+              <Label>{t.address.detail}</Label>
               <Input
-                placeholder="街道、门牌号等"
+                placeholder={t.address.detailPlaceholder}
                 value={form.addressLine1}
                 onChange={(e) => setForm((prev) => ({ ...prev, addressLine1: e.target.value }))}
                 className="mt-1"
@@ -346,9 +365,9 @@ const AddressesPage: React.FC = () => {
             </div>
 
             <div>
-              <Label>地址补充</Label>
+              <Label>{t.address.detail2}</Label>
               <Input
-                placeholder="公寓、楼层等（选填）"
+                placeholder={t.address.detail2Placeholder}
                 value={form.addressLine2 || ''}
                 onChange={(e) => setForm((prev) => ({ ...prev, addressLine2: e.target.value }))}
                 className="mt-1"
@@ -357,18 +376,18 @@ const AddressesPage: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>城市 *</Label>
+                <Label>{t.address.city}</Label>
                 <Input
-                  placeholder="城市"
+                  placeholder={t.address.cityPlaceholder}
                   value={form.city}
                   onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
                   className="mt-1"
                 />
               </div>
               <div>
-                <Label>州/省</Label>
+                <Label>{t.address.state}</Label>
                 <Input
-                  placeholder="州/省（选填）"
+                  placeholder={t.address.statePlaceholder}
                   value={form.state || ''}
                   onChange={(e) => setForm((prev) => ({ ...prev, state: e.target.value }))}
                   className="mt-1"
@@ -378,18 +397,18 @@ const AddressesPage: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>邮编</Label>
+                <Label>{t.address.zip}</Label>
                 <Input
-                  placeholder="邮政编码（选填）"
+                  placeholder={t.address.zipPlaceholder}
                   value={form.zipCode || ''}
                   onChange={(e) => setForm((prev) => ({ ...prev, zipCode: e.target.value }))}
                   className="mt-1"
                 />
               </div>
               <div>
-                <Label>国家 *</Label>
+                <Label>{t.address.country}</Label>
                 <Input
-                  placeholder="如：CN, US, UK"
+                  placeholder={t.address.countryPlaceholder}
                   value={form.country}
                   onChange={(e) => setForm((prev) => ({ ...prev, country: e.target.value }))}
                   className="mt-1"
@@ -406,13 +425,13 @@ const AddressesPage: React.FC = () => {
                   onChange={(e) => setForm((prev) => ({ ...prev, isDefault: e.target.checked }))}
                   className="rounded border-slate-300"
                 />
-                <Label htmlFor="set-default" className="mb-0 cursor-pointer">设为默认地址</Label>
+                <Label htmlFor="set-default" className="mb-0 cursor-pointer">{t.address.setAsDefault}</Label>
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSubmit}>{editingId ? '保存' : '创建'}</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>{t.common.cancel}</Button>
+            <Button onClick={handleSubmit}>{editingId ? t.common.save : t.address.create}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -5,6 +5,89 @@
 
 ---
 
+## [1.9.0] — 2026-10-15
+
+收尾：移动端适配、错误可观测、地址簿接线、自动化截图与演示视频。
+
+### Added（展示资产 · 全部自动化生成）
+- `scripts/capture/screenshots.mjs` + `npm run capture`：Puppeteer 全页截图（1440 宽，本机 Chrome 复用，不下载浏览器）
+- `scripts/capture/record-demo.mjs` + `npm run capture:video`：CDP screencast 抓帧 → ffmpeg 合成 **90 秒演示视频**（1280×720 H.264）与 README 内联 GIF
+- `scripts/capture/seed-demo.mjs`：截图/录屏专用演示数据（6 个带图商品、6 笔订单含 1 笔待审批退款、3 个首页楼层集合、3 张优惠券、2 个 CMS 页面、评价/咨询/地址/收藏/购物车/审计）
+- `client/public/demo/*.png`：演示商品图（此前无图，截图中商品是灰色占位块）
+- **截图从 16 张扩到 27 张**：补齐此前从未被截图的集合楼层、集合详情、收藏、地址、优惠券、退款、运费模板、集合管理、CMS、审计日志；全部为 **Flow** 新品牌
+- `docs/social-preview.png` 重制为新品牌（原图是旧 GlobalEcom 横版 logo，且内容是 JPEG 伪装成 .png）
+
+### Fixed
+- **地址簿接口契约错位**（既有 bug）：`getAddresses()` 读 `data.items`，后端实际返回裸数组 → `undefined.length` 使 `/addresses` 与 `/checkout` 白屏崩溃；现做形状兼容
+- **结算页不复用地址簿**：地址簿全站无入口（`/addresses` 无任何链接指向）且结算页不读取已存地址 → 买家端用户菜单与移动端抽屉加入口；结算页自动预填默认地址并支持一键切换
+- **移动端完全无导航**：买家端 `<768px` 导航/搜索/卖家中心全隐藏，卖家端侧栏写死 `w-60` 导致手机不可用 → 两端均接入 `Sheet` 抽屉导航
+- **21 处错误被静默吞掉**：`catch` 只 `console.error`，用户看到"空列表/点了没反应/加载不出"，把网络故障伪装成无数据 → 新增统一 `notifyError`，11 个页面补齐用户可见反馈；地址页区分"加载失败"与"确实为空"
+- `AICenterPage` 的 Agent 弹窗缺高度约束（小屏保存按钮被推出视口）
+- `CmsPageView` 用原生 `<a href="/">` 导致整页刷新丢 SPA 状态 → 改用 `<Link>`
+- `ChatWidget` 滚动失效（`ScrollArea` 的滚动容器是 viewport，设 `scrollTop` 无效）→ 改用 `scrollIntoView`
+- 买家端「申请退款」按钮无状态门控（待付款/已取消也能点）且提交后无成功反馈
+- `client/src/App.tsx` 与 `app.tsx` 大小写重复（Linux CI 下有导入歧义）
+- `<html lang>` 静态写死 `zh` 且默认语言为 `en`，现按语言运行时同步；默认语言改为跟随浏览器
+
+### Changed（i18n 收口）
+- 新增 `t.address.*`（46 键 × 4 语，此前地址页 236 个中文字符零 i18n）与退款相关文案（`requestRefund` / `refundSubmitted` / `common.lastUpdated`）
+- 新增 `client/src/utils/locale.ts`：`getLocale` / `formatDateTime` / `formatDate` / `pickLocalized`（类目·集合·CMS 内容仅中英双语，西/葡统一回退英文，行为显式可预期）
+- 新增 `client/src/lib/error-feedback.ts`：统一错误出口（含后端 message 提取）
+
+### Verification
+- lint 0 问题 / 双端 strict typecheck 0 错误 / 单测 52/52 / 构建通过
+- 全新 compose 部署 healthy
+- 截图脚本可复跑（27/27 成功）；视频 1 分 10 秒、1.8MB、ffmpeg 校验无错误
+
+---
+
+## [1.8.0] — 2026-10-15
+
+品牌更名 **GlobalEcom AI → Flow**（更简短好记），并修复全量审查发现的问题。
+
+### Changed
+- **产品更名**：用户可见品牌统一为 **Flow**（`Flow — 让跨境生意更简单`），仓库名与远程地址保持不变
+  - 界面：页头/侧栏 logo alt、首页 hero、登录注册页、页脚公司/入驻文案、版权行
+  - 标识符：Cookie `globalecom_auth`→`flow_auth`、`globalecom_oauth_state`→`flow_oauth_state`；localStorage `globalecom_*`→`flow_*`（user / session_id / language / last_visit_date）；JWT 开发默认密钥 → `flow-dev-*`
+  - 工程：package 名 `globalecom-ai`→`flow`（含 lockfile）、Docker 容器名与默认库/用户/密码 `globalecom*`→`flow*`（仍可用环境变量覆盖，不破坏既有部署）、CI 与 `.env.example`、`drizzle.config.ts` 默认连接串同步
+  - 文档：README / AGENTS / CONTRIBUTING / SECURITY / LICENSE / docs 全部更新
+
+### Fixed
+- **`client/index.html` 残留模板占位**：`JSON.parse('{{{__platform__}}}')` 未被构建替换，每次页面加载都抛错（且全仓无任何使用方）→ 删除该段脚本
+- **favicon 生产环境 404**：`<link rel="icon">` 指向源码路径 `/src/assets/branding/logo-icon.png` → 改为 `/favicon.svg`（已在 `client/public/` 中并正确打包）
+
+### Docs
+- `AGENTS.md`：修正过期技术栈（NestJS 10 → 12 / Express 5 + strict）；补齐模块清单（集合详情、退款管理、CSV 导入、运营楼层）；**更正数据库表清单**（原文档列出的 `product_images`、`shop_settings` 并不存在，现按 schema 实际 35 张表分组列出）；新增 AI 配置优先级、无 Key 降级、自定义 Agent、模型适配要点与验证入口
+- `.gitignore`：补充 `.serena/`、浏览器截图 profile 与本地验证残留
+
+### Verification
+- `npm ci`（包名变更后重装）→ lint 0 问题 → 双端 strict typecheck 0 错误 → 单测 52/52 → 构建通过
+- 全新 compose 部署 healthy → 三条冒烟全过：`smoke-workflows` 16 步 / `smoke-ai-degraded` 6 步 / `smoke` 19 步
+- 无头浏览器复核首页与集合详情：品牌名渲染正确、favicon 200、无控制台报错
+
+---
+
+## [1.7.1] — 2026-10-15
+
+真实大模型实测：五 Agent 全链路对接国产模型（云知声 u2-flash）跑通，修复思考型模型适配。
+
+### Fixed（真实模型实测暴露）
+- **思考型模型输出被截断**：reasoning 类模型（云知声 u2-flash / DeepSeek-reasoner 等）先输出大段思维链，原 max_tokens（1500）下正文尚未开始即被截断（`finish_reason=length`、`content` 为空）。网关现按模型名自动将思考型模型的预算提升至 ≥6000，各 Agent 仍只声明"答案需要多少 token"
+- **响应字段差异容错**：部分网关把正文放在 `reasoning_content` / `output_text` / `text` 而非 `content`，网关按 `content → reasoning_content → output_text → text` 顺序取首个非空值
+- 截断错误信息明确化：区分"被 max_tokens 截断（建议提高预算或改用非思考模型）"与"返回为空"
+
+### Verified（真实模型端到端，非 mock）
+使用本地直连的国产模型端点（OpenAI 兼容）完成实测：
+- 连通测试：`{"ok":true,"model":"u2-flash"}`
+- **商品文案**：生成专业英文标题 + 5 条卖点（结构化 JSON 正确解析）
+- **多语言翻译**：中→日准确（"この折りたたみウォーターカップは…"）、中→西准确
+- **智能客服**：正确引用店铺政策（30 天无理由退换），三层检索生效
+- **选品建议**：基于类目+热销数据输出 6 个差异化选品方向
+- **趋势分析**：基于真实 SQL 聚合输出 2061 字报告，落库且历史可回看
+- **用量统计**：9 次调用按 Agent 分别入账（token/成功率真实计量）
+
+---
+
 ## [1.7.0] — 2026-10-15
 
 买家端运营楼层 + 集合详情页：卖家建的集合真正出现在前台。

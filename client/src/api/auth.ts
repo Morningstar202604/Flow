@@ -5,7 +5,7 @@ import type {
   User,
 } from '@shared/api.interface';
 
-const USER_KEY = 'globalecom_user';
+const USER_KEY = 'flow_user';
 
 function isLocalStorageAvailable(): boolean {
   try {

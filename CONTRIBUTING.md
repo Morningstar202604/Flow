@@ -1,8 +1,8 @@
 # 贡献指南 · Contributing Guide
 
-感谢你愿意为 **GlobalEcom AI** 贡献代码、文档或想法！任何形式的帮助都让这个项目变得更好。
+感谢你愿意为 **Flow** 贡献代码、文档或想法！任何形式的帮助都让这个项目变得更好。
 
-Thanks for your interest in contributing to **GlobalEcom AI**! Every kind of help makes this project better.
+Thanks for your interest in contributing to **Flow**! Every kind of help makes this project better.
 
 ---
 

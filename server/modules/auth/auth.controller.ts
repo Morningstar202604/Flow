@@ -29,7 +29,7 @@ import type {
   GoogleAuthStatus,
 } from '../../../shared/api.interface';
 
-const OAUTH_STATE_COOKIE_NAME = 'globalecom_oauth_state';
+const OAUTH_STATE_COOKIE_NAME = 'flow_oauth_state';
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 /** 登录/注册限流：每 IP 每 60 秒 5 次（全局 100/min 之外的额外收口） */

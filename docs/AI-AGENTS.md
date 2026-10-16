@@ -1,4 +1,4 @@
-# GlobalEcom AI — AI Agent 说明
+# Flow — AI Agent 说明
 
 | 项 | 内容 |
 |---|---|
@@ -10,6 +10,10 @@
 
 ## 通用调用约定
 
+> **模型适配说明（真实模型实测）**：兼容 OpenAI 协议的服务商均可直接使用（DeepSeek / 通义 / 智谱 / 火山方舟 / 云知声 / 商汤等）。
+> 网关已处理两类真实差异：① 思考型模型（reasoner / u2 / *-thinking）的 token 预算自动提升至 ≥6000，避免思维链占满预算导致正文被截断；
+> ② 响应正文可能出现在 `reasoning_content` / `output_text` / `text` 字段，网关按序容错取值。
+> Base URL 支持任意版本段（`/v1`、`/v3`、`/v4`、`/compatible-mode/v1`），会自动拼出正确的 `/chat/completions`。
 > **模型配置来源**：界面设置（卖家工作台「AI 分析中心 → 模型设置」）优先级高于 `LLM_*` 环境变量；
 > 两者都未配置时，所有端点统一返回 400「请填写模型」（`LLM_NOT_CONFIGURED_MESSAGE`），绝不返回假数据。
 > 另：卖家可创建任意数量的自定义 Agent（系统提示词 + `{{input}}` 模板 + 文本/JSON 输出），用量按 `custom:<slug>` 独立计量。

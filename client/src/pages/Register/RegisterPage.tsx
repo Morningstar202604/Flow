@@ -57,14 +57,14 @@ const RegisterPage: React.FC = () => {
           <div className="flex justify-center mb-4">
             <Image
               src={logoMain}
-              alt="GlobalEcom AI"
+              alt="Flow"
               className="h-16 w-16 object-contain rounded-xl"
             />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mb-2">
             {t.auth.createAccount}
           </h1>
-          <p className="text-sm text-slate-500">GlobalEcom AI · AI 让跨境生意更简单</p>
+          <p className="text-sm text-slate-500">Flow · 让跨境生意更简单</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
