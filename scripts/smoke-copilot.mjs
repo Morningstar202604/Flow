@@ -185,7 +185,51 @@ try {
   assert(couponRows.length === 0, '拒绝后不应创建优惠券');
   ok('拒绝：动作标记 rejected 且无副作用');
 
-  // ---------- 5. 越权 ----------
+  // ---------- 5. 店铺巡检（先造一个低库存商品） ----------
+  const [lowProduct] = await sql`
+    INSERT INTO products (seller_id, title_zh, title_en, status, total_stock)
+    VALUES (${sellerId}, ${'清仓商品' + runId}, ${'Clearance ' + runId}, 'active', 3) RETURNING id`;
+
+  const insights = await api('GET', '/api/copilot/insights', { cookie: seller.cookie });
+  assert(Array.isArray(insights.body.insights), '巡检应返回 insights 数组');
+  assert(typeof insights.body.generatedAt === 'string', '巡检应带生成时间');
+  const lowStockInsight = insights.body.insights.find((i) => i.type === 'low_stock' && i.entityId === lowProduct.id);
+  assert(lowStockInsight, '巡检应识别出刚建的低库存商品');
+  assert(lowStockInsight.severity === 'warning', `库存 3 应为 warning，实际 ${lowStockInsight.severity}`);
+  assert(typeof lowStockInsight.prompt === 'string' && lowStockInsight.prompt.length > 0, '告警应带可执行 prompt');
+  ok(`店铺巡检：${insights.body.insights.length} 项告警，低库存已识别`);
+
+  // ---------- 6. 多步计划（批次） ----------
+  const planRes = await api('POST', `/api/copilot/conversations/${conversationId}/messages`, {
+    cookie: seller.cookie,
+    json: { content: '帮我做一个清库存促销计划' },
+  });
+  const batchId = planRes.body.actions[0]?.batchId;
+  assert(planRes.body.actions.length >= 2, `多步计划应产生 ≥2 个动作，实际 ${planRes.body.actions.length}`);
+  assert(batchId && planRes.body.actions.every((a) => a.batchId === batchId), '同一轮动作应共享批次号');
+  assert(planRes.body.actions.every((a) => a.status === 'pending'), '批次动作应为 pending');
+
+  const planAction = planRes.body.actions.find((a) => a.toolName === 'update_product_status');
+  assert(planAction, '多步计划应包含 update_product_status 动作');
+  const plannedProductId = planAction.args.productId;
+
+  const [productBefore] = await sql`SELECT status FROM products WHERE id = ${plannedProductId}`;
+  assert(productBefore.status === 'active', '审批前商品应保持 active');
+
+  const batchApproved = await api('POST', `/api/copilot/batches/${batchId}/resolve`, {
+    cookie: seller.cookie,
+    json: { approve: true },
+  });
+  assert(batchApproved.body.ok === true, `整批批准应成功：${batchApproved.body.message}`);
+  assert(batchApproved.body.actions.every((a) => a.status === 'executed'), '整批动作应全部 executed');
+
+  const [productAfter] = await sql`SELECT status FROM products WHERE id = ${plannedProductId}`;
+  assert(productAfter.status === 'inactive', `整批执行后商品应下架，实际 ${productAfter.status}`);
+  const planCoupon = await sql`SELECT id FROM coupons WHERE code = 'CLEAR10'`;
+  assert(planCoupon.length === 1, '清仓券应已创建');
+  ok(`多步计划：${batchApproved.body.actions.length} 步整批执行完成`);
+
+  // ---------- 7. 越权 ----------
   const forbidden = await api('GET', '/api/copilot/conversations', {
     cookie: buyer.cookie,
     expect: [403],

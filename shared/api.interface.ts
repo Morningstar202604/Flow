@@ -540,10 +540,18 @@ export interface CopilotAction {
   summary: string;
   args: Record<string, unknown>;
   status: CopilotActionStatus;
+  /** 同一轮生成的多步动作共享批次号；有值时可整批批准/拒绝 */
+  batchId?: string;
   result?: string;
   errorMessage?: string;
   createdAt: string;
   resolvedAt?: string;
+}
+
+export interface CopilotBatchResolveResult {
+  actions: CopilotAction[];
+  ok: boolean;
+  message: string;
 }
 
 export interface CopilotConversation {
@@ -582,6 +590,32 @@ export interface CopilotToolsView {
     kind: CopilotToolKind;
     params: Array<{ name: string; type: string; required: boolean; description: string }>;
   }>;
+}
+
+// ==================== AI 运营副驾 · 店铺巡检 ====================
+
+export type CopilotInsightType =
+  | 'low_stock'
+  | 'stale_refund'
+  | 'unpaid_order'
+  | 'stale_shipment';
+
+export interface CopilotInsight {
+  id: string;
+  type: CopilotInsightType;
+  severity: 'critical' | 'warning' | 'info';
+  title: string;
+  detail: string;
+  suggestion: string;
+  /** 可一键发给副驾的指令 */
+  prompt: string;
+  entityId?: string;
+}
+
+export interface CopilotInsightsView {
+  generatedAt: string;
+  thresholds: Record<string, number>;
+  insights: CopilotInsight[];
 }
 
 export type PaymentProvider = 'stripe' | 'paypal' | 'demo';

@@ -119,7 +119,9 @@ Content-Type: application/json
 | 调用协议 | 同一 `AiGatewayService`，`agent=copilot`，`response_format=json_object` |
 | 输出协议 | `{"tool":"工具名","args":{...},"thought":"..."}` 或 `{"final":"给卖家的答复"}` |
 | 单轮步数上限 | 6 步（防死循环）；单轮待审批动作上限 3 个 |
-| 落库 | `copilot_conversations` / `copilot_messages` / `copilot_actions` |
+| 落库 | `copilot_conversations` / `copilot_messages` / `copilot_actions`（含 `batch_id`） |
+| 多步计划 | 同一轮多个写动作共享 `batch_id`；`POST /api/copilot/batches/:batchId/resolve` 整批按序执行、**失败即停** |
+| 店铺巡检 | `GET /api/copilot/insights`：低库存 / 超时退款 / 未支付订单 / 长期未签收（纯 SQL，不调用 LLM） |
 
 ### 工具清单（`server/modules/copilot/copilot-tools.ts`）
 
@@ -156,8 +158,11 @@ Content-Type: application/json
 
 ```bash
 npm run mock:providers                 # Stripe / PayPal / LLM 模拟器（含副驾确定性决策）
-npm run smoke:copilot                  # 读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 越权 403
+npm run smoke:copilot                  # 读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 巡检 → 多步计划 → 越权 403
 ```
+
+> 多步计划是全链路最有"Agent 感"的能力：卖家只说一句"清库存促销"，副驾会先查低库存、再生成清仓券与下架动作，
+> 两条动作打包成一个批次，卖家点「批准整批」后按顺序落地；任一步失败即停，后面保持待确认，不会静默跳过。
 
 ---
 

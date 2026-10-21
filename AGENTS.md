@@ -107,6 +107,8 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - `copilot-protocol.ts`：模型输出协议解析（`{"tool":...}` / `{"final":...}`）、工具目录生成、历史折叠
 - `copilot-tool.service.ts`：读工具查询；写工具**全部委托** OrdersService / RefundsService / ProductsService / CouponsService / InquiryService，不重复实现业务规则
 - `copilot.service.ts`：ReAct 循环（上限 6 步）；写工具在循环内只落 `copilot_actions(pending)`，**审批端点**才执行，且校验动作所有者
+- `copilot-insights.service.ts`：店铺巡检（低库存 / 超时退款 / 未支付订单 / 长期未签收），纯 SQL 聚合、不调 LLM
+- 多步计划：同轮写动作共享 `batchId`，`POST /api/copilot/batches/:batchId/resolve` 整批按序执行、失败即停
 - 安全约束：`@RolesGuard(['seller','admin'])` 覆盖全部端点；未注册工具名直接拒绝；参数在执行前二次校验
 
 ## 验证入口

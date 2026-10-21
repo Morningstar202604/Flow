@@ -15,9 +15,10 @@
   - `copilot-protocol.ts`：模型输出协议解析（工具调用 / 最终答复）、工具目录生成、历史折叠
   - `copilot-tool.service.ts`：读工具查询；写工具全部委托既有领域服务（订单状态机 / 退款审批 / 商品状态 / 优惠券 / 咨询）
   - `copilot.service.ts`：循环编排、待审批动作落库、审批执行与越权校验
-- 数据库：`copilot_conversations` / `copilot_messages` / `copilot_actions`（迁移 `0002_copilot_workbench.sql`）
+- 数据库：`copilot_conversations` / `copilot_messages` / `copilot_actions`（迁移 `0002_copilot_workbench.sql` / `0003_copilot_batch.sql`）
 - 前端：`/seller/copilot` 运营副驾页（多会话、快捷指令、工具执行折叠展示、待确认动作卡片、批准/拒绝）
-- 共享类型：`CopilotConversation` / `CopilotMessage` / `CopilotAction` / `CopilotSendResult` 等
+- **多步计划执行**：同一轮生成的多个写动作共享批次号，卖家「批准整批」按序执行、失败即停；左侧常驻「店铺巡检」面板（低库存 / 超时退款 / 未支付订单 / 长期未签收），点一条即可让副驾接手
+- 共享类型：`CopilotConversation` / `CopilotMessage` / `CopilotAction` / `CopilotBatchResolveResult` / `CopilotInsight` 等
 - 联调：mock LLM 新增副驾确定性决策；`scripts/smoke-copilot.mjs` + `npm run smoke:copilot`
 
 ### Security
@@ -29,10 +30,11 @@
 - `npm run dev:server` 已从 `tsx watch` 改为 `tsc --watch` + `node --watch`（tsx 不产出发射型装饰器元数据，导致 Nest 依赖解析失败）；如仍遇 ESM-only 依赖问题，可回退 `tsx watch server/main.ts` 并显式使用 `@Inject(...)`
 
 ### Verification
-- 单测 77/77（新增 25 例：协议解析、参数校验、审批门禁、越权、降级）
+- 单测 80/80（新增 28 例：协议解析、参数校验、审批门禁、越权、降级、批次顺序执行与失败即停）
 - `npm run lint` / `npm run type:check` / `npm run build` 全绿
-- `npm run smoke:copilot`（读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 越权 403）与既有 `smoke:providers` 18 步全部通过
-- `npm run dev:server` 启动验证（health 200）
+- `npm run smoke:copilot` 10 步（读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 巡检识别低库存 → 多步计划整批执行 → 越权 403）
+- 既有 `smoke:providers` 18 步、`smoke:workflows` 16 步全部通过
+- `npm run dev:server` 启动验证（health 200）；真浏览器验收副驾页（巡检面板、待确认卡片、整批批准、控制台无错误）
 
 ---
 

@@ -71,12 +71,45 @@ function copilotContent(body) {
     const markers = userMessages.filter((m) => !m.content.startsWith('['));
     for (let i = markers.length - 1; i >= 0; i -= 1) {
       const text = markers[i].content;
-      if (text.includes('订单') || text.includes('概况') || text.includes('库存') || text.includes('退款') || text.includes('优惠券') || text.includes('咨询')) {
+      if (text.includes('订单') || text.includes('概况') || text.includes('库存') || text.includes('退款') || text.includes('优惠券') || text.includes('咨询') || text.includes('促销')) {
         return text;
       }
     }
     return last;
   })();
+
+  // 多步计划：清库存促销 = 建券 + 下架商品（同一轮两个写动作 → 一个批次）
+  if (directive.includes('促销') || directive.includes('清库存')) {
+    const confirmHints = messages.filter(
+      (m) => m.role === 'user' && m.content.startsWith('[系统] 动作已提交卖家确认'),
+    ).length;
+    if (!seenTools.includes('list_low_stock')) {
+      return JSON.stringify({ tool: 'list_low_stock', args: { threshold: 20 }, thought: '促销第 1 步：先查低库存商品' });
+    }
+    if (confirmHints === 0) {
+      return JSON.stringify({
+        tool: 'create_coupon',
+        args: { code: 'CLEAR10', type: 'percent', value: 10, minOrderAmount: 50, totalQuantity: 100, expiresInDays: 14 },
+        thought: '促销第 2 步：创建清仓优惠券',
+      });
+    }
+    if (confirmHints === 1) {
+      // 取最近一次低库存查询结果里的最后一个商品 id（最新数据，避免误用历史会话里的旧 id）
+      const toolResults = messages
+        .filter((m) => m.role === 'user' && m.content.startsWith('[工具 list_low_stock 的执行结果]'))
+        .map((m) => m.content);
+      const latest = toolResults[toolResults.length - 1] ?? '';
+      const ids = [...latest.matchAll(/id=([0-9a-f-]{36})/gi)].map((match) => match[1]);
+      if (ids.length > 0) {
+        return JSON.stringify({
+          tool: 'update_product_status',
+          args: { productId: ids[0], status: 'inactive' },
+          thought: '促销第 3 步：下架清仓商品',
+        });
+      }
+    }
+    return JSON.stringify({ final: '已提交清库存促销计划，等待你整批确认。' });
+  }
 
   if (directive.includes('变更为') || directive.includes('发货')) {
     if (sawConfirmHint) return JSON.stringify({ final: '已提交订单状态变更，等待你确认后执行。' });

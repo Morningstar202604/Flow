@@ -25,7 +25,7 @@ export interface CopilotToolDefinition {
 
 export type CopilotDecision =
   | { type: 'final'; reply: string }
-  | { type: 'tool'; tool: string; args: Record<string, unknown>; thought?: string }
+  | { type: 'tool'; tool: string; args: Record<string, unknown>; thought?: string; plan?: string }
   | { type: 'invalid'; error: string };
 
 export interface ToolArgValidation {
@@ -67,7 +67,8 @@ export function parseCopilotDecision(content: string): CopilotDecision {
     if (typeof tool === 'string' && tool.trim().length > 0) {
       const args = isPlainObject(parsed.args) ? parsed.args : {};
       const thought = typeof parsed.thought === 'string' ? parsed.thought : undefined;
-      return { type: 'tool', tool: tool.trim(), args, thought };
+      const plan = typeof parsed.plan === 'string' ? parsed.plan : undefined;
+      return { type: 'tool', tool: tool.trim(), args, thought, plan };
     }
 
     const finalText = firstNonEmptyString(parsed.final, parsed.reply, parsed.message);

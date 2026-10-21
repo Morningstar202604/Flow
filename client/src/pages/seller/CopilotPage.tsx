@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   Bot,
   Check,
   ChevronRight,
+  ListChecks,
   Loader2,
   MessageSquarePlus,
+  RefreshCw,
   Send,
   ShieldAlert,
   Sparkles,
@@ -32,6 +35,8 @@ import type {
   CopilotAction,
   CopilotConversation,
   CopilotConversationDetail,
+  CopilotInsight,
+  CopilotInsightsView,
   CopilotMessage,
 } from '@shared/api.interface';
 import { toast } from 'sonner';
@@ -62,7 +67,20 @@ const CopilotPage: React.FC = () => {
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<CopilotAction | null>(null);
   const [rejectReason, setRejectReason] = useState<string>('');
+  const [insights, setInsights] = useState<CopilotInsightsView | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState<boolean>(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  const fetchInsights = useCallback(async (): Promise<void> => {
+    try {
+      setInsightsLoading(true);
+      setInsights(await copilotApi.getCopilotInsights());
+    } catch (err) {
+      notifyError(err, '获取店铺巡检失败');
+    } finally {
+      setInsightsLoading(false);
+    }
+  }, []);
 
   const fetchConversations = useCallback(async (): Promise<CopilotConversation[]> => {
     try {
@@ -98,7 +116,8 @@ const CopilotPage: React.FC = () => {
         await loadConversation(rows[0].id);
       }
     })();
-  }, [fetchConversations, loadConversation]);
+    void fetchInsights();
+  }, [fetchConversations, loadConversation, fetchInsights]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
@@ -221,6 +240,71 @@ const CopilotPage: React.FC = () => {
     } finally {
       setResolvingId(null);
     }
+  };
+
+  const pendingBatchIds = Array.from(
+    new Set(
+      (detail?.actions ?? [])
+        .filter((action) => action.status === 'pending' && action.batchId)
+        .map((action) => action.batchId as string),
+    ),
+  );
+
+  const handleApproveBatch = async (batchId: string): Promise<void> => {
+    setResolvingId(batchId);
+    try {
+      const result = await copilotApi.resolveCopilotBatch(batchId, true);
+      const byId = new Map(result.actions.map((action) => [action.id, action]));
+      setDetail((prev) =>
+        prev
+          ? { ...prev, actions: prev.actions.map((action) => byId.get(action.id) ?? action) }
+          : prev,
+      );
+      if (result.ok) toast.success(result.message);
+      else toast.error(result.message);
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '批量执行失败'));
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  const renderBatchCard = (batchId: string): React.ReactNode => {
+    const batchActions = (detail?.actions ?? []).filter(
+      (action) => action.batchId === batchId && action.status === 'pending',
+    );
+    if (batchActions.length === 0) return null;
+    return (
+      <div key={`batch-${batchId}`} className="mb-3 rounded-lg border border-indigo-300 bg-indigo-50 p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs text-indigo-700">
+              <ListChecks className="h-3.5 w-3.5" />
+              <span className="font-semibold">多步计划 · 共 {batchActions.length} 步（按顺序执行，失败即停）</span>
+            </div>
+            <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm text-slate-800">
+              {batchActions.map((action) => (
+                <li key={action.id}>{action.summary}</li>
+              ))}
+            </ol>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              size="sm"
+              onClick={() => void handleApproveBatch(batchId)}
+              disabled={resolvingId === batchId}
+            >
+              {resolvingId === batchId ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Check className="h-3.5 w-3.5" />
+              )}
+              批准整批
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const renderActionCard = (action: CopilotAction): React.ReactNode => (
@@ -380,6 +464,59 @@ const CopilotPage: React.FC = () => {
             ))}
           </div>
         </ScrollArea>
+
+        {/* 店铺巡检：常驻左侧，随时可点一条让副驾处理 */}
+        <div className="border-t p-2">
+          <div className="mb-1 flex items-center justify-between px-1">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+              店铺巡检
+              {(insights?.insights.length ?? 0) > 0 && (
+                <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+                  {insights?.insights.length}
+                </Badge>
+              )}
+            </div>
+            <button
+              type="button"
+              aria-label="刷新巡检"
+              className="text-slate-400 hover:text-slate-600"
+              onClick={() => void fetchInsights()}
+              disabled={insightsLoading}
+            >
+              <RefreshCw className={`h-3 w-3 ${insightsLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
+            {insightsLoading && !insights && (
+              <div className="px-1 py-2 text-xs text-slate-400">正在检查…</div>
+            )}
+            {insights && insights.insights.length === 0 && (
+              <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs text-emerald-700">
+                暂无异常
+              </div>
+            )}
+            {(insights?.insights ?? []).map((insight: CopilotInsight) => (
+              <button
+                key={insight.id}
+                type="button"
+                className={`block w-full rounded border px-2 py-1.5 text-left text-xs hover:brightness-[0.97] ${
+                  insight.severity === 'critical'
+                    ? 'border-red-200 bg-red-50 text-red-800'
+                    : insight.severity === 'warning'
+                      ? 'border-amber-200 bg-amber-50 text-amber-900'
+                      : 'border-slate-200 bg-slate-50 text-slate-700'
+                }`}
+                title={insight.detail}
+                onClick={() => void handleSend(insight.prompt)}
+                disabled={sending}
+              >
+                <div className="font-medium">{insight.title}</div>
+                <div className="mt-0.5 line-clamp-2 text-[11px] opacity-80">{insight.detail}</div>
+              </button>
+            ))}
+          </div>
+        </div>
       </Card>
 
       {/* 对话区 */}
@@ -403,7 +540,7 @@ const CopilotPage: React.FC = () => {
 
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-4 p-4">
-            {!detail && !loadingDetail && (
+            {(!detail || detail.messages.length === 0) && !loadingDetail && (
               <div className="mx-auto max-w-2xl py-10 text-center">
                 <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B1F3A] text-white">
                   <Bot className="h-7 w-7" />
@@ -436,6 +573,12 @@ const CopilotPage: React.FC = () => {
             )}
 
             {detail?.messages.map(renderMessage)}
+
+            {pendingBatchIds.length > 0 && (
+              <div className="space-y-2 border-t border-slate-200 pt-3">
+                {pendingBatchIds.map((batchId) => renderBatchCard(batchId))}
+              </div>
+            )}
 
             {sending && (
               <div className="flex items-center gap-2 text-sm text-slate-500">

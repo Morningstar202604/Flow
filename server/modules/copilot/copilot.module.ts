@@ -9,6 +9,7 @@ import { RefundsModule } from '../refunds/refunds.module';
 import { CopilotController } from './copilot.controller';
 import { CopilotService } from './copilot.service';
 import { CopilotToolService } from './copilot-tool.service';
+import { CopilotInsightsService } from './copilot-insights.service';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { CopilotToolService } from './copilot-tool.service';
     RefundsModule,
   ],
   controllers: [CopilotController],
-  providers: [CopilotService, CopilotToolService],
+  providers: [CopilotService, CopilotToolService, CopilotInsightsService],
   exports: [CopilotService],
 })
 export class CopilotModule {}

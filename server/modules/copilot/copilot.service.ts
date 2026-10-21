@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { and, asc, count, desc, eq } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import {
@@ -168,6 +169,8 @@ export class CopilotService {
     const newMessages: CopilotMessage[] = [this.mapMessage(userMessage)];
     const newActions: CopilotAction[] = [];
     const toolTrace: CopilotSendResult['toolTrace'] = [];
+    /** 同一轮的所有写动作共享批次号，卖家可一次批准整批（按序执行、失败即停） */
+    let currentBatchId: string | null = null;
     let reply = '';
 
     for (let step = 0; step < MAX_STEPS; step += 1) {
@@ -237,6 +240,7 @@ export class CopilotService {
       }
 
       const summary = tool.summarize?.(validation.args) ?? `${tool.name} ${JSON.stringify(validation.args)}`;
+      if (!currentBatchId) currentBatchId = randomUUID();
       const actionRow = await this.db
         .insert(copilotActions)
         .values({
@@ -247,6 +251,7 @@ export class CopilotService {
           summary,
           args: JSON.stringify(validation.args),
           status: 'pending',
+          batchId: currentBatchId,
         })
         .returning();
 
@@ -423,6 +428,67 @@ export class CopilotService {
     }
   }
 
+  // ==================== 批次审批（多步计划） ====================
+
+  /**
+   * 整批审批：按创建顺序逐个执行，**失败即停**（后续动作保持 pending，不做任何静默跳过）。
+   * 拒绝整批时全部标记 rejected。
+   */
+  async resolveBatch(
+    userId: string,
+    role: string,
+    batchId: string,
+    approve: boolean,
+    reason?: string,
+  ): Promise<{ actions: CopilotAction[]; ok: boolean; message: string }> {
+    const rows = await this.db
+      .select()
+      .from(copilotActions)
+      .where(and(eq(copilotActions.batchId, batchId), eq(copilotActions.userId, userId)))
+      .orderBy(asc(copilotActions.createdAt));
+
+    if (rows.length === 0) {
+      throw new NotFoundException('批次不存在');
+    }
+    const pendingRows = rows.filter((row) => row.status === 'pending');
+    if (pendingRows.length === 0) {
+      throw new BadRequestException('该批次没有待处理动作');
+    }
+
+    if (!approve) {
+      const now = new Date();
+      const resolved: CopilotAction[] = [];
+      for (const row of pendingRows) {
+        const updated = await this.db
+          .update(copilotActions)
+          .set({ status: 'rejected', result: reason?.trim() || null, resolvedAt: now })
+          .where(eq(copilotActions.id, row.id))
+          .returning();
+        resolved.push(this.mapAction(updated[0]));
+      }
+      return { actions: resolved, ok: true, message: '已拒绝整批操作，均未执行。' };
+    }
+
+    const resolved: CopilotAction[] = [];
+    for (const row of pendingRows) {
+      const result = await this.resolveAction(userId, role, row.id, true);
+      resolved.push(result.action);
+      if (!result.ok) {
+        return {
+          actions: resolved,
+          ok: false,
+          message: `第 ${resolved.length} 步执行失败：${result.message}。后续步骤已停止，仍待确认。`,
+        };
+      }
+    }
+
+    return {
+      actions: resolved,
+      ok: true,
+      message: `整批 ${resolved.length} 个操作已按顺序执行完成。`,
+    };
+  }
+
   // ==================== 工具目录 ====================
 
   getTools(): CopilotToolsView {
@@ -513,8 +579,9 @@ ${buildToolCatalog(COPILOT_TOOLS)}
 2. 写操作只能通过工具提出，提交后系统会要求卖家人工确认；你绝不能声称"已执行"，只能说"已提交确认"。
 3. 工具参数必须严格符合目录中的名称、类型与取值；不确定时先调用读工具确认目标 ID / 单号。
 4. 一次只提交一个工具调用；拿到结果后再决定下一步。
-5. 若工具返回失败，向卖家如实说明失败原因，不要假装成功。
-6. 回答使用中文；涉及金额保留原样；不要输出与卖家问题无关的内容。`;
+5. 多步计划（如"清库存促销"=建券 + 下架 + 改价）：先把需要的读查询做完，再逐个提交写动作；同一轮提交的多个写动作会组成一个批次，卖家可一次批准整批（按顺序执行、失败即停）。提交时在 thought 中写清这是计划的第几步。
+6. 若工具返回失败，向卖家如实说明失败原因，不要假装成功。
+7. 回答使用中文；涉及金额保留原样；不要输出与卖家问题无关的内容。`;
   }
 
   private deriveTitle(input: string): string {
@@ -563,6 +630,7 @@ ${buildToolCatalog(COPILOT_TOOLS)}
       summary: row.summary,
       args,
       status: row.status as CopilotAction['status'],
+      batchId: row.batchId ?? undefined,
       result: row.result ?? undefined,
       errorMessage: row.errorMessage ?? undefined,
       createdAt: row.createdAt.toISOString(),

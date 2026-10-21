@@ -14,10 +14,13 @@ import { Throttle } from '@nestjs/throttler';
 
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CopilotService } from './copilot.service';
+import { CopilotInsightsService } from './copilot-insights.service';
 import type {
   CopilotActionResolveResult,
+  CopilotBatchResolveResult,
   CopilotConversation,
   CopilotConversationDetail,
+  CopilotInsightsView,
   CopilotSendResult,
   CopilotToolsView,
 } from '../../../shared/api.interface';
@@ -52,7 +55,10 @@ export class ResolveActionDto {
 @Controller('copilot')
 @UseGuards(new RolesGuard(['seller', 'admin']))
 export class CopilotController {
-  constructor(private readonly copilotService: CopilotService) {}
+  constructor(
+    private readonly copilotService: CopilotService,
+    private readonly insightsService: CopilotInsightsService,
+  ) {}
 
   private getActor(req: Request): { userId: string; role: string } {
     return { userId: (req.user as { id: string }).id, role: req.user?.role ?? 'seller' };
@@ -61,6 +67,11 @@ export class CopilotController {
   @Get('tools')
   getTools(): CopilotToolsView {
     return this.copilotService.getTools();
+  }
+
+  @Get('insights')
+  async getInsights(): Promise<CopilotInsightsView> {
+    return this.insightsService.getInsights();
   }
 
   @Get('conversations')
@@ -120,5 +131,15 @@ export class CopilotController {
   ): Promise<{ impact: string }> {
     const actor = this.getActor(req);
     return { impact: await this.copilotService.describeActionImpact(actor.userId, id) };
+  }
+
+  @Post('batches/:batchId/resolve')
+  async resolveBatch(
+    @Req() req: Request,
+    @Param('batchId') batchId: string,
+    @Body() dto: ResolveActionDto,
+  ): Promise<CopilotBatchResolveResult> {
+    const actor = this.getActor(req);
+    return this.copilotService.resolveBatch(actor.userId, actor.role, batchId, dto.approve, dto.reason);
   }
 }

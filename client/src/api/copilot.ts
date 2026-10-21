@@ -1,8 +1,10 @@
 import { http } from '../lib/http';
 import type {
   CopilotActionResolveResult,
+  CopilotBatchResolveResult,
   CopilotConversation,
   CopilotConversationDetail,
+  CopilotInsightsView,
   CopilotSendResult,
   CopilotToolsView,
 } from '@shared/api.interface';
@@ -52,4 +54,21 @@ export async function resolveCopilotAction(
 export async function getCopilotActionImpact(id: string): Promise<string> {
   const { data } = await http.get<{ impact: string }>(`/api/copilot/actions/${id}/impact`);
   return data.impact;
+}
+
+export async function resolveCopilotBatch(
+  batchId: string,
+  approve: boolean,
+  reason?: string,
+): Promise<CopilotBatchResolveResult> {
+  const { data } = await http.post<CopilotBatchResolveResult>(
+    `/api/copilot/batches/${batchId}/resolve`,
+    { approve, reason },
+  );
+  return data;
+}
+
+export async function getCopilotInsights(): Promise<CopilotInsightsView> {
+  const { data } = await http.get<CopilotInsightsView>('/api/copilot/insights');
+  return data;
 }

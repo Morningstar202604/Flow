@@ -596,6 +596,8 @@ export const copilotActions = pgTable('copilot_actions', {
   summary: varchar('summary', { length: 500 }).notNull().default(''),
   args: text('args').notNull().default('{}'),
   status: varchar('status', { length: 16 }).notNull().default('pending'),
+  // 同一轮生成的多步动作共享 batchId，可整批审批（按创建顺序执行，失败即停）
+  batchId: varchar('batch_id', { length: 36 }),
   result: text('result'),
   errorMessage: text('error_message'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -603,6 +605,7 @@ export const copilotActions = pgTable('copilot_actions', {
 }, (t) => ({
   conversationStatusIdx: index('copilot_actions_conversation_status_idx').on(t.conversationId, t.status),
   userStatusIdx: index('copilot_actions_user_status_idx').on(t.userId, t.status),
+  batchIdx: index('copilot_actions_batch_idx').on(t.batchId),
 }));
 
 // ==================== 页面访问（访客统计） ====================
