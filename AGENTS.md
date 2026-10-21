@@ -65,6 +65,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - CMS 页面 `/page/:slug` - 自定义页面（About / FAQ 等）
 
 ### 卖家端（/seller）
+- **AI 运营副驾** `/seller/copilot` - 工具调用 Agent：读店铺数据 + 写操作人工审批
 - 数据看板 `/seller/dashboard` - GMV、订单、访客、趋势图
 - 商品管理 `/seller/products` - CRUD、上下架、变体、CSV 批量导入、AI 文案
 - 订单管理 `/seller/orders` - 列表、状态流转、发货、物流
@@ -73,7 +74,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - AI 分析中心 `/seller/ai-center` - **模型设置**、用量统计、历史报告、**我的 Agent（自定义）**
 - 优惠券 / 运费模板 / 集合 / CMS 页面 / 审计日志
 
-## 数据库表（共 35 张，以 `server/database/schema.ts` 为准）
+## 数据库表（共 38 张，以 `server/database/schema.ts` 为准）
 
 - 用户与地址：`users` `addresses`
 - 商品：`categories` `products` `productVariants` `stockMovements`
@@ -82,6 +83,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - 购物车：`cartItems` `cartRecoveryCodes`
 - 内容与咨询：`cmsPages` `redirects` `inquirySessions` `inquiryMessages`
 - AI 与运营：`aiSettings` `aiAgents` `aiReports` `aiUsageLog` `pointTransactions` `visits` `auditLogs`
+- AI 运营副驾：`copilotConversations` `copilotMessages` `copilotActions`
 
 ## AI Agent
 
@@ -97,8 +99,19 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 思考型模型（reasoner / u2 / *-thinking）的 token 预算自动提升至 ≥6000（否则思维链占满预算导致正文被截断）；
 响应正文可能出现在 `content` / `reasoning_content` / `output_text` / `text`，网关按序容错取值。
 
+### AI 运营副驾（`server/modules/copilot/`）
+
+工具调用 Agent + 人工审批门禁，模型仍走同一 `AiGatewayService`（用量记入 `agent=copilot`）。
+
+- `copilot-tools.ts`：11 个工具的唯一注册表（5 只读 + 6 写）；每个参数声明类型/枚举/范围/正则，`validateToolArgs` 拒绝未知参数
+- `copilot-protocol.ts`：模型输出协议解析（`{"tool":...}` / `{"final":...}`）、工具目录生成、历史折叠
+- `copilot-tool.service.ts`：读工具查询；写工具**全部委托** OrdersService / RefundsService / ProductsService / CouponsService / InquiryService，不重复实现业务规则
+- `copilot.service.ts`：ReAct 循环（上限 6 步）；写工具在循环内只落 `copilot_actions(pending)`，**审批端点**才执行，且校验动作所有者
+- 安全约束：`@RolesGuard(['seller','admin'])` 覆盖全部端点；未注册工具名直接拒绝；参数在执行前二次校验
+
 ## 验证入口
 
-- `npm run lint` / `npm run type:check` / `npm test`（52 例单测）/ `npm run build`
+- `npm run lint` / `npm run type:check` / `npm test`（77 例单测）/ `npm run build`
 - `npm run smoke:workflows`（16 步全业务工作流）/ `npm run smoke:degraded`（无 Key 降级）/ `npm run smoke`（19 步交易闭环）
+- `npm run smoke:copilot`（副驾：读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 越权 403）
 - `npm run mock:providers` + `npm run smoke:providers`（渠道模拟器：AI 五 Agent + Stripe/PayPal 全链路）

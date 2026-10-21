@@ -42,6 +42,8 @@ function classifyAgent(body) {
   const messages = body?.messages ?? [];
   const system = messages.find((m) => m.role === 'system')?.content ?? '';
   const user = messages.filter((m) => m.role === 'user').map((m) => m.content).join('\n');
+  // 副驾提示词含「AI 运营副驾」与工具协议，优先识别（其上下文里也会出现订单/商品字样）
+  if (system.includes('AI 运营副驾')) return 'copilot';
   // 特征键取各 Agent 提示词中的独有输出字段（select 的数据上下文里也含 titleEn 字样，不能作判别键）
   if (user.includes('"bulletPoints"') || user.includes('"longDescription"')) return 'copywriter';
   if (user.includes('"keyword"') && user.includes('"confidence"')) return 'select';
@@ -51,8 +53,94 @@ function classifyAgent(body) {
   return 'unknown';
 }
 
+/**
+ * 副驾模拟决策：按卖家最后一条消息中的指令关键字驱动，覆盖
+ * 读工具 → 写工具待审批 → 最终答复 的完整协议；无指令时直接 final。
+ */
+function copilotContent(body) {
+  const messages = body?.messages ?? [];
+  const userMessages = messages.filter((m) => m.role === 'user');
+  const last = userMessages[userMessages.length - 1]?.content ?? '';
+  const seenTools = messages
+    .filter((m) => m.role === 'user')
+    .map((m) => /^\[工具 ([a-z_]+) 的执行结果\]/.exec(m.content)?.[1])
+    .filter(Boolean);
+  const sawConfirmHint = messages.some((m) => m.role === 'user' && m.content.startsWith('[系统] 动作已提交卖家确认'));
+
+  const directive = (() => {
+    const markers = userMessages.filter((m) => !m.content.startsWith('['));
+    for (let i = markers.length - 1; i >= 0; i -= 1) {
+      const text = markers[i].content;
+      if (text.includes('订单') || text.includes('概况') || text.includes('库存') || text.includes('退款') || text.includes('优惠券') || text.includes('咨询')) {
+        return text;
+      }
+    }
+    return last;
+  })();
+
+  if (directive.includes('变更为') || directive.includes('发货')) {
+    if (sawConfirmHint) return JSON.stringify({ final: '已提交订单状态变更，等待你确认后执行。' });
+    const status = directive.includes('已送达') ? 'delivered' : 'shipped';
+    const m = /ORD[A-Z0-9]+/.exec(directive);
+    const orderNo = m ? m[0] : (process.env.MOCK_COPILOT_ORDER_NO ?? 'ORD0000000000000000');
+    return JSON.stringify({
+      tool: 'update_order_status',
+      args: { orderNo, status, carrier: 'MOCK-EXPRESS', trackingNumber: 'MOCK-TRACK-001' },
+      thought: '卖家要求变更订单状态',
+    });
+  }
+
+  if (directive.includes('优惠券')) {
+    if (sawConfirmHint) return JSON.stringify({ final: '已提交建券动作，等待你确认后执行。' });
+    const codeMatch = /[A-Z][A-Z0-9_-]{2,29}/.exec(directive.replace(/优惠券/g, ' '));
+    return JSON.stringify({
+      tool: 'create_coupon',
+      args: {
+        code: codeMatch ? codeMatch[0] : 'MOCK10',
+        type: 'percent',
+        value: 10,
+        minOrderAmount: 50,
+        totalQuantity: 100,
+        expiresInDays: 30,
+      },
+      thought: '卖家要求创建优惠券',
+    });
+  }
+
+  if (directive.includes('退款')) {
+    if (seenTools.includes('list_pending_refunds')) {
+      return JSON.stringify({ final: '已列出待审批退款，请在下方核对后决定。' });
+    }
+    return JSON.stringify({ tool: 'list_pending_refunds', args: {}, thought: '先查询待审批退款' });
+  }
+
+  if (directive.includes('库存')) {
+    if (seenTools.includes('list_low_stock')) {
+      return JSON.stringify({ final: '已列出低库存商品。' });
+    }
+    return JSON.stringify({ tool: 'list_low_stock', args: { threshold: 20 }, thought: '查询低库存商品' });
+  }
+
+  if (directive.includes('订单')) {
+    if (seenTools.includes('list_orders')) {
+      return JSON.stringify({ final: '已列出订单。' });
+    }
+    return JSON.stringify({ tool: 'list_orders', args: { limit: 5 }, thought: '查询最近订单' });
+  }
+
+  if (directive.includes('概况')) {
+    if (seenTools.includes('get_store_overview')) {
+      return JSON.stringify({ final: '已读取店铺概况。' });
+    }
+    return JSON.stringify({ tool: 'get_store_overview', args: {}, thought: '读取店铺概况' });
+  }
+
+  return JSON.stringify({ final: `MOCK-COPILOT: ${directive.slice(0, 80)}` });
+}
+
 function llmContent(agent, body) {
   const user = (body?.messages ?? []).filter((m) => m.role === 'user').map((m) => m.content).join('\n');
+  if (agent === 'copilot') return copilotContent(body);
   // 自定义 Agent（unknown）要求 JSON 时返回合法 JSON 并回显输入，供断言模板渲染贯穿
   if (agent === 'unknown' && body?.response_format?.type === 'json_object') {
     return JSON.stringify({ mock: true, echo: user.slice(0, 200) });

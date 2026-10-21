@@ -1,0 +1,506 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Bot,
+  Check,
+  ChevronRight,
+  Loader2,
+  MessageSquarePlus,
+  Send,
+  ShieldAlert,
+  Sparkles,
+  Trash2,
+  Wrench,
+  X,
+} from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Markdown } from '@/components/ui/markdown';
+import { copilotApi } from '@/api';
+import type {
+  CopilotAction,
+  CopilotConversation,
+  CopilotConversationDetail,
+  CopilotMessage,
+} from '@shared/api.interface';
+import { toast } from 'sonner';
+import { extractErrorMessage, notifyError } from '@/lib/error-feedback';
+
+const STATUS_LABEL: Record<CopilotAction['status'], string> = {
+  pending: '待确认',
+  executed: '已执行',
+  rejected: '已拒绝',
+  failed: '执行失败',
+};
+
+const QUICK_PROMPTS: Array<{ label: string; prompt: string }> = [
+  { label: '店铺概况', prompt: '看一下店铺概况，今天表现怎么样？' },
+  { label: '待发货订单', prompt: '帮我查一下待发货的订单' },
+  { label: '库存预警', prompt: '哪些商品库存偏低？' },
+  { label: '待审批退款', prompt: '现在有哪些待审批的退款？' },
+];
+
+const CopilotPage: React.FC = () => {
+  const [conversations, setConversations] = useState<CopilotConversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<CopilotConversationDetail | null>(null);
+  const [loadingList, setLoadingList] = useState<boolean>(true);
+  const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
+  const [sending, setSending] = useState<boolean>(false);
+  const [input, setInput] = useState<string>('');
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<CopilotAction | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>('');
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  const fetchConversations = useCallback(async (): Promise<CopilotConversation[]> => {
+    try {
+      setLoadingList(true);
+      const rows = await copilotApi.listCopilotConversations();
+      setConversations(rows);
+      return rows;
+    } catch (err) {
+      notifyError(err, '获取对话列表失败');
+      return [];
+    } finally {
+      setLoadingList(false);
+    }
+  }, []);
+
+  const loadConversation = useCallback(async (id: string): Promise<void> => {
+    try {
+      setLoadingDetail(true);
+      const data = await copilotApi.getCopilotConversation(id);
+      setDetail(data);
+      setActiveId(id);
+    } catch (err) {
+      notifyError(err, '加载对话失败');
+    } finally {
+      setLoadingDetail(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const rows = await fetchConversations();
+      if (rows.length > 0) {
+        await loadConversation(rows[0].id);
+      }
+    })();
+  }, [fetchConversations, loadConversation]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' });
+  }, [detail?.messages.length, sending]);
+
+  const handleNewConversation = async (): Promise<void> => {
+    try {
+      const created = await copilotApi.createCopilotConversation();
+      setConversations((prev) => [created, ...prev]);
+      setActiveId(created.id);
+      setDetail({ conversation: created, messages: [], actions: [] });
+    } catch (err) {
+      notifyError(err, '创建对话失败');
+    }
+  };
+
+  const handleDeleteConversation = async (id: string): Promise<void> => {
+    try {
+      await copilotApi.deleteCopilotConversation(id);
+      setConversations((prev) => prev.filter((item) => item.id !== id));
+      if (activeId === id) {
+        setActiveId(null);
+        setDetail(null);
+      }
+      toast.success('对话已删除');
+    } catch (err) {
+      notifyError(err, '删除对话失败');
+    }
+  };
+
+  const handleSend = async (text?: string): Promise<void> => {
+    const content = (text ?? input).trim();
+    if (!content || sending) return;
+
+    let conversationId = activeId;
+    try {
+      setSending(true);
+      if (!conversationId) {
+        const created = await copilotApi.createCopilotConversation();
+        conversationId = created.id;
+        setActiveId(created.id);
+        setConversations((prev) => [created, ...prev]);
+      }
+
+      const optimistic: CopilotMessage = {
+        id: `local-${Date.now()}`,
+        conversationId,
+        role: 'user',
+        content,
+        createdAt: new Date().toISOString(),
+      };
+      setDetail((prev) =>
+        prev
+          ? { ...prev, messages: [...prev.messages, optimistic] }
+          : prev,
+      );
+      setInput('');
+
+      const result = await copilotApi.sendCopilotMessage(conversationId, content);
+
+      setDetail((prev) => {
+        const base = prev ?? { conversation: { id: conversationId!, title: '新对话', createdAt: '', updatedAt: '' }, messages: [], actions: [] };
+        const known = new Set(base.messages.map((m) => m.id));
+        const appended = result.messages.filter((m) => !known.has(m.id));
+        const actionById = new Map(base.actions.map((a) => [a.id, a]));
+        for (const action of result.actions) actionById.set(action.id, action);
+        return {
+          ...base,
+          messages: [...base.messages.filter((m) => !m.id.startsWith('local-')), ...appended],
+          actions: Array.from(actionById.values()),
+        };
+      });
+
+      // 刷新标题与列表排序
+      const rows = await fetchConversations();
+      const current = rows.find((row) => row.id === conversationId);
+      if (current) {
+        setDetail((prev) => (prev ? { ...prev, conversation: current } : prev));
+      }
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '发送失败，请重试'));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleApprove = async (action: CopilotAction): Promise<void> => {
+    setResolvingId(action.id);
+    try {
+      const result = await copilotApi.resolveCopilotAction(action.id, true);
+      setDetail((prev) =>
+        prev
+          ? { ...prev, actions: prev.actions.map((a) => (a.id === action.id ? result.action : a)) }
+          : prev,
+      );
+      if (result.ok) toast.success(result.message);
+      else toast.error(result.message);
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '执行失败'));
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  const handleReject = async (): Promise<void> => {
+    if (!rejectTarget) return;
+    setResolvingId(rejectTarget.id);
+    try {
+      const result = await copilotApi.resolveCopilotAction(rejectTarget.id, false, rejectReason);
+      setDetail((prev) =>
+        prev
+          ? { ...prev, actions: prev.actions.map((a) => (a.id === rejectTarget.id ? result.action : a)) }
+          : prev,
+      );
+      toast.success(result.message);
+      setRejectTarget(null);
+      setRejectReason('');
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '拒绝失败'));
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  const renderActionCard = (action: CopilotAction): React.ReactNode => (
+    <div
+      key={action.id}
+      className={`mt-2 rounded-lg border p-3 ${
+        action.status === 'pending'
+          ? 'border-amber-300 bg-amber-50'
+          : action.status === 'executed'
+            ? 'border-emerald-200 bg-emerald-50'
+            : 'border-slate-200 bg-slate-50'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <Wrench className="h-3.5 w-3.5" />
+            <span className="font-mono">{action.toolName}</span>
+            <Badge variant={action.status === 'pending' ? 'default' : 'secondary'}>
+              {STATUS_LABEL[action.status]}
+            </Badge>
+          </div>
+          <div className="mt-1 text-sm font-medium text-slate-800">{action.summary}</div>
+          {action.result && (
+            <div className="mt-1 text-xs text-slate-600">{action.result}</div>
+          )}
+          {action.errorMessage && (
+            <div className="mt-1 text-xs text-red-600">{action.errorMessage}</div>
+          )}
+        </div>
+        {action.status === 'pending' && (
+          <div className="flex shrink-0 gap-2">
+            <Button
+              size="sm"
+              onClick={() => void handleApprove(action)}
+              disabled={resolvingId === action.id}
+            >
+              {resolvingId === action.id ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Check className="h-3.5 w-3.5" />
+              )}
+              批准执行
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setRejectTarget(action);
+                setRejectReason('');
+              }}
+              disabled={resolvingId === action.id}
+            >
+              <X className="h-3.5 w-3.5" />
+              拒绝
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderMessage = (message: CopilotMessage): React.ReactNode => {
+    if (message.role === 'tool') {
+      return (
+        <div key={message.id} className="flex justify-center">
+          <details className="w-full max-w-2xl rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <summary className="cursor-pointer select-none">
+              <span className="font-mono">{message.toolName}</span>
+              <span className="ml-2">{message.toolOk ? '执行成功' : '执行失败'}</span>
+            </summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words font-sans">{message.content}</pre>
+          </details>
+        </div>
+      );
+    }
+
+    const isUser = message.role === 'user';
+    const action = message.actionId
+      ? detail?.actions.find((item) => item.id === message.actionId)
+      : undefined;
+
+    return (
+      <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+        <div className={`max-w-[85%] ${isUser ? 'order-2' : ''}`}>
+          <div
+            className={`rounded-2xl px-4 py-2.5 text-sm ${
+              isUser
+                ? 'bg-[#0B1F3A] text-white'
+                : 'border border-slate-200 bg-white text-slate-800'
+            }`}
+          >
+            {isUser ? (
+              <div className="whitespace-pre-wrap break-words">{message.content}</div>
+            ) : (
+              <Markdown className="prose-sm max-w-none">{message.content}</Markdown>
+            )}
+          </div>
+          {action && renderActionCard(action)}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex h-[calc(100vh-150px)] min-h-[560px] gap-4">
+      {/* 会话列表 */}
+      <Card className="hidden w-64 shrink-0 flex-col overflow-hidden md:flex">
+        <div className="flex items-center justify-between border-b p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <Bot className="h-4 w-4" />
+            对话
+          </div>
+          <Button size="sm" variant="outline" onClick={() => void handleNewConversation()}>
+            <MessageSquarePlus className="h-4 w-4" />
+            新建
+          </Button>
+        </div>
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-1 p-2">
+            {loadingList && (
+              <div className="flex items-center gap-2 px-2 py-3 text-sm text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin" /> 加载中
+              </div>
+            )}
+            {!loadingList && conversations.length === 0 && (
+              <div className="px-2 py-3 text-sm text-slate-500">还没有对话，直接开始提问即可。</div>
+            )}
+            {conversations.map((conversation) => (
+              <div
+                key={conversation.id}
+                className={`group flex items-center gap-1 rounded-md px-2 py-2 text-sm ${
+                  activeId === conversation.id ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 truncate text-left"
+                  onClick={() => void loadConversation(conversation.id)}
+                >
+                  {conversation.title}
+                  {(conversation.pendingActionCount ?? 0) > 0 && (
+                    <Badge className="ml-2" variant="secondary">
+                      {conversation.pendingActionCount} 待确认
+                    </Badge>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  aria-label="删除对话"
+                  className="hidden shrink-0 text-slate-400 hover:text-red-500 group-hover:block"
+                  onClick={() => void handleDeleteConversation(conversation.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </Card>
+
+      {/* 对话区 */}
+      <Card className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0B1F3A] text-white">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-slate-800">AI 运营副驾</div>
+              <div className="text-xs text-slate-500">
+                读取真实店铺数据 · 写操作需你确认后执行
+              </div>
+            </div>
+          </div>
+          <Button size="sm" variant="outline" className="md:hidden" onClick={() => void handleNewConversation()}>
+            <MessageSquarePlus className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-4 p-4">
+            {!detail && !loadingDetail && (
+              <div className="mx-auto max-w-2xl py-10 text-center">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B1F3A] text-white">
+                  <Bot className="h-7 w-7" />
+                </div>
+                <h2 className="text-lg font-semibold text-slate-800">今天想处理什么？</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  副驾会先查真实数据再回答；发货、退款、发券等写操作一律要你点确认。
+                </p>
+                <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {QUICK_PROMPTS.map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      onClick={() => void handleSend(item.prompt)}
+                      disabled={sending}
+                    >
+                      <span>{item.label}</span>
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {loadingDetail && (
+              <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin" /> 加载对话
+              </div>
+            )}
+
+            {detail?.messages.map(renderMessage)}
+
+            {sending && (
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin" /> 副驾正在查询与思考…
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+        </ScrollArea>
+
+        <CardContent className="border-t p-3">
+          <div className="flex items-end gap-2">
+            <Textarea
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  void handleSend();
+                }
+              }}
+              placeholder="例如：把订单 ORD... 标记为已发货；或：哪些商品库存偏低？"
+              rows={2}
+              className="resize-none"
+              disabled={sending}
+            />
+            <Button
+              onClick={() => void handleSend()}
+              disabled={sending || input.trim().length === 0}
+              className="h-10"
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              发送
+            </Button>
+          </div>
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+            <ShieldAlert className="h-3.5 w-3.5" />
+            写操作会先生成待确认动作，未经你批准不会执行
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!rejectTarget} onOpenChange={(open) => !open && setRejectTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>拒绝该操作</DialogTitle>
+            <DialogDescription>拒绝后不会执行任何变更，原因可选。</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={rejectReason}
+            onChange={(event) => setRejectReason(event.target.value)}
+            placeholder="拒绝原因（可选）"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectTarget(null)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={() => void handleReject()} disabled={resolvingId === rejectTarget?.id}>
+              确认拒绝
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default CopilotPage;

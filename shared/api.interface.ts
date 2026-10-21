@@ -512,6 +512,78 @@ export interface AIUsageStatsQuery {
   endDate?: string;
 }
 
+// ==================== AI 运营副驾（工具调用 Agent + 人工审批） ====================
+
+export type CopilotToolKind = 'read' | 'write';
+
+export type CopilotActionStatus = 'pending' | 'executed' | 'rejected' | 'failed';
+
+export interface CopilotMessage {
+  id: string;
+  conversationId: string;
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  /** 工具消息：工具名与参数（便于卖家核对 Agent 读了什么、做了什么） */
+  toolName?: string;
+  toolArgs?: string;
+  toolOk?: boolean;
+  /** 助手消息关联的待审批动作 */
+  actionId?: string;
+  createdAt: string;
+}
+
+export interface CopilotAction {
+  id: string;
+  conversationId: string;
+  toolName: string;
+  kind: CopilotToolKind;
+  summary: string;
+  args: Record<string, unknown>;
+  status: CopilotActionStatus;
+  result?: string;
+  errorMessage?: string;
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+export interface CopilotConversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  pendingActionCount?: number;
+}
+
+export interface CopilotConversationDetail {
+  conversation: CopilotConversation;
+  messages: CopilotMessage[];
+  actions: CopilotAction[];
+}
+
+export interface CopilotSendResult {
+  conversationId: string;
+  reply: string;
+  messages: CopilotMessage[];
+  actions: CopilotAction[];
+  /** 本轮命中的工具（按执行顺序） */
+  toolTrace: Array<{ tool: string; kind: CopilotToolKind; ok: boolean }>;
+}
+
+export interface CopilotActionResolveResult {
+  action: CopilotAction;
+  ok: boolean;
+  message: string;
+}
+
+export interface CopilotToolsView {
+  tools: Array<{
+    name: string;
+    description: string;
+    kind: CopilotToolKind;
+    params: Array<{ name: string; type: string; required: boolean; description: string }>;
+  }>;
+}
+
 export type PaymentProvider = 'stripe' | 'paypal' | 'demo';
 export type PaymentStatus = 'pending' | 'paid' | 'refunded' | 'failed';
 

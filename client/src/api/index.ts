@@ -5,6 +5,7 @@ export * as ordersApi from './orders';
 export * as inquiryApi from './inquiry';
 export * as dashboardApi from './dashboard';
 export * as aiApi from './ai';
+export * as copilotApi from './copilot';
 export * as authApi from './auth';
 export * as paymentsApi from './payments';
 export * as reviewsApi from './reviews';

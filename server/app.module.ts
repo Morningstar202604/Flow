@@ -24,6 +24,7 @@ import { ShippingModule } from './modules/shipping/shipping.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { HealthModule } from './modules/health/health.module';
 import { SeedModule } from './modules/seed/seed.module';
+import { CopilotModule } from './modules/copilot/copilot.module';
 import { JwtAuthMiddleware } from './common/middleware/jwt-auth.middleware';
 import { CsrfHeaderMiddleware } from './common/middleware/csrf-header.middleware';
 
@@ -37,6 +38,7 @@ const businessModules = [
   CategoriesModule,
   CmsModule,
   CollectionsModule,
+  CopilotModule,
   CouponsModule,
   DashboardModule,
   FavoritesModule,

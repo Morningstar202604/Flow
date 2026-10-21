@@ -5,6 +5,37 @@
 
 ---
 
+## [1.10.0] — 2026-10-21
+
+新增 **AI 运营副驾（Copilot）**：把 AI 从"生成内容"推进到"执行运营"，写操作强制人工审批。
+
+### Added
+- `server/modules/copilot/`：工具调用 Agent（ReAct，单轮 ≤6 步）+ 人工审批门禁
+  - `copilot-tools.ts`：11 个工具注册表（5 只读 + 6 写），参数声明类型/枚举/范围/正则/长度
+  - `copilot-protocol.ts`：模型输出协议解析（工具调用 / 最终答复）、工具目录生成、历史折叠
+  - `copilot-tool.service.ts`：读工具查询；写工具全部委托既有领域服务（订单状态机 / 退款审批 / 商品状态 / 优惠券 / 咨询）
+  - `copilot.service.ts`：循环编排、待审批动作落库、审批执行与越权校验
+- 数据库：`copilot_conversations` / `copilot_messages` / `copilot_actions`（迁移 `0002_copilot_workbench.sql`）
+- 前端：`/seller/copilot` 运营副驾页（多会话、快捷指令、工具执行折叠展示、待确认动作卡片、批准/拒绝）
+- 共享类型：`CopilotConversation` / `CopilotMessage` / `CopilotAction` / `CopilotSendResult` 等
+- 联调：mock LLM 新增副驾确定性决策；`scripts/smoke-copilot.mjs` + `npm run smoke:copilot`
+
+### Security
+- 写工具在模型循环内**永不执行**，只落 `pending` 动作；仅会话所有者可批准，重复审批/越权均拒绝
+- 未知工具名、未知参数、越界取值在执行前拒绝，避免模型幻觉触达业务服务
+- 全部副驾端点为 seller/admin（买家 403）
+
+### Known issues
+- `npm run dev:server` 已从 `tsx watch` 改为 `tsc --watch` + `node --watch`（tsx 不产出发射型装饰器元数据，导致 Nest 依赖解析失败）；如仍遇 ESM-only 依赖问题，可回退 `tsx watch server/main.ts` 并显式使用 `@Inject(...)`
+
+### Verification
+- 单测 77/77（新增 25 例：协议解析、参数校验、审批门禁、越权、降级）
+- `npm run lint` / `npm run type:check` / `npm run build` 全绿
+- `npm run smoke:copilot`（读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 越权 403）与既有 `smoke:providers` 18 步全部通过
+- `npm run dev:server` 启动验证（health 200）
+
+---
+
 ## [1.9.0] — 2026-10-15
 
 收尾：移动端适配、错误可观测、地址簿接线、自动化截图与演示视频。

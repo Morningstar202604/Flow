@@ -15,7 +15,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 [![GitHub](https://img.shields.io/badge/GitHub-X33834%2FGlobalEcom--AI-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![Gitee](https://img.shields.io/badge/Gitee-badhope%2FGlobalEcom--AI-C71D23?style=flat-square&logo=gitee&logoColor=white)](https://gitee.com/badhope/GlobalEcom-AI)
 [![GitCode](https://img.shields.io/badge/GitCode-badhope%2FGlobalEcom--AI-2F6BFF?style=flat-square&logo=git&logoColor=white)](https://gitcode.com/badhope/GlobalEcom-AI)
-[![Version](https://img.shields.io/badge/version-v1.9.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.9.0)
+[![Version](https://img.shields.io/badge/version-v1.10.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.10.0)
 [![Stars](https://img.shields.io/github/stars/X33834/GlobalEcom-AI?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![CI](https://img.shields.io/github/actions/workflow/status/X33834/GlobalEcom-AI/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/X33834/GlobalEcom-AI/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -33,7 +33,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 - **品牌定位 / Positioning**：出口电商平台 · Cross-Border Commerce Platform
 - **主传播语 / Tagline**：让跨境生意更简单 · Cross-Border Commerce, Simplified
 - **主色 / Brand Colors**：深海军蓝 `#0B1F3A` + 科技青 `#00C2B8`
-- **当前版本 / Version**：v1.9.0（[CHANGELOG.md](CHANGELOG.md)）
+- **当前版本 / Version**：v1.10.0（[CHANGELOG.md](CHANGELOG.md)）
 
 ---
 
@@ -92,6 +92,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 - **客户管理**：地址簿、收货信息、购买历史
 - **CMS 页面**：富文本编辑首页 Banner / About / FAQ
 - **咨询管理**：买家会话列表与回复
+- **AI 运营副驾**：自然语言下达运营指令，Agent 调工具查真实数据、发起写操作，**人工确认后执行**
 - **AI 分析中心**：5 个 Agent 入口 + 调用用量统计（token / 耗时 / 成功率）
 - **操作审计日志**：操作前后值 diff + IP，筛选回看
 
@@ -116,6 +117,27 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 | **自定义 Agent** | 用户自建（任意数量） | 同左 | 「AI 分析中心 → 我的 Agent」：提示词模板 / 文本或 JSON 输出 / 即时试跑 / 独立用量 |
 
 > 详细输入输出、降级行为与环境变量说明见 [docs/AI-AGENTS.md](docs/AI-AGENTS.md)。
+
+---
+
+## AI 运营副驾：让 Agent 真正替你干活 · Copilot with Human-in-the-Loop
+
+前 5 个 Agent 只产出内容，**运营副驾（Copilot）直接操作店铺**：卖家说人话，Agent 调工具读真实数据，需要改动时先生成"待确认动作"，卖家点批准才执行。
+
+- **11 个工具**：5 个只读（店铺概况 / 订单 / 商品 / 低库存 / 待审批退款）+ 6 个写操作（改订单状态 / 批准退款 / 拒绝退款 / 商品上下架 / 建优惠券 / 回复咨询）
+- **人工审批门禁（fail-closed）**：写工具在模型循环内**永不执行**，只落 `copilot_actions(pending)`；只有会话所有者点"批准执行"才经既有业务服务落地（订单状态机、库存回补、积分回滚、审计日志与手动操作完全一致）
+- **参数强校验**：每个工具声明 JSON Schema 式参数（类型 / 枚举 / 范围 / 正则 / 长度），未知参数一律拒绝，防模型幻觉与参数注入
+- **全链路可回看**：对话、工具结果、动作与执行结果逐条落库，待确认数量在会话列表可见
+- **诚实降级**：未配置模型时直接 400 提示，不伪造任何执行结果
+
+```
+卖家：把订单 ORD20261021ABC 标记为已发货
+  └─ Agent → update_order_status（参数校验通过）
+       └─ 落 copilot_actions(status=pending)，不执行
+            └─ 卖家点「批准执行」→ OrdersService.updateStatus（状态机 + 审计）
+```
+
+> 无界面联调：`npm run mock:providers` + `npm run smoke:copilot`（读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 越权 403 全链路断言）。详见 [docs/AI-AGENTS.md](docs/AI-AGENTS.md#6-copilot--ai-运营副驾)。
 
 ---
 
@@ -254,7 +276,7 @@ npm run type:check   # 前后端 TypeScript 类型检查
 | `scripts/smoke-ai-degraded.mjs` | 无模型 Key 降级验证：AI 诚实提示，其余功能正常 |
 | `scripts/smoke-providers.mjs` | 渠道全链路：AI 五 Agent + Stripe/PayPal 支付退款 |
 | `scripts/mock-providers.mjs` | 本地渠道模拟器：Stripe / PayPal / LLM（含签名 webhook 回打），联调与 CI 专用 |
-| `scripts/smoke-providers.mjs` | 渠道全链路冒烟：AI 五 Agent + Stripe/PayPal 支付退款断言 |
+| `scripts/smoke-copilot.mjs` | AI 运营副驾全链路：读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 越权 403 |
 | `scripts/capture/screenshots.mjs` | 自动截图（Puppeteer 全页，`npm run capture`） |
 | `scripts/capture/record-demo.mjs` | 自动录屏（CDP + ffmpeg，`npm run capture:video`） |
 | `scripts/capture/seed-demo.mjs` | 截图/录屏用演示数据（商品带图、订单、集合、优惠券、CMS、咨询） |

@@ -5,5 +5,6 @@ import { InquiryService } from './inquiry.service';
 @Module({
   controllers: [InquiryController],
   providers: [InquiryService],
+  exports: [InquiryService],
 })
 export class InquiryModule {}

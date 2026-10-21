@@ -21,6 +21,7 @@ import ProductManagePage from './pages/seller/ProductManagePage';
 import OrderManagePage from './pages/seller/OrderManagePage';
 import InquiryManagePage from './pages/seller/InquiryManagePage';
 import AICenterPage from './pages/seller/AICenterPage';
+import CopilotPage from './pages/seller/CopilotPage';
 import CouponsPage from './pages/seller/CouponsPage/CouponsPage';
 import RefundsManagePage from './pages/seller/RefundsManagePage';
 import ShippingTemplatesPage from './pages/seller/ShippingTemplatesPage';
@@ -72,6 +73,7 @@ const RoutesComponent = () => {
             <Route path="products" element={<ProductManagePage />} />
             <Route path="orders" element={<OrderManagePage />} />
             <Route path="inquiries" element={<InquiryManagePage />} />
+            <Route path="copilot" element={<CopilotPage />} />
             <Route path="ai-center" element={<AICenterPage />} />
             <Route path="coupons" element={<CouponsPage />} />
             <Route path="refunds" element={<RefundsManagePage />} />

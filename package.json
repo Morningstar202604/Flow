@@ -1,12 +1,14 @@
 {
   "name": "flow",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "AI 原生跨境出货台 · AI-Native Cross-Border Commerce Platform",
   "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "tsx watch server/main.ts",
+    "dev:server": "npm run build:server && concurrently -k -n tsc,node -c yellow,blue \"npm:dev:server:tsc\" \"npm:dev:server:node\"",
+    "dev:server:tsc": "tsc -p tsconfig.node.json --watch --preserveWatchOutput",
+    "dev:server:node": "node --watch dist-server/server/main.js",
     "dev:client": "vite --config vite.config.ts",
     "build": "npm run build:server && npm run build:client",
     "build:server": "tsc -p tsconfig.node.json",
@@ -28,6 +30,7 @@
     "smoke:providers": "node scripts/smoke-providers.mjs",
     "smoke:degraded": "node scripts/smoke-ai-degraded.mjs",
     "smoke:workflows": "node scripts/smoke-workflows.mjs",
+    "smoke:copilot": "node scripts/smoke-copilot.mjs",
     "capture": "node scripts/capture/screenshots.mjs",
     "capture:video": "node scripts/capture/record-demo.mjs"
   },

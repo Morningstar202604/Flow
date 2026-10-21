@@ -25,5 +25,6 @@ import { TranslationService } from './translation.service';
     SelectService,
     TranslationService,
   ],
+  exports: [AiGatewayService],
 })
 export class AiModule {}

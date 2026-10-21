@@ -558,6 +558,53 @@ export const aiAgents = pgTable('ai_agents', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ==================== AI 运营副驾（工具调用 Agent + 人工审批） ====================
+
+// 会话：卖家与副驾的对话
+export const copilotConversations = pgTable('copilot_conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 200 }).notNull().default('新对话'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userUpdatedIdx: index('copilot_conversations_user_updated_idx').on(t.userId, t.updatedAt),
+}));
+
+// 消息：user / assistant / tool（工具结果回填）
+export const copilotMessages = pgTable('copilot_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id').notNull().references(() => copilotConversations.id, { onDelete: 'cascade' }),
+  role: varchar('role', { length: 16 }).notNull(),
+  content: text('content').notNull(),
+  toolName: varchar('tool_name', { length: 64 }),
+  toolArgs: text('tool_args'),
+  toolOk: boolean('tool_ok'),
+  actionId: uuid('action_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  conversationCreatedIdx: index('copilot_messages_conversation_created_idx').on(t.conversationId, t.createdAt),
+}));
+
+// 待审批动作：写操作只有经卖家显式批准后才执行
+export const copilotActions = pgTable('copilot_actions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id').notNull().references(() => copilotConversations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  toolName: varchar('tool_name', { length: 64 }).notNull(),
+  kind: varchar('kind', { length: 8 }).notNull().default('write'),
+  summary: varchar('summary', { length: 500 }).notNull().default(''),
+  args: text('args').notNull().default('{}'),
+  status: varchar('status', { length: 16 }).notNull().default('pending'),
+  result: text('result'),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+}, (t) => ({
+  conversationStatusIdx: index('copilot_actions_conversation_status_idx').on(t.conversationId, t.status),
+  userStatusIdx: index('copilot_actions_user_status_idx').on(t.userId, t.status),
+}));
+
 // ==================== 页面访问（访客统计） ====================
 
 export const visits = pgTable('visits', {

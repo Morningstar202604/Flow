@@ -15,6 +15,7 @@ import {
   Truck,
   Layers,
   Menu,
+  Bot,
 } from 'lucide-react';
 import logoWhite from '@/assets/branding/logo-white.png';
 import { Button } from '@/components/ui/button';
@@ -54,6 +55,11 @@ const SellerLayout: React.FC = () => {
   };
 
   const navItems = [
+    {
+      to: '/seller/copilot',
+      label: 'AI 运营副驾',
+      icon: Bot,
+    },
     {
       to: '/seller/dashboard',
       label: '数据看板',

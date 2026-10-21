@@ -1,0 +1,55 @@
+import { http } from '../lib/http';
+import type {
+  CopilotActionResolveResult,
+  CopilotConversation,
+  CopilotConversationDetail,
+  CopilotSendResult,
+  CopilotToolsView,
+} from '@shared/api.interface';
+
+export async function getCopilotTools(): Promise<CopilotToolsView> {
+  const { data } = await http.get<CopilotToolsView>('/api/copilot/tools');
+  return data;
+}
+
+export async function listCopilotConversations(): Promise<CopilotConversation[]> {
+  const { data } = await http.get<CopilotConversation[]>('/api/copilot/conversations');
+  return data;
+}
+
+export async function createCopilotConversation(title?: string): Promise<CopilotConversation> {
+  const { data } = await http.post<CopilotConversation>('/api/copilot/conversations', { title });
+  return data;
+}
+
+export async function getCopilotConversation(id: string): Promise<CopilotConversationDetail> {
+  const { data } = await http.get<CopilotConversationDetail>(`/api/copilot/conversations/${id}`);
+  return data;
+}
+
+export async function deleteCopilotConversation(id: string): Promise<{ success: boolean }> {
+  const { data } = await http.delete<{ success: boolean }>(`/api/copilot/conversations/${id}`);
+  return data;
+}
+
+export async function sendCopilotMessage(id: string, content: string): Promise<CopilotSendResult> {
+  const { data } = await http.post<CopilotSendResult>(`/api/copilot/conversations/${id}/messages`, { content });
+  return data;
+}
+
+export async function resolveCopilotAction(
+  id: string,
+  approve: boolean,
+  reason?: string,
+): Promise<CopilotActionResolveResult> {
+  const { data } = await http.post<CopilotActionResolveResult>(`/api/copilot/actions/${id}/resolve`, {
+    approve,
+    reason,
+  });
+  return data;
+}
+
+export async function getCopilotActionImpact(id: string): Promise<string> {
+  const { data } = await http.get<{ impact: string }>(`/api/copilot/actions/${id}/impact`);
+  return data.impact;
+}
