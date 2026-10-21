@@ -5,6 +5,33 @@
 
 ---
 
+## [1.11.0] — 2026-10-22
+
+新增 **买家端 AI 导购**：与卖家副驾共用 Agent 框架，工具集物理隔离。
+
+### Added
+- `server/modules/shopper/`：买家侧工具调用 Agent（5 个工具：搜索 / 分类 / 详情 / 我的购物车 / 加购）
+  - `shopper-tools.ts`：独立注册表，与卖家 11 个工具零交集；`add_to_cart` 为唯一写工具
+  - `shopper-tool.service.ts`：只读查询 + 加购（复用 `CartService`，库存校验与原逻辑一致）
+  - `shopper.service.ts`：ReAct 循环（≤5 步）、加购待确认、匿名 session 归属
+- `GET/POST /api/shopper/*`：工具目录、会话、消息、动作确认（匿名可用，按 `x-session-id` 隔离）
+- 前端 `ShopperWidget`：买家全站右下角浮窗（多语言 4 语、快捷问题、加购确认卡片、会话恢复）
+- 数据库：`copilot_conversations.channel`（seller / shopper）+ `session_id`，`copilot_actions.session_id`（迁移 `0004_shopper_channel.sql`）
+- 联调：mock LLM 新增导购确定性决策；`scripts/smoke-shopper.mjs` + `npm run smoke:shopper`
+
+### Security
+- 买家工具集与卖家工具集分离注册，导购侧查询卖家工具名直接拒绝（单元测试断言零交集）
+- 加购同样走人工确认，未确认前购物车不变
+- 匿名会话按 sessionId 归属，其他 session 访问返回 404
+
+### Verification
+- 单测 89/89（新增 9 例：工具隔离、加购待确认、确认执行、越权、未配置降级）
+- `npm run lint` / `npm run type:check` / `npm run build` 全绿
+- `npm run smoke:shopper` 6 步、`npm run smoke:copilot` 10 步全通过
+- 真浏览器验收：首页浮窗打开、推荐链路、加购确认后购物车真实增加、控制台无错误
+
+---
+
 ## [1.10.1] — 2026-10-22
 
 新增 **AI 运营副驾（Copilot）**：把 AI 从"生成内容"推进到"执行运营"，写操作强制人工审批。

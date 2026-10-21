@@ -44,6 +44,7 @@ function classifyAgent(body) {
   const user = messages.filter((m) => m.role === 'user').map((m) => m.content).join('\n');
   // 副驾提示词含「AI 运营副驾」与工具协议，优先识别（其上下文里也会出现订单/商品字样）
   if (system.includes('AI 运营副驾')) return 'copilot';
+  if (system.includes('AI 导购')) return 'shopper';
   // 特征键取各 Agent 提示词中的独有输出字段（select 的数据上下文里也含 titleEn 字样，不能作判别键）
   if (user.includes('"bulletPoints"') || user.includes('"longDescription"')) return 'copywriter';
   if (user.includes('"keyword"') && user.includes('"confidence"')) return 'select';
@@ -171,9 +172,59 @@ function copilotContent(body) {
   return JSON.stringify({ final: `MOCK-COPILOT: ${directive.slice(0, 80)}` });
 }
 
+/**
+ * 买家导购模拟决策：搜索 → 详情 → 加购待确认 → final。
+ */
+function shopperContent(body) {
+  const messages = body?.messages ?? [];
+  const userMessages = messages.filter((m) => m.role === 'user' && !m.content.startsWith('['));
+  const lastUser = userMessages[userMessages.length - 1]?.content ?? '';
+  const toolResults = messages
+    .filter((m) => m.role === 'user' && m.content.startsWith('[工具 '))
+    .map((m) => m.content);
+  const seen = toolResults.map((text) => /^\[工具 ([a-z_]+) 的执行结果\]/.exec(text)?.[1]).filter(Boolean);
+  const sawConfirm = messages.some((m) => m.role === 'user' && m.content.startsWith('[系统] 动作已提交买家确认'));
+
+  const searchResult = [...toolResults].reverse().find((text) => text.startsWith('[工具 search_products'));
+  const productId = searchResult ? /id=([0-9a-f-]{36})/i.exec(searchResult)?.[1] : undefined;
+
+  if (lastUser.includes('购物车') && seen.includes('get_my_cart')) {
+    return JSON.stringify({ final: '你的购物车内容已在上面列出。' });
+  }
+  if (lastUser.includes('购物车') && !seen.includes('get_my_cart') && !lastUser.includes('加入')) {
+    return JSON.stringify({ tool: 'get_my_cart', args: {}, thought: '查看买家购物车' });
+  }
+
+  if (lastUser.includes('加入购物车') || lastUser.includes('加购')) {
+    if (sawConfirm) return JSON.stringify({ final: '已提交加购确认，等你确认后生效。' });
+    if (!productId) {
+      return JSON.stringify({ tool: 'search_products', args: { keyword: '耳机', limit: 3 }, thought: '先搜索商品' });
+    }
+    return JSON.stringify({ tool: 'add_to_cart', args: { productId, quantity: 1 }, thought: '把搜索到的商品加入购物车' });
+  }
+
+  if (lastUser.includes('耳机') || lastUser.includes('推荐') || lastUser.includes('找')) {
+    if (seen.includes('search_products') && productId && !seen.includes('get_product_detail')) {
+      return JSON.stringify({ tool: 'get_product_detail', args: { productId }, thought: '查看首条结果详情' });
+    }
+    if (seen.includes('get_product_detail')) {
+      return JSON.stringify({ final: '已查到商品详情，含价格、规格与库存，供你参考。' });
+    }
+    return JSON.stringify({ tool: 'search_products', args: { keyword: '耳机', limit: 3 }, thought: '搜索耳机' });
+  }
+
+  if (lastUser.includes('分类') || lastUser.includes('卖什么')) {
+    if (seen.includes('list_categories')) return JSON.stringify({ final: '以上是店铺分类。' });
+    return JSON.stringify({ tool: 'list_categories', args: {}, thought: '列出分类' });
+  }
+
+  return JSON.stringify({ final: `MOCK-SHOPPER: ${lastUser.slice(0, 60)}` });
+}
+
 function llmContent(agent, body) {
   const user = (body?.messages ?? []).filter((m) => m.role === 'user').map((m) => m.content).join('\n');
   if (agent === 'copilot') return copilotContent(body);
+  if (agent === 'shopper') return shopperContent(body);
   // 自定义 Agent（unknown）要求 JSON 时返回合法 JSON 并回显输入，供断言模板渲染贯穿
   if (agent === 'unknown' && body?.response_format?.type === 'json_object') {
     return JSON.stringify({ mock: true, echo: user.slice(0, 200) });

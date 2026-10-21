@@ -166,6 +166,24 @@ npm run smoke:copilot                  # 读工具 → 待审批 → 批准执�
 
 ---
 
+---
+
+## 7. Shopper — 买家端 AI 导购
+
+买家侧 Agent，和卖家副驾共用协议与网关，但**工具集物理隔离**（`server/modules/shopper/`）。
+
+| 项 | 内容 |
+|---|---|
+| 入口 | 买家商城右下角「AI 导购」浮窗（全站买家页面） |
+| 归属 | 登录买家按 userId；匿名按 `x-session-id`（与购物车同一套会话标识） |
+| 工具 | `search_products` / `list_categories` / `get_product_detail` / `get_my_cart`（只读）+ `add_to_cart`（写，需确认） |
+| 隔离保证 | 买家工具名与卖家工具名零交集（单元测试断言）；卖家工具名在导购侧查不到，直接拒绝 |
+| 加购确认 | 与副驾同一机制：先落 `copilot_actions(pending)`，买家点「加入购物车」才调 `CartService.addItem` |
+| 诚实约束 | 只推荐 `status=active` 且有货商品；未配置模型时明确提示"AI 导购暂未开启"，不影响浏览与下单 |
+
+> 为什么不用卖家副驾的 11 个工具？买家永远不该看到订单管理、退款审批、发券、改价这些能力；
+> 用独立注册表而不是运行时过滤，避免"过滤写错一次就泄露"的风险。
+
 ## 外部能力对照表
 
 | Agent | 需要的环境变量 | 缺 key 时行为 |

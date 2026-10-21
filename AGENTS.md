@@ -63,6 +63,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - 订单 `/orders` - 列表、详情、物流、退款申请
 - 集合详情 `/collections/:slug` - 集合内全部商品（买家公开）
 - CMS 页面 `/page/:slug` - 自定义页面（About / FAQ 等）
+- AI 导购 - 买家侧浮窗 Agent：搜索/详情/购物车/加购（加购需确认）
 
 ### 卖家端（/seller）
 - **AI 运营副驾** `/seller/copilot` - 工具调用 Agent：读店铺数据 + 写操作人工审批
@@ -83,7 +84,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - 购物车：`cartItems` `cartRecoveryCodes`
 - 内容与咨询：`cmsPages` `redirects` `inquirySessions` `inquiryMessages`
 - AI 与运营：`aiSettings` `aiAgents` `aiReports` `aiUsageLog` `pointTransactions` `visits` `auditLogs`
-- AI 运营副驾：`copilotConversations` `copilotMessages` `copilotActions`
+- AI 运营副驾 / 导购：`copilotConversations` `copilotMessages` `copilotActions`（`channel` 区分 seller / shopper）
 
 ## AI Agent
 
@@ -113,7 +114,8 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 
 ## 验证入口
 
-- `npm run lint` / `npm run type:check` / `npm test`（77 例单测）/ `npm run build`
+- `npm run lint` / `npm run type:check` / `npm test`（89 例单测）/ `npm run build`
 - `npm run smoke:workflows`（16 步全业务工作流）/ `npm run smoke:degraded`（无 Key 降级）/ `npm run smoke`（19 步交易闭环）
-- `npm run smoke:copilot`（副驾：读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 越权 403）
+- `npm run smoke:copilot`（副驾：读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 巡检 → 多步计划 → 越权 403）
+- `npm run smoke:shopper`（导购：工具隔离 → 搜索/详情 → 加购确认 → 会话隔离）
 - `npm run mock:providers` + `npm run smoke:providers`（渠道模拟器：AI 五 Agent + Stripe/PayPal 全链路）

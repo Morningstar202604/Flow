@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import ShopperWidget from './ShopperWidget';
 import { ShoppingCart, Store, Globe, Search, User, LogOut, Heart, ChevronDown, Menu, MapPin } from 'lucide-react';
 import logoHorizontal from '@/assets/branding/logo-horizontal.png';
 import { Button } from '@/components/ui/button';
@@ -290,6 +291,8 @@ const BuyerLayout: React.FC = () => {
       <main className="flex-1">
         <Outlet />
       </main>
+
+      <ShopperWidget />
 
       <footer className="bg-[#0B1F3A] text-slate-400 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

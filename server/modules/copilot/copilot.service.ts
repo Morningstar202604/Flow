@@ -68,7 +68,7 @@ export class CopilotService {
     const rows = await this.db
       .select()
       .from(copilotConversations)
-      .where(eq(copilotConversations.userId, userId))
+      .where(and(eq(copilotConversations.userId, userId), eq(copilotConversations.channel, 'seller')))
       .orderBy(desc(copilotConversations.updatedAt))
       .limit(50);
 
@@ -92,7 +92,7 @@ export class CopilotService {
   async createConversation(userId: string, title?: string): Promise<CopilotConversation> {
     const inserted = await this.db
       .insert(copilotConversations)
-      .values({ userId, title: title?.trim() || '新对话' })
+      .values({ userId, title: title?.trim() || '新对话', channel: 'seller' })
       .returning();
     return this.mapConversation(inserted[0]);
   }
@@ -533,7 +533,7 @@ export class CopilotService {
       .from(copilotConversations)
       .where(eq(copilotConversations.id, conversationId))
       .limit(1);
-    if (rows.length === 0 || rows[0].userId !== userId) {
+    if (rows.length === 0 || rows[0].userId !== userId || rows[0].channel !== 'seller') {
       throw new NotFoundException('对话不存在');
     }
     return rows[0];

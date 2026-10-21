@@ -560,15 +560,19 @@ export const aiAgents = pgTable('ai_agents', {
 
 // ==================== AI 运营副驾（工具调用 Agent + 人工审批） ====================
 
-// 会话：卖家与副驾的对话
+// 会话：卖家副驾（channel=seller）与买家导购（channel=shopper）共用，按 channel + 归属隔离。
+// 买家可匿名：未登录时归属用 sessionId（与购物车同一套会话标识）。
 export const copilotConversations = pgTable('copilot_conversations', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  sessionId: varchar('session_id', { length: 64 }),
   title: varchar('title', { length: 200 }).notNull().default('新对话'),
+  channel: varchar('channel', { length: 16 }).notNull().default('seller'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userUpdatedIdx: index('copilot_conversations_user_updated_idx').on(t.userId, t.updatedAt),
+  sessionIdx: index('copilot_conversations_session_idx').on(t.sessionId, t.updatedAt),
 }));
 
 // 消息：user / assistant / tool（工具结果回填）
@@ -590,7 +594,9 @@ export const copilotMessages = pgTable('copilot_messages', {
 export const copilotActions = pgTable('copilot_actions', {
   id: uuid('id').primaryKey().defaultRandom(),
   conversationId: uuid('conversation_id').notNull().references(() => copilotConversations.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // 归属：登录用户用 userId；匿名买家（导购）用 sessionId
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  sessionId: varchar('session_id', { length: 64 }),
   toolName: varchar('tool_name', { length: 64 }).notNull(),
   kind: varchar('kind', { length: 8 }).notNull().default('write'),
   summary: varchar('summary', { length: 500 }).notNull().default(''),
@@ -606,6 +612,7 @@ export const copilotActions = pgTable('copilot_actions', {
   conversationStatusIdx: index('copilot_actions_conversation_status_idx').on(t.conversationId, t.status),
   userStatusIdx: index('copilot_actions_user_status_idx').on(t.userId, t.status),
   batchIdx: index('copilot_actions_batch_idx').on(t.batchId),
+  sessionIdx: index('copilot_actions_session_idx').on(t.sessionId, t.status),
 }));
 
 // ==================== 页面访问（访客统计） ====================

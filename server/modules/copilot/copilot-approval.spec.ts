@@ -100,7 +100,9 @@ function createTools() {
 const conversationRow: Row = {
   id: '00000000-0000-4000-8000-000000000001',
   userId: 'seller-1',
+  sessionId: null,
   title: '新对话',
+  channel: 'seller',
   createdAt: new Date('2026-10-21T00:00:00Z'),
   updatedAt: new Date('2026-10-21T00:00:00Z'),
 };

@@ -25,6 +25,7 @@ import { AddressesModule } from './modules/addresses/addresses.module';
 import { HealthModule } from './modules/health/health.module';
 import { SeedModule } from './modules/seed/seed.module';
 import { CopilotModule } from './modules/copilot/copilot.module';
+import { ShopperModule } from './modules/shopper/shopper.module';
 import { JwtAuthMiddleware } from './common/middleware/jwt-auth.middleware';
 import { CsrfHeaderMiddleware } from './common/middleware/csrf-header.middleware';
 
@@ -50,6 +51,7 @@ const businessModules = [
   ProductsModule,
   RefundsModule,
   SeedModule,
+  ShopperModule,
   ReviewsModule,
   ShippingModule,
 ];

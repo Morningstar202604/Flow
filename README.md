@@ -15,7 +15,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 [![GitHub](https://img.shields.io/badge/GitHub-X33834%2FGlobalEcom--AI-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![Gitee](https://img.shields.io/badge/Gitee-badhope%2FGlobalEcom--AI-C71D23?style=flat-square&logo=gitee&logoColor=white)](https://gitee.com/badhope/GlobalEcom-AI)
 [![GitCode](https://img.shields.io/badge/GitCode-badhope%2FGlobalEcom--AI-2F6BFF?style=flat-square&logo=git&logoColor=white)](https://gitcode.com/badhope/GlobalEcom-AI)
-[![Version](https://img.shields.io/badge/version-v1.10.1-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.10.1)
+[![Version](https://img.shields.io/badge/version-v1.11.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.11.0)
 [![Stars](https://img.shields.io/github/stars/X33834/GlobalEcom-AI?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![CI](https://img.shields.io/github/actions/workflow/status/X33834/GlobalEcom-AI/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/X33834/GlobalEcom-AI/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -33,7 +33,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 - **品牌定位 / Positioning**：出口电商平台 · Cross-Border Commerce Platform
 - **主传播语 / Tagline**：让跨境生意更简单 · Cross-Border Commerce, Simplified
 - **主色 / Brand Colors**：深海军蓝 `#0B1F3A` + 科技青 `#00C2B8`
-- **当前版本 / Version**：v1.10.1（[CHANGELOG.md](CHANGELOG.md)）
+- **当前版本 / Version**：v1.11.0（[CHANGELOG.md](CHANGELOG.md)）
 
 ---
 
@@ -78,6 +78,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 - **订单跟踪**：状态时间线、物流轨迹、**退款申请**（卖家审批 → 原路退回）、带图评价
 - **会员体系**：积分赚取 / 消费、等级（bronze / silver / gold）
 - **多语言**：zh / en / es / pt 四语言，商品双语展示
+- **AI 导购**：买家侧 Agent，按需求推荐在售商品、读详情/购物车，加购需买家确认
 - **CMS**：自定义页面（About、FAQ 等）
 
 ### 卖家 AI 工作台 · Seller AI Workbench

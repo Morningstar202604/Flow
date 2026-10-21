@@ -76,7 +76,9 @@ function gateway(): AiGatewayService {
 const conversation: Row = {
   id: 'conv-1',
   userId: 'seller-1',
+  sessionId: null,
   title: 'x',
+  channel: 'seller',
   createdAt: new Date(),
   updatedAt: new Date(),
 };
