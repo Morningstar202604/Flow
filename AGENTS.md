@@ -104,7 +104,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 
 工具调用 Agent + 人工审批门禁，模型仍走同一 `AiGatewayService`（用量记入 `agent=copilot`）。
 
-- `copilot-tools.ts`：11 个工具的唯一注册表（5 只读 + 6 写）；每个参数声明类型/枚举/范围/正则，`validateToolArgs` 拒绝未知参数
+- `copilot-tools.ts`：12 个工具的唯一注册表（5 只读 + 7 写）；每个参数声明类型/枚举/范围/正则，`validateToolArgs` 拒绝未知参数
 - `copilot-protocol.ts`：模型输出协议解析（`{"tool":...}` / `{"final":...}`）、工具目录生成、历史折叠
 - `copilot-tool.service.ts`：读工具查询；写工具**全部委托** OrdersService / RefundsService / ProductsService / CouponsService / InquiryService，不重复实现业务规则
 - `copilot.service.ts`：ReAct 循环（上限 6 步）；写工具在循环内只落 `copilot_actions(pending)`，**审批端点**才执行，且校验动作所有者
@@ -113,11 +113,14 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - 巡检阈值：`ai_settings` 键 `copilot_insight_thresholds`，GET/PUT `/api/copilot/insights/thresholds`
 - 导购漏斗：`shopper_events` 打点 + `GET /api/copilot/shopper-funnel`（下单阶段联真实订单）
 - 需求缺口：零结果搜索记 `search_miss`；`GET /api/copilot/shopper-demand-gaps`；SelectAgent 自动注入近 90 天缺口
+- 缺口建草稿：`POST /api/copilot/shopper-demand-gaps/draft` → `create_draft_product` 待确认动作（12 个工具）
+- 商品级漏斗：`GET /api/copilot/shopper-product-funnel`（推荐/加购/下单会话 + 转化率）
+- 定时巡检：`CopilotWatchService` 原生定时器 + `ai_settings` 租约互斥；`GET/PUT /api/copilot/watch`、`POST /api/copilot/watch/run`
 - 安全约束：`@RolesGuard(['seller','admin'])` 覆盖全部端点；未注册工具名直接拒绝；参数在执行前二次校验
 
 ## 验证入口
 
-- `npm run lint` / `npm run type:check` / `npm test`（102 例单测）/ `npm run build`
+- `npm run lint` / `npm run type:check` / `npm test`（109 例单测）/ `npm run build`
 - `npm run smoke:workflows`（16 步全业务工作流）/ `npm run smoke:degraded`（无 Key 降级）/ `npm run smoke`（19 步交易闭环）
 - `npm run smoke:copilot`（副驾：读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 巡检 → 多步计划 → 越权 403）
 - `npm run smoke:shopper`（导购：工具隔离 → 搜索/详情 → 加购确认 → 会话隔离）

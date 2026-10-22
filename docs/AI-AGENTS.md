@@ -125,6 +125,9 @@ Content-Type: application/json
 | 巡检阈值 | `GET/PUT /api/copilot/insights/thresholds`：4 项阈值存 `ai_settings`，逐字段校验 + 越界拒绝 + 审计 |
 | 导购漏斗 | `GET /api/copilot/shopper-funnel?days=30`：打开→推荐→加购→下单 四阶段按会话去重；下单阶段联真实订单（登录按 userId、匿名按订单快照 sessionId） |
 | 需求缺口 | `GET /api/copilot/shopper-demand-gaps?days=90`：导购搜索**零结果**的词（次数/去重会话/最近时间）；SelectAgent 生成选品建议时自动注入近 90 天缺口 |
+| 缺口建草稿 | `POST /api/copilot/shopper-demand-gaps/draft`：从缺口词生成 `create_draft_product` 待确认动作（仍走审批，批准后为 draft 状态） |
+| 商品级漏斗 | `GET /api/copilot/shopper-product-funnel?days=30`：每个商品被推荐/加购/下单的会话数与加购转化率，按推荐量降序 |
+| 定时巡检 | `GET/PUT /api/copilot/watch` + `POST /api/copilot/watch/run`：原生定时器（零新依赖），默认关闭；间隔 5-1440 分钟；`ai_settings` 行级租约做跨实例互斥；只对**新增**告警记摘要 |
 
 ### 工具清单（`server/modules/copilot/copilot-tools.ts`）
 

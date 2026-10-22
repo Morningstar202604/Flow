@@ -181,6 +181,21 @@ try {
   }
   ok(`需求缺口：${gaps.length} 个零结果关键词`);
 
+  // 商品级漏斗：本次加购的商品应出现在"被推荐→加购"里，转化率 100%
+  const productFunnel = await (async () => {
+    const res = await fetch(`${BASE}/api/copilot/shopper-product-funnel?days=30`, {
+      headers: { Cookie: seller.cookie },
+    });
+    return res.json();
+  })();
+  assert(Array.isArray(productFunnel.items), '商品级漏斗应返回 items');
+  const funnelItem = productFunnel.items.find((item) => item.productId === product.id);
+  assert(funnelItem, '刚加购的商品应出现在商品级漏斗里');
+  assert(funnelItem.recommendedSessions >= 1, `推荐会话数应 ≥1，实际 ${funnelItem.recommendedSessions}`);
+  assert(funnelItem.cartSessions >= 1, `加购会话数应 ≥1，实际 ${funnelItem.cartSessions}`);
+  assert(funnelItem.cartRate > 0, '加购转化率应大于 0');
+  ok(`商品级漏斗：${funnelItem.title} 推荐 ${funnelItem.recommendedSessions} → 加购 ${funnelItem.cartSessions}（${(funnelItem.cartRate * 100).toFixed(0)}%）`);
+
   // 会话隔离
   const foreign = await api('GET', `/api/shopper/conversations/${conversationId}`, {
     sessionId: `other-${runId}-session-9999`,

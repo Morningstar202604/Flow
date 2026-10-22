@@ -630,6 +630,29 @@ export interface ShopperTopQuery {
   count: number;
 }
 
+export interface ShopperProductFunnelItem {
+  productId: string;
+  title: string;
+  /** 被推荐次数（出现在搜索/详情结果中的会话数） */
+  recommendedSessions: number;
+  /** 确认加购的会话数 */
+  cartSessions: number;
+  /** 加购转化率 = cartSessions / recommendedSessions */
+  cartRate: number;
+  /** 加购后下单的会话数 */
+  orderedSessions: number;
+  /** 库存与价格，便于定位"推荐了但没人买"的原因 */
+  totalStock: number;
+  minPrice: string;
+  avgRating: number;
+}
+
+export interface ShopperProductFunnelResponse {
+  since: string;
+  days: number;
+  items: ShopperProductFunnelItem[];
+}
+
 export interface ShopperDemandGap {
   keyword: string;
   /** 该词零结果的搜索次数 */

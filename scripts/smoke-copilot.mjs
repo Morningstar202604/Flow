@@ -261,7 +261,63 @@ try {
   await api('PUT', '/api/copilot/insights/thresholds', { cookie: seller.cookie, json: { lowStock: 10 } });
   ok('巡检阈值：默认 10 → 保存 50 → 巡检生效 → 越界拒绝 → 复原');
 
-  // ---------- 8. 越权 ----------
+  // ---------- 8. 定时巡检 ----------
+  const watchBefore = await api('GET', '/api/copilot/watch', { cookie: seller.cookie });
+  assert(watchBefore.body.enabled === false, `定时巡检默认应关闭，实际 ${watchBefore.body.enabled}`);
+  assert(watchBefore.body.intervalMinutes >= 5, '默认间隔应 ≥5 分钟');
+
+  const watchOn = await api('PUT', '/api/copilot/watch', {
+    cookie: seller.cookie,
+    json: { enabled: true, intervalMinutes: 15 },
+  });
+  assert(watchOn.body.enabled === true && watchOn.body.intervalMinutes === 15, '定时巡检应保存成功');
+
+  // 造一条低库存告警，确保本次巡检确有内容可比对
+  await sql`
+    INSERT INTO products (seller_id, title_zh, title_en, status, total_stock)
+    VALUES (${sellerId}, ${'巡检告警商品' + runId}, ${'Watch Alert ' + runId}, 'active', 1)`;
+
+  const watchRun = await api('POST', '/api/copilot/watch/run', { cookie: seller.cookie });
+  assert(watchRun.body.ran === true, `手动巡检应执行，实际 ${JSON.stringify(watchRun.body)}`);
+  assert(watchRun.body.message.includes('巡检'), '巡检摘要应可读');
+  assert(watchRun.body.message.includes('新增 1 项'), `首次巡检应报告 1 条新增告警，实际 ${watchRun.body.message.slice(0, 80)}`);
+
+  // 第二次执行：不应把旧告警算成"新增"
+  const watchRun2 = await api('POST', '/api/copilot/watch/run', { cookie: seller.cookie });
+  assert(watchRun2.body.ran === true, '第二次巡检也应执行');
+  assert(watchRun2.body.message.includes('新增 0 项'), '第二次不应有新告警');
+
+  await api('PUT', '/api/copilot/watch', { cookie: seller.cookie, json: { enabled: false } });
+  ok('定时巡检：默认关闭 → 开启 15 分钟 → 手动执行 → 二次不重复告警 → 关闭');
+
+  // ---------- 9. 需求缺口 → 草稿商品 ----------
+  const gapKeyword = `测试缺口${runId.slice(-4)}`;
+  await sql`
+    INSERT INTO shopper_events (session_id, stage, keyword)
+    VALUES (${'gap-session-' + runId}, 'search_miss', ${gapKeyword})`;
+
+  const draft = await api('POST', '/api/copilot/shopper-demand-gaps/draft', {
+    cookie: seller.cookie,
+    json: { keyword: gapKeyword },
+  });
+  assert(draft.body.status === 'pending', `建草稿应生成待确认动作，实际 ${draft.body.status}`);
+  assert(draft.body.toolName === 'create_draft_product', '动作工具应为 create_draft_product');
+
+  const beforeDraftRows = await sql`SELECT id FROM products WHERE title_zh = ${gapKeyword}`;
+  assert(beforeDraftRows.length === 0, '批准前不应创建商品');
+
+  const draftApproved = await api('POST', `/api/copilot/actions/${draft.body.id}/resolve`, {
+    cookie: seller.cookie,
+    json: { approve: true },
+  });
+  assert(draftApproved.body.ok === true, `草稿商品应创建成功：${draftApproved.body.message}`);
+  const afterDraftRows = await sql`
+    SELECT id, status, total_stock FROM products WHERE title_zh = ${gapKeyword}`;
+  assert(afterDraftRows.length === 1, '批准后应创建 1 个商品');
+  assert(afterDraftRows[0].status === 'draft', `新商品应为 draft，实际 ${afterDraftRows[0].status}`);
+  ok('需求缺口：一键建草稿 → 审批前无商品 → 批准后为 draft 状态');
+
+  // ---------- 10. 越权 ----------
   const forbidden = await api('GET', '/api/copilot/conversations', {
     cookie: buyer.cookie,
     expect: [403],

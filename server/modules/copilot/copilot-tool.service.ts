@@ -81,6 +81,8 @@ export class CopilotToolService {
         return this.updateProductStatus(args, actor);
       case 'create_coupon':
         return this.createCoupon(args, actor);
+      case 'create_draft_product':
+        return this.createDraftProduct(args, actor);
       case 'send_inquiry_reply':
         return this.sendInquiryReply(args, actor);
       default:
@@ -332,6 +334,37 @@ export class CopilotToolService {
     };
   }
 
+  private async createDraftProduct(
+    args: Record<string, unknown>,
+    actor: { userId: string; role: string },
+  ): Promise<ToolExecutionResult> {
+    const titleZh = String(args.titleZh).trim();
+    const titleEn = String(args.titleEn).trim();
+    const price = Number(args.price);
+    const stock = typeof args.stock === 'number' ? args.stock : 0;
+    const categoryId = typeof args.categoryId === 'string' ? args.categoryId : undefined;
+
+    const product = await this.productsService.create(
+      {
+        titleZh,
+        titleEn,
+        descZh: typeof args.descZh === 'string' ? args.descZh : undefined,
+        descEn: typeof args.descZh === 'string' ? args.descZh : undefined,
+        price,
+        stock,
+        status: 'draft',
+        categoryId,
+      },
+      actor.userId,
+    );
+
+    return {
+      ok: true,
+      content: `草稿商品《${product.titleZh}》已创建（状态 draft，售价 $${product.minPrice ?? price}）。请补充图片与详情后再上架。`,
+      summary: `草稿商品 ${product.id.slice(0, 8)}…`,
+    };
+  }
+
   private async sendInquiryReply(
     args: Record<string, unknown>,
     actor: { userId: string; role: string },
@@ -403,6 +436,9 @@ export class CopilotToolService {
     }
     if (tool.name === 'create_coupon') {
       return '将新增 1 张优惠券';
+    }
+    if (tool.name === 'create_draft_product') {
+      return '将新增 1 个草稿商品（不会自动上架）';
     }
     return '';
   }

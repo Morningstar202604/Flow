@@ -10,6 +10,7 @@ import type {
   CopilotToolsView,
   ShopperDemandGap,
   ShopperFunnelResponse,
+  ShopperProductFunnelResponse,
   UpdateCopilotInsightThresholdsRequest,
 } from '@shared/api.interface';
 
@@ -98,5 +99,43 @@ export async function getShopperDemandGaps(days = 90): Promise<ShopperDemandGap[
   const { data } = await http.get<ShopperDemandGap[]>('/api/copilot/shopper-demand-gaps', {
     params: { days, limit: 10 },
   });
+  return data;
+}
+
+export interface WatchSettingsView {
+  enabled: boolean;
+  intervalMinutes: number;
+}
+
+export async function getWatchSettings(): Promise<WatchSettingsView> {
+  const { data } = await http.get<WatchSettingsView>('/api/copilot/watch');
+  return data;
+}
+
+export async function updateWatchSettings(body: Partial<WatchSettingsView>): Promise<WatchSettingsView> {
+  const { data } = await http.put<WatchSettingsView>('/api/copilot/watch', body);
+  return data;
+}
+
+export async function runWatchNow(): Promise<{ ran: boolean; message: string }> {
+  const { data } = await http.post<{ ran: boolean; message: string }>('/api/copilot/watch/run');
+  return data;
+}
+
+export async function getShopperProductFunnel(days = 30): Promise<ShopperProductFunnelResponse> {
+  const { data } = await http.get<ShopperProductFunnelResponse>('/api/copilot/shopper-product-funnel', {
+    params: { days, limit: 20 },
+  });
+  return data;
+}
+
+export async function createDraftFromGap(
+  keyword: string,
+  categoryId?: string,
+): Promise<{ conversationId: string; id: string; summary: string }> {
+  const { data } = await http.post<{ conversationId: string; id: string; summary: string }>(
+    '/api/copilot/shopper-demand-gaps/draft',
+    { keyword, categoryId },
+  );
   return data;
 }

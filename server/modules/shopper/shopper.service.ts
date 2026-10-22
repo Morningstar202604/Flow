@@ -300,6 +300,17 @@ ${buildToolCatalog(SHOPPER_TOOLS)}
         newMessages.push(this.mapMessage(messageRow));
         toolTrace.push({ tool: tool.name, kind: 'read', ok: result.ok });
 
+        // 商品级漏斗：记录本次被推荐到的每个商品（详情页也算一次推荐）
+        for (const productId of result.productIds ?? []) {
+          await this.analytics.track({
+            userId: ctx.userId ?? null,
+            sessionId: ctx.sessionId ?? null,
+            stage: 'product_recommended',
+            conversationId,
+            productId,
+          });
+        }
+
         if (tool.name === 'search_products') {
           // 零结果单独记 search_miss：这是"买家在找但店里没有"的需求信号，喂给选品 Agent
           const resultCount = result.resultCount ?? 0;

@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
@@ -43,6 +44,7 @@ import type {
   CopilotMessage,
   ShopperDemandGap,
   ShopperFunnelResponse,
+  ShopperProductFunnelResponse,
 } from '@shared/api.interface';
 import { toast } from 'sonner';
 import { extractErrorMessage, notifyError } from '@/lib/error-feedback';
@@ -81,6 +83,11 @@ const CopilotPage: React.FC = () => {
   const [funnelLoading, setFunnelLoading] = useState<boolean>(false);
   const [funnelOpen, setFunnelOpen] = useState<boolean>(false);
   const [demandGaps, setDemandGaps] = useState<ShopperDemandGap[]>([]);
+  const [productFunnel, setProductFunnel] = useState<ShopperProductFunnelResponse | null>(null);
+  const [watch, setWatch] = useState<{ enabled: boolean; intervalMinutes: number } | null>(null);
+  const [watchSaving, setWatchSaving] = useState<boolean>(false);
+  const [watchRunning, setWatchRunning] = useState<boolean>(false);
+  const [draftingKeyword, setDraftingKeyword] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const fetchInsights = useCallback(async (): Promise<void> => {
@@ -99,16 +106,60 @@ const CopilotPage: React.FC = () => {
     if (funnel) return;
     try {
       setFunnelLoading(true);
-      const [funnelData, gaps] = await Promise.all([
+      const [funnelData, gaps, productData, watchData] = await Promise.all([
         copilotApi.getShopperFunnel(30),
         copilotApi.getShopperDemandGaps(90),
+        copilotApi.getShopperProductFunnel(30),
+        copilotApi.getWatchSettings(),
       ]);
       setFunnel(funnelData);
       setDemandGaps(gaps);
+      setProductFunnel(productData);
+      setWatch(watchData);
     } catch (err) {
       notifyError(err, '读取导购漏斗失败');
     } finally {
       setFunnelLoading(false);
+    }
+  };
+
+  const saveWatch = async (patch: Partial<{ enabled: boolean; intervalMinutes: number }>): Promise<void> => {
+    if (!watch) return;
+    try {
+      setWatchSaving(true);
+      const next = await copilotApi.updateWatchSettings({ ...watch, ...patch });
+      setWatch(next);
+      toast.success(next.enabled ? `定时巡检已开启，每 ${next.intervalMinutes} 分钟` : '定时巡检已关闭');
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '保存定时巡检设置失败'));
+    } finally {
+      setWatchSaving(false);
+    }
+  };
+
+  const runWatch = async (): Promise<void> => {
+    try {
+      setWatchRunning(true);
+      const result = await copilotApi.runWatchNow();
+      toast.success(result.message.split('\n')[0]);
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '巡检执行失败'));
+    } finally {
+      setWatchRunning(false);
+    }
+  };
+
+  const createDraft = async (keyword: string): Promise<void> => {
+    try {
+      setDraftingKeyword(keyword);
+      const result = await copilotApi.createDraftFromGap(keyword);
+      setFunnelOpen(false);
+      await loadConversation(result.conversationId);
+      toast.success('已生成草稿商品待确认，请在下方批准');
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '生成草稿失败'));
+    } finally {
+      setDraftingKeyword(null);
     }
   };
 
@@ -766,11 +817,52 @@ const CopilotPage: React.FC = () => {
                 ) : (
                   <div className="space-y-1">
                     {demandGaps.map((gap) => (
-                      <div key={gap.keyword} className="flex items-center justify-between rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
-                        <span>{gap.keyword}</span>
-                        <span className="text-amber-700">{gap.misses} 次 · {gap.sessions} 人</span>
+                      <div key={gap.keyword} className="flex items-center justify-between gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                        <span className="min-w-0 flex-1 truncate">{gap.keyword}</span>
+                        <span className="shrink-0 text-amber-700">{gap.misses} 次 · {gap.sessions} 人</span>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded border border-amber-300 bg-white px-1.5 py-0.5 text-[11px] text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                          disabled={draftingKeyword === gap.keyword}
+                          onClick={() => void createDraft(gap.keyword)}
+                        >
+                          {draftingKeyword === gap.keyword ? '生成中…' : '建草稿'}
+                        </button>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-slate-600">商品级漏斗（被推荐 → 加购，按推荐量排序）</div>
+                {!productFunnel || productFunnel.items.length === 0 ? (
+                  <div className="text-xs text-slate-400">暂无商品级数据</div>
+                ) : (
+                  <div className="max-h-40 overflow-y-auto rounded border border-slate-200">
+                    <table className="w-full text-[11px]">
+                      <thead className="bg-slate-50 text-slate-500">
+                        <tr>
+                          <th className="px-2 py-1 text-left font-medium">商品</th>
+                          <th className="px-1 py-1 text-right font-medium">推荐</th>
+                          <th className="px-1 py-1 text-right font-medium">加购</th>
+                          <th className="px-1 py-1 text-right font-medium">转化</th>
+                          <th className="px-2 py-1 text-right font-medium">库存</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {productFunnel.items.map((item) => (
+                          <tr key={item.productId} className="border-t border-slate-100">
+                            <td className="max-w-[140px] truncate px-2 py-1 text-slate-700">{item.title}</td>
+                            <td className="px-1 py-1 text-right text-slate-600">{item.recommendedSessions}</td>
+                            <td className="px-1 py-1 text-right text-slate-600">{item.cartSessions}</td>
+                            <td className={`px-1 py-1 text-right ${item.cartRate < 0.2 ? 'text-red-600' : 'text-emerald-600'}`}>
+                              {(item.cartRate * 100).toFixed(0)}%
+                            </td>
+                            <td className="px-2 py-1 text-right text-slate-500">{item.totalStock}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
@@ -804,6 +896,36 @@ const CopilotPage: React.FC = () => {
             <DialogTitle>巡检设置</DialogTitle>
             <DialogDescription>调整告警阈值，保存后立即生效（留空或超范围会被拒绝）。</DialogDescription>
           </DialogHeader>
+          {watch && (
+            <div className="mb-4 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-slate-700">定时巡检</div>
+                  <div className="text-xs text-slate-500">后台按间隔自动巡检，只记录新增告警（默认关闭）</div>
+                </div>
+                <Switch
+                  checked={watch.enabled}
+                  disabled={watchSaving}
+                  onCheckedChange={(checked) => void saveWatch({ enabled: checked })}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-slate-600">间隔（分钟，5-1440）</span>
+                <Input
+                  type="number"
+                  className="w-24"
+                  value={watch.intervalMinutes}
+                  disabled={watchSaving}
+                  onChange={(event) => setWatch({ ...watch, intervalMinutes: Number(event.target.value) })}
+                  onBlur={() => void saveWatch({ intervalMinutes: watch.intervalMinutes })}
+                />
+              </div>
+              <Button size="sm" variant="outline" className="w-full" onClick={() => void runWatch()} disabled={watchRunning}>
+                {watchRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                立即执行一次巡检
+              </Button>
+            </div>
+          )}
           {thresholdsDraft && (
             <div className="space-y-3">
               {[

@@ -489,6 +489,70 @@ export class CopilotService {
     };
   }
 
+  /**
+   * 从需求缺口一键建草稿商品：不直接写库，生成一个 pending 动作，
+   * 与所有写操作走同一道审批门禁（卖家仍需点"批准执行"）。
+   */
+  async createDraftFromGap(
+    userId: string,
+    role: string,
+    keyword: string,
+    categoryId?: string,
+  ): Promise<{ conversationId: string; action: CopilotAction }> {
+    const cleanKeyword = keyword.trim().slice(0, 100);
+    if (!cleanKeyword) throw new BadRequestException('关键词不能为空');
+
+    const conversation = await this.createConversation(userId, `补款：${cleanKeyword}`);
+
+    await this.insertMessage({
+      conversationId: conversation.id,
+      role: 'user',
+      content: `买家在导购里搜「${cleanKeyword}」但没有结果，帮我建一个草稿商品`,
+    });
+
+    const tool = getTool('create_draft_product');
+    if (!tool) throw new BadRequestException('工具未注册');
+
+    const rawArgs: Record<string, unknown> = {
+      titleZh: cleanKeyword,
+      titleEn: cleanKeyword,
+      descZh: `针对买家搜索需求「${cleanKeyword}」新增的草稿商品，请补充卖点与图片。`,
+      price: 0.01,
+      stock: 0,
+      ...(categoryId ? { categoryId } : {}),
+    };
+    const validation = validateToolArgs(tool, rawArgs);
+    if (!validation.ok) {
+      throw new BadRequestException(`参数不合法：${validation.errors.join('；')}`);
+    }
+
+    const summary = tool.summarize?.(validation.args) ?? `创建草稿商品 ${cleanKeyword}`;
+    const inserted = await this.db
+      .insert(copilotActions)
+      .values({
+        conversationId: conversation.id,
+        userId,
+        toolName: tool.name,
+        kind: 'write',
+        summary,
+        args: JSON.stringify(validation.args),
+        status: 'pending',
+      })
+      .returning();
+
+    const action = this.mapAction(inserted[0]);
+    await this.insertMessage({
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: `已生成待确认操作：${summary}。价格与标题是占位值，批准后请在「商品管理」里补全图片、卖点与真实售价。`,
+      toolName: tool.name,
+      toolArgs: JSON.stringify(validation.args),
+      actionId: action.id,
+    });
+
+    return { conversationId: conversation.id, action };
+  }
+
   // ==================== 工具目录 ====================
 
   getTools(): CopilotToolsView {

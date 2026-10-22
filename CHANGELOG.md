@@ -5,6 +5,31 @@
 
 ---
 
+## [1.14.0] — 2026-10-22
+
+定时巡检（零新依赖）+ 缺口一键建草稿 + 商品级漏斗。
+
+### Added
+- **定时巡检**：`CopilotWatchService`（Node 原生定时器，不引入 `@nestjs/schedule`）
+  - `GET/PUT /api/copilot/watch`（enabled / intervalMinutes 5-1440），`POST /api/copilot/watch/run` 手动触发
+  - 跨实例互斥：`ai_settings` 单行 `UPDATE ... WHERE updated_at < now() - lease` 原子租约
+  - 只对**新增**告警生成摘要（`diffNewInsights`），避免每轮重复提醒；摘要写日志，通知渠道留待接入
+- **缺口一键建草稿**：`POST /api/copilot/shopper-demand-gaps/draft` 生成 `create_draft_product` 待确认动作
+  - 新增副驾工具 `create_draft_product`（第 12 个工具，写操作，审批后创建 draft 商品）
+  - 批准前不落任何商品；批准后状态为 `draft`，价格/标题为占位值需人工补全
+- **商品级漏斗**：`GET /api/copilot/shopper-product-funnel?days=30`
+  - 每商品推荐/加购/下单会话数与加购转化率；下单阶段按 `order_items` + 会话归属联真实订单
+  - 导购工具结果新增 `productIds`，详情查看也计入"被推荐"
+- 前端：漏斗弹窗新增「商品级漏斗」表格与缺口「建草稿」按钮；巡检设置新增定时巡检开关/间隔/立即执行
+
+### Verification
+- 单测 109/109（新增 7 例：巡检摘要 diff、商品级漏斗转化率/空数据/除零）
+- `npm run lint` / `npm run type:check` / `npm run build` 全绿
+- `smoke:copilot` 13 步（新增定时巡检与建草稿）、`smoke:shopper` 9 步（新增商品级漏斗）、`smoke:workflows` 16 步全通过
+- 真浏览器：漏斗弹窗显示需求缺口（含建草稿按钮）与商品级漏斗表格；巡检设置显示定时巡检开关，控制台无错误
+
+---
+
 ## [1.13.0] — 2026-10-22
 
 需求缺口闭环：导购零结果搜索 → 卖家可分析 → 选品 Agent 真实需求输入。

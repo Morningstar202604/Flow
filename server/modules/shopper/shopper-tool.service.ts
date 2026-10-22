@@ -11,6 +11,8 @@ export interface ShopperToolResult {
   content: string;
   /** 检索类工具的结果条数（供转化漏斗区分"有结果"与"零结果"） */
   resultCount?: number;
+  /** 检索类工具命中的商品 ID（供商品级漏斗记录"被推荐"） */
+  productIds?: string[];
 }
 
 /**
@@ -170,6 +172,7 @@ export class ShopperToolService {
 
     return {
       ok: true,
+      productIds: [product.id],
       content: [
         `商品：${product.titleZh || product.titleEn}`,
         `描述：${(product.descZh || product.descEn || '暂无').slice(0, 300)}`,

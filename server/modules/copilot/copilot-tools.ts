@@ -261,6 +261,58 @@ export const COPILOT_TOOLS: readonly CopilotToolDefinition[] = [
     },
   },
   {
+    name: 'create_draft_product',
+    description: '创建一个草稿商品（仅卖家确认后执行；默认 draft 状态，不会直接上架）。用于把买家未满足需求转成待完善的上架草稿',
+    kind: 'write',
+    params: [
+      {
+        name: 'titleZh',
+        type: 'string',
+        description: '中文商品标题',
+        required: true,
+        maxLength: 200,
+      },
+      {
+        name: 'titleEn',
+        type: 'string',
+        description: '英文商品标题',
+        required: true,
+        maxLength: 200,
+      },
+      {
+        name: 'descZh',
+        type: 'string',
+        description: '中文卖点描述（可选）',
+        maxLength: 1000,
+      },
+      {
+        name: 'price',
+        type: 'number',
+        description: '建议售价（0.01-1000000）',
+        required: true,
+        min: 0.01,
+        max: 1000000,
+      },
+      {
+        name: 'stock',
+        type: 'number',
+        description: '初始库存（0-100000，默认 0，草稿阶段通常为 0）',
+        integer: true,
+        min: 0,
+        max: 100000,
+      },
+      {
+        name: 'categoryId',
+        type: 'string',
+        description: '分类 ID（可选；不确定时留空）',
+        maxLength: 36,
+        pattern: UUID_PATTERN,
+      },
+    ],
+    summarize: (args) =>
+      `创建草稿商品《${String(args.titleZh)}》，建议售价 $${String(args.price)}`,
+  },
+  {
     name: 'send_inquiry_reply',
     description: '以卖家身份回复买家咨询会话',
     kind: 'write',

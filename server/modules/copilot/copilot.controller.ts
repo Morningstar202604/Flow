@@ -17,10 +17,13 @@ import { Throttle } from '@nestjs/throttler';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuditService } from '../audit/audit.service';
 import { CopilotService } from './copilot.service';
+import { CopilotToolService } from './copilot-tool.service';
 import { CopilotInsightsService } from './copilot-insights.service';
+import { CopilotWatchService, type WatchSettings } from './copilot-watch.service';
 import { ShopperAnalyticsService } from '../shopper/shopper-analytics.service';
 import { sanitizeInsightThresholds } from './copilot-insight-thresholds';
 import type {
+  CopilotAction,
   CopilotActionResolveResult,
   CopilotBatchResolveResult,
   CopilotConversation,
@@ -31,6 +34,7 @@ import type {
   CopilotToolsView,
   ShopperDemandGap,
   ShopperFunnelResponse,
+  ShopperProductFunnelResponse,
 } from '../../../shared/api.interface';
 
 export class CreateConversationDto {
@@ -72,6 +76,29 @@ export class UpdateInsightThresholdsDto {
   staleShippedDays?: number;
 }
 
+export class UpdateWatchSettingsDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(1440)
+  intervalMinutes?: number;
+}
+
+export class CreateDraftFromGapDto {
+  @IsString()
+  @Length(1, 100)
+  keyword!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 60)
+  categoryId?: string;
+}
+
 export class ResolveActionDto {
   @IsBoolean()
   approve!: boolean;
@@ -93,6 +120,8 @@ export class CopilotController {
     private readonly copilotService: CopilotService,
     private readonly insightsService: CopilotInsightsService,
     private readonly shopperAnalytics: ShopperAnalyticsService,
+    private readonly watchService: CopilotWatchService,
+    private readonly toolService: CopilotToolService,
     private readonly auditService: AuditService,
   ) {}
 
@@ -127,6 +156,72 @@ export class CopilotController {
     return this.shopperAnalytics.getDemandGaps(
       Number.isFinite(parsedDays) ? parsedDays : 90,
       Number.isFinite(parsedLimit) ? parsedLimit : 10,
+    );
+  }
+
+  @Get('watch')
+  async getWatchSettings(): Promise<WatchSettings> {
+    return this.watchService.getSettings();
+  }
+
+  @Put('watch')
+  async updateWatchSettings(
+    @Req() req: Request,
+    @Body() dto: UpdateWatchSettingsDto,
+  ): Promise<WatchSettings> {
+    const actor = this.getActor(req);
+    const updated = await this.watchService.updateSettings(dto, actor.userId);
+    void this.auditService.log({
+      action: 'copilot.watch_update',
+      entity: 'ai_settings',
+      entityId: 'copilot_watch_settings',
+      after: { ...updated },
+      userId: actor.userId,
+      role: actor.role,
+    });
+    return updated;
+  }
+
+  @Post('watch/run')
+  async runWatchNow(@Req() req: Request): Promise<{ ran: boolean; message: string }> {
+    const actor = this.getActor(req);
+    const result = await this.watchService.runOnce(true);
+    void this.auditService.log({
+      action: 'copilot.watch_run',
+      entity: 'ai_settings',
+      entityId: 'copilot_watch_settings',
+      after: { ran: result.ran },
+      userId: actor.userId,
+      role: actor.role,
+    });
+    return result;
+  }
+
+  @Post('shopper-demand-gaps/draft')
+  async createDraftFromGap(
+    @Req() req: Request,
+    @Body() dto: CreateDraftFromGapDto,
+  ): Promise<CopilotAction & { conversationId: string }> {
+    const actor = this.getActor(req);
+    const result = await this.copilotService.createDraftFromGap(
+      actor.userId,
+      actor.role,
+      dto.keyword,
+      dto.categoryId,
+    );
+    return { ...result.action, conversationId: result.conversationId };
+  }
+
+  @Get('shopper-product-funnel')
+  async getShopperProductFunnel(
+    @Query('days') days?: string,
+    @Query('limit') limit?: string,
+  ): Promise<ShopperProductFunnelResponse> {
+    const parsedDays = days ? parseInt(days, 10) : 30;
+    const parsedLimit = limit ? parseInt(limit, 10) : 20;
+    return this.shopperAnalytics.getProductFunnel(
+      Number.isFinite(parsedDays) ? parsedDays : 30,
+      Number.isFinite(parsedLimit) ? parsedLimit : 20,
     );
   }
 
