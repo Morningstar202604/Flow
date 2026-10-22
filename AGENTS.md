@@ -117,12 +117,14 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - 商品级漏斗：`GET /api/copilot/shopper-product-funnel`（推荐/加购/下单会话 + 转化率）
 - 定时巡检：`CopilotWatchService` 原生定时器 + `ai_settings` 租约互斥；`GET/PUT /api/copilot/watch`、`POST /api/copilot/watch/run`
 - 巡检通知：`CopilotNotifyService` webhook（飞书/企微/钉钉/Slack 文本格式），失败降级不影响巡检
+- 通知可靠性：指数退避 3 次 + 连续失败 3 次熔断 5 分钟（`copilot-notify-retry.ts`）
+- 上架门禁：`product-publish-check.ts` 6 项校验；PATCH status=active 未通过返回 400
 - 草稿 AI 补全：批准 `create_draft_product` 后自动生成英文文案（失败不阻断创建）
 - 安全约束：`@RolesGuard(['seller','admin'])` 覆盖全部端点；未注册工具名直接拒绝；参数在执行前二次校验
 
 ## 验证入口
 
-- `npm run lint` / `npm run type:check` / `npm test`（114 例单测）/ `npm run build`
+- `npm run lint` / `npm run type:check` / `npm test`（125 例单测）/ `npm run build`
 - `npm run smoke:workflows`（16 步全业务工作流）/ `npm run smoke:degraded`（无 Key 降级）/ `npm run smoke`（19 步交易闭环）
 - `npm run smoke:copilot`（副驾：读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 巡检 → 多步计划 → 越权 403）
 - `npm run smoke:shopper`（导购：工具隔离 → 搜索/详情 → 加购确认 → 会话隔离）

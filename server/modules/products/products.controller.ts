@@ -37,6 +37,7 @@ import type {
   ProductListParams,
 } from '../../../shared/api.interface';
 import { ProductsService } from './products.service';
+import { evaluatePublishReadiness } from './product-publish-check';
 
 const PRODUCT_SORT_BY = ['price_asc', 'price_desc', 'sold_desc', 'newest'] as const;
 const PRODUCT_STATUS = ['draft', 'active', 'inactive'] as const;
@@ -339,6 +340,13 @@ export class ProductsController {
     const list = (ids ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 60);
     if (list.length === 0) return [];
     return this.productsService.findByIds(list, true);
+  }
+
+  @UseGuards(new RolesGuard(['seller', 'admin']))
+  @Get(':id/publish-readiness')
+  async getPublishReadiness(@Param('id') id: string) {
+    const product = await this.productsService.findOne(id);
+    return evaluatePublishReadiness(product);
   }
 
   @Get(':id')

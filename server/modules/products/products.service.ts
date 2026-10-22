@@ -10,6 +10,7 @@ import type {
   UpdateProductRequest,
 } from '../../../shared/api.interface';
 import { AuditService } from '../audit/audit.service';
+import { evaluatePublishReadiness } from './product-publish-check';
 import Papa from 'papaparse';
 
 export interface ImportFailure { row: number; reason: string; }
@@ -455,6 +456,16 @@ export class ProductsService {
         if (input.stock !== undefined) {
           patch.totalStock = input.stock;
         }
+      }
+    }
+
+    // 上架门禁：draft/inactive → active 必须先通过完整性校验（fail-closed）
+    if (input.status === 'active' && oldStatus !== 'active') {
+      const current = await this.findOne(id);
+      const readiness = evaluatePublishReadiness(current);
+      if (!readiness.ready) {
+        const missing = readiness.checks.filter((check) => !check.ok).map((check) => check.label).join('；');
+        throw new BadRequestException(`商品未满足上架条件：${missing}`);
       }
     }
 

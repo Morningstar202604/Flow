@@ -5,6 +5,29 @@
 
 ---
 
+## [1.16.0] — 2026-10-22
+
+通知可靠性（重试 + 熔断）与草稿上架门禁。
+
+### Added
+- **通知重试与熔断**（`copilot-notify-retry.ts` 纯函数 + `CopilotNotifyService` 集成）
+  - 指数退避重试：默认 3 次，间隔 400ms → 800ms，上限 4s
+  - 4xx（除 429）判定为永久失败，不重试（避免对着错误配置反复打）
+  - 连续失败 3 次熔断该通道 5 分钟，冷却后自动 half-open 重试；熔断状态写入巡检摘要
+- **草稿商品上架门禁**（`product-publish-check.ts`）
+  - 6 项 fail-closed 校验：中英文标题 / 商品图 / 售价 > 0 / 库存 > 0 / 描述 / 分类
+  - `PATCH /api/products/:id {status:'active'}` 未通过返回 400 并列出缺失项
+  - `GET /api/products/:id/publish-readiness` 供前端在编辑弹窗内实时展示检查清单
+  - 商品管理页状态开关失败时展示后端原因（此前只 console.error，点了没反应）
+
+### Verification
+- 单测 125/125（新增 11 例：退避序列/熔断状态机/成功重置、上架门禁 6 项规则与提示）
+- `npm run lint` / `npm run type:check` / `npm run build` 全绿
+- `smoke:copilot` 14 步（新增：缺图零库存被拒 → 补齐后通过 → active）、`smoke:shopper` 9 步、`smoke:workflows` 16 步全通过
+- 真浏览器：商品编辑弹窗显示"上架检查：1 项待补齐"及逐项 ✓/✗ 与修复提示，控制台无错误
+
+---
+
 ## [1.15.0] — 2026-10-22
 
 巡检通知外发 + 草稿商品 AI 补全 + 多副本互斥实测。

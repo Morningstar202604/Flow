@@ -347,7 +347,44 @@ try {
   assert((draftCopy.seo_keywords_en ?? '').length > 0, '英文 SEO 关键词应被补全');
   ok('需求缺口：一键建草稿 → 审批 → draft 状态 + AI 英文文案补全');
 
-  // ---------- 10. 越权 ----------
+  // ---------- 10. 上架门禁：草稿缺图/零库存不可上架，补齐后可上架 ----------
+  const draftId = afterDraftRows[0].id;
+  const gateBlocked = await api('PATCH', `/api/products/${draftId}`, {
+    cookie: seller.cookie,
+    json: { status: 'active' },
+    expect: [400],
+  });
+  assert(gateBlocked.status === 400, '缺图/零库存的草稿不应允许上架');
+
+  const readiness = await api('GET', `/api/products/${draftId}/publish-readiness`, { cookie: seller.cookie });
+  assert(readiness.body.ready === false, '就绪检查应判定未通过');
+  assert(readiness.body.blockingCount > 0, '应列出待补齐项');
+  assert(readiness.body.checks.some((c) => c.key === 'image' && !c.ok), '缺图应被识别');
+  assert(readiness.body.checks.some((c) => c.key === 'stock' && !c.ok), '零库存应被识别');
+
+  // 补齐：图 + 库存 + 描述（标题/价格/分类在上一步已具备）
+  const [gateCategory] = await sql`
+    INSERT INTO categories (name_zh, name_en, slug)
+    VALUES ('门禁类目', 'Gate Category', ${'gate-cat-' + runId}) RETURNING id`;
+  await sql`
+    UPDATE products
+    SET cover_image = ${'https://example.com/p-' + runId + '.png'}, total_stock = 10, category_id = ${gateCategory.id}
+    WHERE id = ${draftId}`;
+  await sql`
+    UPDATE product_variants SET stock = 10 WHERE product_id = ${draftId}`;
+  const readinessAfter = await api('GET', `/api/products/${draftId}/publish-readiness`, { cookie: seller.cookie });
+  assert(readinessAfter.body.ready === true, `补齐后就绪检查应通过，实际 ${JSON.stringify(readinessAfter.body.checks.filter((c) => !c.ok))}`);
+
+  const gatePassed = await api('PATCH', `/api/products/${draftId}`, {
+    cookie: seller.cookie,
+    json: { status: 'active' },
+  });
+  assert(gatePassed.status === 200, `补齐后应允许上架，实际 ${gatePassed.status}`);
+  const [published] = await sql`SELECT status FROM products WHERE id = ${draftId}`;
+  assert(published.status === 'active', `商品应为 active，实际 ${published.status}`);
+  ok('上架门禁：缺图零库存被拒 → 补齐后通过 → 状态 active');
+
+  // ---------- 11. 越权 ----------
   const forbidden = await api('GET', '/api/copilot/conversations', {
     cookie: buyer.cookie,
     expect: [403],

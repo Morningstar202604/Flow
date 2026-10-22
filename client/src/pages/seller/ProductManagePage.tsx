@@ -229,6 +229,7 @@ const ProductManagePage: React.FC = () => {
   };
 
   const handleEdit = (product: Product) => {
+    void loadReadiness(product.id);
     setEditingProduct(product);
     const firstVariant = product.variants[0];
     productForm.reset({
@@ -267,7 +268,28 @@ const ProductManagePage: React.FC = () => {
       await productsApi.updateProductStatus(product.id, newStatus);
       fetchProducts();
     } catch (err) {
-      console.error('更新商品状态失败', err);
+      // 上架门禁失败时把后端给出的缺失项直接展示，避免"点了没反应"
+      notifyError(err, '更新商品状态失败，请检查商品信息是否完整');
+    }
+  };
+
+  /** 编辑态商品的上架就绪检查（仅展示，不阻断保存） */
+  const [readiness, setReadiness] = useState<{
+    ready: boolean;
+    blockingCount: number;
+    checks: Array<{ key: string; label: string; ok: boolean; hint?: string }>;
+  } | null>(null);
+
+  const loadReadiness = async (productId: string): Promise<void> => {
+    try {
+      const res = await fetch(`/api/products/${productId}/publish-readiness`, {
+        credentials: 'include',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      });
+      if (!res.ok) return;
+      setReadiness(await res.json());
+    } catch {
+      setReadiness(null);
     }
   };
 
@@ -867,6 +889,25 @@ const ProductManagePage: React.FC = () => {
                   </FormItem>
                 )}
               />
+
+              {readiness && editingProduct && (
+                <div className={`rounded-lg border p-3 text-xs ${readiness.ready ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+                  <div className="mb-1 font-medium">
+                    {readiness.ready ? '上架检查：全部通过，可直接上架' : `上架检查：${readiness.blockingCount} 项待补齐`}
+                  </div>
+                  <ul className="space-y-0.5">
+                    {readiness.checks.map((check) => (
+                      <li key={check.key} className="flex items-start gap-1.5">
+                        <span className="mt-[1px]">{check.ok ? '✓' : '✗'}</span>
+                        <span className={check.ok ? 'opacity-70' : ''}>
+                          {check.label}
+                          {!check.ok && check.hint ? `（${check.hint}）` : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <DialogFooter>
                 <Button
