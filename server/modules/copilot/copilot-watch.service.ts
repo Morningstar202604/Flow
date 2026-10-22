@@ -5,7 +5,8 @@ import { aiSettings } from '../../database/schema';
 import { CopilotInsightsService } from './copilot-insights.service';
 import { CopilotNotifyService } from './copilot-notify.service';
 import type { SmtpConfig } from './copilot-notify-transport';
-import { diffNewInsights, formatInsightDigest } from './copilot-insight-digest';
+import { diffNewInsights } from './copilot-insight-digest';
+import { formatForChannel, renderDigest } from './copilot-digest-format';
 import type { CopilotInsight } from '../../../shared/api.interface';
 
 /** 巡检调度配置（存 ai_settings，键 copilot_watch_settings） */
@@ -158,10 +159,10 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
         const { insights } = await this.insightsService.getInsights();
         const previous = await this.readSnapshot();
         const newInsights = diffNewInsights(previous, insights);
-        const digest = formatInsightDigest(insights, newInsights);
+        const plainDigest = renderDigest({ insights, newInsights }, 'plain');
 
         await this.writeSnapshot(insights);
-        this.logger.log(digest.replace(/\n/g, ' | '));
+        this.logger.log(plainDigest.replace(/\n/g, ' | '));
 
         const settings = await this.getSettings();
         const channelReady = settings.notifyKind === 'email'
@@ -171,19 +172,23 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
         let notifyNote = '';
         if (shouldNotify) {
           const subject = renderSubject(settings.notifySubjectTemplate, insights, newInsights);
+          const channelKind = settings.notifyKind === 'email' ? 'email' : 'webhook';
+          const format = formatForChannel(channelKind);
+          const body = format === 'plain' ? plainDigest : renderDigest({ insights, newInsights }, format);
           const sent = await this.notifyService.send(
             settings.notifyKind === 'email'
               ? { kind: 'email', smtp: settings.notifySmtp }
               : { kind: 'webhook', url: settings.notifyUrl },
-            digest,
+            format === 'markdown' ? body : plainDigest,
             subject,
+            format === 'html' ? body : undefined,
           );
           notifyNote = sent.ok
             ? `（已推送${sent.channel === 'email' ? '邮件' : '通知'}）`
             : `（通知未发送：${sent.message}）`;
         }
 
-        return { ran: true, message: digest + notifyNote };
+        return { ran: true, message: plainDigest + notifyNote };
       } finally {
         await this.releaseLock();
       }

@@ -106,6 +106,7 @@ const CopilotPage: React.FC = () => {
   const [draftingKeyword, setDraftingKeyword] = useState<string | null>(null);
   const [auditResult, setAuditResult] = useState<Array<{ id: string; title: string; missing: string[] }> | null>(null);
   const [auditing, setAuditing] = useState<boolean>(false);
+  const [backfilling, setBackfilling] = useState<boolean>(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const fetchInsights = useCallback(async (): Promise<void> => {
@@ -205,6 +206,21 @@ const CopilotPage: React.FC = () => {
       notifyError(err, extractErrorMessage(err, '体检失败'));
     } finally {
       setAuditing(false);
+    }
+  };
+
+  const backfillAll = async (): Promise<void> => {
+    if (!auditResult || auditResult.length === 0) return;
+    try {
+      setBackfilling(true);
+      const results = await copilotApi.backfillProductCopy(auditResult.map((item) => item.id));
+      const okCount = results.filter((item) => item.ok && item.filled.length > 0).length;
+      toast.success(`已补全 ${okCount}/${results.length} 个商品文案${okCount < results.length ? '（其余需人工处理图片或库存）' : ''}`);
+      setAuditResult(await copilotApi.auditActiveProducts());
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '批量补全失败'));
+    } finally {
+      setBackfilling(false);
     }
   };
 
@@ -918,14 +934,26 @@ const CopilotPage: React.FC = () => {
               <div>
                 <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
                   <span>在售商品体检</span>
-                  <button
-                    type="button"
-                    className="text-xs font-normal text-[#00C2B8] hover:underline"
-                    onClick={() => void auditActive()}
-                    disabled={auditing}
-                  >
-                    {auditing ? '检查中…' : '立即检查'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {auditResult && auditResult.length > 0 && (
+                      <button
+                        type="button"
+                        className="text-xs font-normal text-indigo-600 hover:underline"
+                        onClick={() => void backfillAll()}
+                        disabled={backfilling}
+                      >
+                        {backfilling ? '补全中…' : '一键补全文案'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="text-xs font-normal text-[#00C2B8] hover:underline"
+                      onClick={() => void auditActive()}
+                      disabled={auditing}
+                    >
+                      {auditing ? '检查中…' : '立即检查'}
+                    </button>
+                  </div>
                 </div>
                 {auditResult === null ? (
                   <div className="text-xs text-slate-400">点击检查，找出信息不完整的历史在售商品</div>

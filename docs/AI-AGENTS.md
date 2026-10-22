@@ -132,6 +132,8 @@ Content-Type: application/json
 | 通知可靠性 | 指数退避重试（3 次，400ms→800ms，上限 4s）；连续失败 3 次熔断 5 分钟；4xx（除 429）视为永久失败不重试；熔断按通道隔离 |
 | 邮件通道 | `notifyKind=email` + `notifySmtp{host,port,secure,user,pass,from,to}`；nodemailer 惰性加载；主题模板支持 `{{count}}/{{critical}}/{{newCount}}` |
 | 上架体检 | `GET /api/products/audit/active?limit=200`：扫描 active 商品缺失项（只读，不自动改状态） |
+| 一键补全 | `POST /api/copilot/products/backfill-copy {ids}`：对体检出的商品批量生成英文标题/卖点/长描述/SEO（只补空缺字段，图片与库存仍需人工） |
+| 通知排版 | `copilot-digest-format.ts` 按渠道渲染：webhook=markdown（飞书/钉钉/企微）、email=HTML 表格、日志=plain；HTML 全字段转义 |
 | 草稿 AI 补全 | 批准 `create_draft_product` 后自动调 CopywriterAgent 生成英文标题/卖点/长描述/SEO 并写回；模型未配置时诚实降级提示 |
 | 上架门禁 | `PATCH /api/products/:id {status:'active'}` 前校验 6 项（中英标题/图片/售价/库存/描述/分类），未通过返回 400 并列出缺失项；`GET /api/products/:id/publish-readiness` 供前端预览 |
 

@@ -11,13 +11,15 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, Length, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, Length, Matches, Max, MaxLength, Min } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuditService } from '../audit/audit.service';
 import { CopilotService } from './copilot.service';
 import { CopilotToolService } from './copilot-tool.service';
+import { ProductsService } from '../products/products.service';
+import { CopywriterService } from '../ai/copywriter.service';
 import { CopilotInsightsService } from './copilot-insights.service';
 import { CopilotWatchService, type WatchSettings } from './copilot-watch.service';
 import { ShopperAnalyticsService } from '../shopper/shopper-analytics.service';
@@ -111,6 +113,12 @@ export class UpdateWatchSettingsDto {
   notifySubjectTemplate?: string;
 }
 
+export class BackfillCopyDto {
+  @IsArray()
+  @IsString({ each: true })
+  ids!: string[];
+}
+
 export class CreateDraftFromGapDto {
   @IsString()
   @Length(1, 100)
@@ -145,6 +153,8 @@ export class CopilotController {
     private readonly shopperAnalytics: ShopperAnalyticsService,
     private readonly watchService: CopilotWatchService,
     private readonly toolService: CopilotToolService,
+    private readonly productsService: ProductsService,
+    private readonly copywriterService: CopywriterService,
     private readonly auditService: AuditService,
   ) {}
 
@@ -236,6 +246,23 @@ export class CopilotController {
       dto.categoryId,
     );
     return { ...result.action, conversationId: result.conversationId };
+  }
+
+  @Post('products/backfill-copy')
+  async backfillCopy(
+    @Req() req: Request,
+    @Body() dto: BackfillCopyDto,
+  ): Promise<Array<{ id: string; title: string; ok: boolean; filled: string[]; message?: string }>> {
+    const actor = this.getActor(req);
+    return this.productsService.backfillCopy(
+      dto.ids,
+      actor,
+      (input) => this.copywriterService.generate({
+        productNameZh: input.productNameZh,
+        category: input.category,
+        targetMarket: '北美市场',
+      }, actor.userId),
+    );
   }
 
   @Get('shopper-product-funnel')

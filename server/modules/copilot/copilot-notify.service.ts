@@ -41,7 +41,12 @@ export class CopilotNotifyService {
 
   constructor(private readonly transport: NotifyTransport) {}
 
-  async send(config: NotifyConfig, text: string, subject = '店铺巡检报告'): Promise<NotifyResult> {
+  async send(
+    config: NotifyConfig,
+    text: string,
+    subject = '店铺巡检报告',
+    html?: string,
+  ): Promise<NotifyResult> {
     if (config.kind === 'none') {
       return { ok: false, channel: 'none', message: '未配置通知渠道', permanent: true };
     }
@@ -55,7 +60,7 @@ export class CopilotNotifyService {
 
     let last: NotifyResult = { ok: false, channel: config.kind, message: '未执行' };
     for (let attempt = 1; attempt <= this.policy.maxAttempts; attempt += 1) {
-      last = await this.transport.deliver(config, subject, text);
+      last = await this.transport.deliver(config, subject, text, html);
       if (last.ok) {
         this.breakers.set(key, recordSuccess());
         return { ...last, attempts: attempt };

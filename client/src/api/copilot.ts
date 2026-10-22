@@ -160,3 +160,13 @@ export async function auditActiveProducts(limit = 200): Promise<Array<{ id: stri
   );
   return data;
 }
+
+export async function backfillProductCopy(
+  ids: string[],
+): Promise<Array<{ id: string; title: string; ok: boolean; filled: string[]; message?: string }>> {
+  const { data } = await http.post<Array<{ id: string; title: string; ok: boolean; filled: string[]; message?: string }>>(
+    '/api/copilot/products/backfill-copy',
+    { ids },
+  );
+  return data;
+}

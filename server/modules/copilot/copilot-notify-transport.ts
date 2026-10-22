@@ -41,12 +41,12 @@ export class NotifyTransport {
   /** 惰性加载，避免未配置邮件时也引入 nodemailer */
   private nodemailer: typeof import('nodemailer') | null = null;
 
-  async deliver(config: NotifyConfig, subject: string, text: string): Promise<NotifyResult> {
+  async deliver(config: NotifyConfig, subject: string, text: string, html?: string): Promise<NotifyResult> {
     if (config.kind === 'none') {
       return { ok: false, channel: 'none', message: '未配置通知渠道', permanent: true };
     }
     if (config.kind === 'webhook') return this.sendWebhook(config.url, text);
-    return this.sendEmail(config.smtp, subject, text);
+    return this.sendEmail(config.smtp, subject, text, html);
   }
 
   private async sendWebhook(url: string | undefined, text: string): Promise<NotifyResult> {
@@ -90,6 +90,7 @@ export class NotifyTransport {
     smtp: SmtpConfig | undefined,
     subject: string,
     text: string,
+    html?: string,
   ): Promise<NotifyResult> {
     if (!smtp?.host || !smtp.from || !smtp.to) {
       return { ok: false, channel: 'email', message: 'SMTP 配置不完整（需 host/from/to）', permanent: true };
@@ -115,6 +116,7 @@ export class NotifyTransport {
         to: smtp.to,
         subject,
         text,
+        ...(html ? { html } : {}),
       });
       return { ok: true, channel: 'email', message: '邮件已发送' };
     } catch (error: unknown) {

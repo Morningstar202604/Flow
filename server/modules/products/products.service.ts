@@ -524,6 +524,78 @@ export class ProductsService {
     return results;
   }
 
+  /**
+   * 批量补全：对信息不完整的在售/草稿商品调用 AI 文案生成并写回。
+   * 只补「文案类」缺失（描述/卖点/SEO/英文标题），图片与库存仍需人工处理。
+   * 返回逐条结果，失败不抛出（单品失败不影响其余）。
+   */
+  async backfillCopy(
+    ids: string[],
+    actor: { userId: string; role?: string },
+    generate: (input: { productNameZh: string; category?: string }) => Promise<{
+      titleEn?: string;
+      bulletPoints?: string[];
+      longDescription?: string;
+      seoKeywords?: string;
+    }>,
+    limit = 20,
+  ): Promise<Array<{ id: string; title: string; ok: boolean; filled: string[]; message?: string }>> {
+    const targets = ids.slice(0, Math.max(1, Math.min(50, limit)));
+    const results: Array<{ id: string; title: string; ok: boolean; filled: string[]; message?: string }> = [];
+
+    for (const id of targets) {
+      try {
+        const product = await this.findOne(id);
+        const filled: string[] = [];
+
+        const copy = await generate({
+          productNameZh: product.titleZh || product.titleEn,
+          category: product.categoryNameZh,
+        });
+
+        const patch: Record<string, unknown> = {};
+        if (copy.titleEn && !product.titleEn.trim()) {
+          patch.titleEn = copy.titleEn.slice(0, 200);
+          filled.push('英文标题');
+        }
+        if (copy.longDescription && !product.longDescEn.trim()) {
+          patch.longDescEn = copy.longDescription;
+          filled.push('长描述');
+        }
+        if (copy.bulletPoints?.length && product.bulletPointsEn.length === 0) {
+          patch.bulletPointsEn = copy.bulletPoints;
+          filled.push('卖点');
+        }
+        if (copy.seoKeywords && !product.seoKeywordsEn.trim()) {
+          patch.seoKeywordsEn = copy.seoKeywords;
+          filled.push('SEO 关键词');
+        }
+
+        if (Object.keys(patch).length > 0) {
+          await this.update(id, patch, actor.userId, { role: actor.role });
+        }
+
+        results.push({
+          id,
+          title: product.titleZh || product.titleEn,
+          ok: true,
+          filled,
+          message: filled.length === 0 ? '无需补全' : undefined,
+        });
+      } catch (error: unknown) {
+        results.push({
+          id,
+          title: id.slice(0, 8),
+          ok: false,
+          filled: [],
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return results;
+  }
+
   async remove(id: string): Promise<{ id: string }> {
     const deleted = await this.db.delete(products).where(eq(products.id, id)).returning({ id: products.id });
     if (deleted.length === 0) throw new NotFoundException('商品不存在');

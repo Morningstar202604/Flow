@@ -1,6 +1,6 @@
 {
   "name": "flow",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "description": "AI 原生跨境出货台 · AI-Native Cross-Border Commerce Platform",
   "license": "MIT",
   "private": true,
@@ -120,6 +120,7 @@
     "concurrently": "^9.2.1",
     "drizzle-kit": "^0.30.6",
     "echarts-for-react": "^3.0.6",
+    "embedded-postgres": "^17.5.0-beta.15",
     "eslint": "^9.35.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "input-otp": "^1.5.0",

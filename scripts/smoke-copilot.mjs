@@ -427,7 +427,37 @@ try {
   }
   ok(`在售商品体检：${audit.body.length} 个商品信息不完整`);
 
-  // ---------- 13. 越权 ----------
+  // ---------- 13. 一键补全文案（体检结果批量 AI 补全） ----------
+  const incomplete = audit.body.slice(0, 2).map((item) => item.id);
+  if (incomplete.length > 0) {
+    const beforeRows = await sql`
+      SELECT id, long_desc_en, bullet_points_en FROM products WHERE id IN ${sql(incomplete)}`;
+    const beforeEmpty = beforeRows.filter(
+      (row) => !row.long_desc_en || (Array.isArray(row.bullet_points_en) && row.bullet_points_en.length === 0),
+    ).length;
+
+    const backfill = await api('POST', '/api/copilot/products/backfill-copy', {
+      cookie: seller.cookie,
+      json: { ids: incomplete },
+    });
+    assert(Array.isArray(backfill.body), '补全接口应返回数组');
+    assert(backfill.body.length === incomplete.length, '每条都应有结果');
+    assert(backfill.body.every((item) => typeof item.ok === 'boolean'), '每条应带 ok 状态');
+
+    const afterRows = await sql`
+      SELECT id, long_desc_en, bullet_points_en FROM products WHERE id IN ${sql(incomplete)}`;
+    const afterEmpty = afterRows.filter(
+      (row) => !row.long_desc_en || (Array.isArray(row.bullet_points_en) && row.bullet_points_en.length === 0),
+    ).length;
+    if (beforeEmpty > 0) {
+      assert(afterEmpty < beforeEmpty, `补全后空缺项应减少（前 ${beforeEmpty} → 后 ${afterEmpty}）`);
+    }
+    ok(`一键补全文案：${backfill.body.filter((r) => r.ok && r.filled.length > 0).length}/${backfill.body.length} 个商品已补全`);
+  } else {
+    ok('一键补全文案：跳过（无待补商品）');
+  }
+
+  // ---------- 14. 越权 ----------
   const forbidden = await api('GET', '/api/copilot/conversations', {
     cookie: buyer.cookie,
     expect: [403],
