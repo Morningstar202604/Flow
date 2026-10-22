@@ -630,6 +630,15 @@ export interface ShopperTopQuery {
   count: number;
 }
 
+export interface ShopperDemandGap {
+  keyword: string;
+  /** 该词零结果的搜索次数 */
+  misses: number;
+  /** 涉及的去重会话数 */
+  sessions: number;
+  lastSeenAt: string;
+}
+
 export interface ShopperFunnelResponse {
   since: string;
   days: number;

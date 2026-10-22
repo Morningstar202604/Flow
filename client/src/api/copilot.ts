@@ -8,6 +8,7 @@ import type {
   CopilotInsightsView,
   CopilotSendResult,
   CopilotToolsView,
+  ShopperDemandGap,
   ShopperFunnelResponse,
   UpdateCopilotInsightThresholdsRequest,
 } from '@shared/api.interface';
@@ -90,5 +91,12 @@ export async function updateCopilotInsightThresholds(
 
 export async function getShopperFunnel(days = 30): Promise<ShopperFunnelResponse> {
   const { data } = await http.get<ShopperFunnelResponse>('/api/copilot/shopper-funnel', { params: { days } });
+  return data;
+}
+
+export async function getShopperDemandGaps(days = 90): Promise<ShopperDemandGap[]> {
+  const { data } = await http.get<ShopperDemandGap[]>('/api/copilot/shopper-demand-gaps', {
+    params: { days, limit: 10 },
+  });
   return data;
 }

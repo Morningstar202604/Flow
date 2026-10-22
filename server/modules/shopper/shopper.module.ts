@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
-import { AiModule } from '../ai/ai.module';
+
 import { CartModule } from '../cart/cart.module';
 import { CategoriesModule } from '../categories/categories.module';
+import { AiModule } from '../ai/ai.module';
 import { ShopperController } from './shopper.controller';
 import { ShopperAnalyticsService } from './shopper-analytics.service';
 import { ShopperService } from './shopper.service';

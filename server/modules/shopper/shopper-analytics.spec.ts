@@ -68,3 +68,69 @@ describe('ShopperAnalyticsService.getFunnel', () => {
     expect((await service.getFunnel(0)).days).toBe(1);
   });
 });
+
+// 行为契约（R13）：需求缺口按搜索次数排序，且只统计零结果搜索
+describe('ShopperAnalyticsService.getDemandGaps', () => {
+  it('R13: 返回关键词、次数、去重会话与最近时间', async () => {
+    const rows = [{ keyword: '机械键盘', misses: 4, sessions: 3, lastSeenAt: '2026-10-21 10:00:00+00' }];
+    const db = {
+      select: () => {
+        const builder = {
+          from: () => builder,
+          where: () => builder,
+          groupBy: () => builder,
+          orderBy: () => builder,
+          limit: async () => rows,
+        };
+        return builder;
+      },
+    } as unknown as Database;
+    const service = new ShopperAnalyticsService(db);
+
+    const gaps = await service.getDemandGaps(90, 10);
+
+    expect(gaps).toEqual([
+      { keyword: '机械键盘', misses: 4, sessions: 3, lastSeenAt: '2026-10-21 10:00:00+00' },
+    ]);
+  });
+
+  it('R13: 空关键词行被过滤', async () => {
+    const rows = [{ keyword: null, misses: 2, sessions: 1, lastSeenAt: 'x' }];
+    const db = {
+      select: () => {
+        const builder = {
+          from: () => builder,
+          where: () => builder,
+          groupBy: () => builder,
+          orderBy: () => builder,
+          limit: async () => rows,
+        };
+        return builder;
+      },
+    } as unknown as Database;
+    const service = new ShopperAnalyticsService(db);
+    expect(await service.getDemandGaps()).toEqual([]);
+  });
+
+  it('R13: limit 被裁剪到 1-50', async () => {
+    let observedLimit = 0;
+    const db = {
+      select: () => {
+        const builder = {
+          from: () => builder,
+          where: () => builder,
+          groupBy: () => builder,
+          orderBy: () => builder,
+          limit: async (n: number) => {
+            observedLimit = n;
+            return [];
+          },
+        };
+        return builder;
+      },
+    } as unknown as Database;
+    const service = new ShopperAnalyticsService(db);
+    await service.getDemandGaps(30, 9999);
+    expect(observedLimit).toBe(50);
+  });
+});

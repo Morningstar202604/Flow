@@ -9,6 +9,8 @@ import { CategoriesService } from '../categories/categories.service';
 export interface ShopperToolResult {
   ok: boolean;
   content: string;
+  /** 检索类工具的结果条数（供转化漏斗区分"有结果"与"零结果"） */
+  resultCount?: number;
 }
 
 /**
@@ -102,7 +104,7 @@ export class ShopperToolService {
       .limit(limit);
 
     if (rows.length === 0) {
-      return { ok: true, content: `没有找到与"${keyword}"相关的在售商品。` };
+      return { ok: true, content: `没有找到与"${keyword}"相关的在售商品。`, resultCount: 0 };
     }
 
     const prices = await this.priceRangeFor(rows.map((row) => row.id));
@@ -114,7 +116,11 @@ export class ShopperToolService {
         : '暂无评分';
       return `- ${row.titleZh || row.titleEn}｜${range ?? '价格见详情'}｜${stockText}｜${rating}｜id=${row.id}`;
     });
-    return { ok: true, content: `找到 ${rows.length} 个商品：\n${lines.join('\n')}` };
+    return {
+      ok: true,
+      content: `找到 ${rows.length} 个商品：\n${lines.join('\n')}`,
+      resultCount: rows.length,
+    };
   }
 
   private async listCategories(): Promise<ShopperToolResult> {

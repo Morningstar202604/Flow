@@ -203,6 +203,15 @@ function shopperContent(body) {
     return JSON.stringify({ tool: 'add_to_cart', args: { productId, quantity: 1 }, thought: '把搜索到的商品加入购物车' });
   }
 
+  // 明确要"没有的商品"时用该词搜索，制造零结果 → 记录需求缺口
+  const missingMatch = /没有的(?:商品)?[：:]?\s*([^\s，。,]{2,10})/.exec(lastUser);
+  if (missingMatch) {
+    if (seen.includes('search_products')) {
+      return JSON.stringify({ final: '抱歉，店里暂时没有这类商品，我已记下你的需求。' });
+    }
+    return JSON.stringify({ tool: 'search_products', args: { keyword: missingMatch[1], limit: 3 }, thought: '搜索买家指定商品' });
+  }
+
   if (lastUser.includes('耳机') || lastUser.includes('推荐') || lastUser.includes('找')) {
     if (seen.includes('search_products') && productId && !seen.includes('get_product_detail')) {
       return JSON.stringify({ tool: 'get_product_detail', args: { productId }, thought: '查看首条结果详情' });
@@ -212,6 +221,7 @@ function shopperContent(body) {
     }
     return JSON.stringify({ tool: 'search_products', args: { keyword: '耳机', limit: 3 }, thought: '搜索耳机' });
   }
+
 
   if (lastUser.includes('分类') || lastUser.includes('卖什么')) {
     if (seen.includes('list_categories')) return JSON.stringify({ final: '以上是店铺分类。' });

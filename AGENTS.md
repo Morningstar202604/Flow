@@ -112,11 +112,12 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - 多步计划：同轮写动作共享 `batchId`，`POST /api/copilot/batches/:batchId/resolve` 整批按序执行、失败即停
 - 巡检阈值：`ai_settings` 键 `copilot_insight_thresholds`，GET/PUT `/api/copilot/insights/thresholds`
 - 导购漏斗：`shopper_events` 打点 + `GET /api/copilot/shopper-funnel`（下单阶段联真实订单）
+- 需求缺口：零结果搜索记 `search_miss`；`GET /api/copilot/shopper-demand-gaps`；SelectAgent 自动注入近 90 天缺口
 - 安全约束：`@RolesGuard(['seller','admin'])` 覆盖全部端点；未注册工具名直接拒绝；参数在执行前二次校验
 
 ## 验证入口
 
-- `npm run lint` / `npm run type:check` / `npm test`（99 例单测）/ `npm run build`
+- `npm run lint` / `npm run type:check` / `npm test`（102 例单测）/ `npm run build`
 - `npm run smoke:workflows`（16 步全业务工作流）/ `npm run smoke:degraded`（无 Key 降级）/ `npm run smoke`（19 步交易闭环）
 - `npm run smoke:copilot`（副驾：读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 巡检 → 多步计划 → 越权 403）
 - `npm run smoke:shopper`（导购：工具隔离 → 搜索/详情 → 加购确认 → 会话隔离）

@@ -41,6 +41,7 @@ import type {
   CopilotInsightThresholds,
   CopilotInsightsView,
   CopilotMessage,
+  ShopperDemandGap,
   ShopperFunnelResponse,
 } from '@shared/api.interface';
 import { toast } from 'sonner';
@@ -79,6 +80,7 @@ const CopilotPage: React.FC = () => {
   const [funnel, setFunnel] = useState<ShopperFunnelResponse | null>(null);
   const [funnelLoading, setFunnelLoading] = useState<boolean>(false);
   const [funnelOpen, setFunnelOpen] = useState<boolean>(false);
+  const [demandGaps, setDemandGaps] = useState<ShopperDemandGap[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const fetchInsights = useCallback(async (): Promise<void> => {
@@ -97,7 +99,12 @@ const CopilotPage: React.FC = () => {
     if (funnel) return;
     try {
       setFunnelLoading(true);
-      setFunnel(await copilotApi.getShopperFunnel(30));
+      const [funnelData, gaps] = await Promise.all([
+        copilotApi.getShopperFunnel(30),
+        copilotApi.getShopperDemandGaps(90),
+      ]);
+      setFunnel(funnelData);
+      setDemandGaps(gaps);
     } catch (err) {
       notifyError(err, '读取导购漏斗失败');
     } finally {
@@ -735,6 +742,37 @@ const CopilotPage: React.FC = () => {
                 <span className="ml-1 font-semibold text-[#0B1F3A]">
                   {(funnel.overallConversion * 100).toFixed(1)}%
                 </span>
+              </div>
+              <div>
+                <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
+                  <span>需求缺口（搜索零结果的词，近 90 天）</span>
+                  {demandGaps.length > 0 && (
+                    <button
+                      type="button"
+                      className="text-xs font-normal text-[#00C2B8] hover:underline"
+                      onClick={() => {
+                        setFunnelOpen(false);
+                        void handleSend(
+                          `买家在导购里搜了这些词但店里没有：${demandGaps.map((gap) => gap.keyword).join('、')}。请基于真实需求给出补货/上架建议`,
+                        );
+                      }}
+                    >
+                      让副驾分析
+                    </button>
+                  )}
+                </div>
+                {demandGaps.length === 0 ? (
+                  <div className="text-xs text-slate-400">暂无零结果搜索</div>
+                ) : (
+                  <div className="space-y-1">
+                    {demandGaps.map((gap) => (
+                      <div key={gap.keyword} className="flex items-center justify-between rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                        <span>{gap.keyword}</span>
+                        <span className="text-amber-700">{gap.misses} 次 · {gap.sessions} 人</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-slate-600">买家热搜词 TOP 10</div>

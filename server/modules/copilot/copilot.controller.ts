@@ -29,6 +29,7 @@ import type {
   CopilotInsightsView,
   CopilotSendResult,
   CopilotToolsView,
+  ShopperDemandGap,
   ShopperFunnelResponse,
 } from '../../../shared/api.interface';
 
@@ -114,6 +115,19 @@ export class CopilotController {
     const parsed = days ? parseInt(days, 10) : 30;
     const safeDays = Number.isFinite(parsed) ? Math.min(365, Math.max(1, parsed)) : 30;
     return this.shopperAnalytics.getFunnel(safeDays);
+  }
+
+  @Get('shopper-demand-gaps')
+  async getShopperDemandGaps(
+    @Query('days') days?: string,
+    @Query('limit') limit?: string,
+  ): Promise<ShopperDemandGap[]> {
+    const parsedDays = days ? parseInt(days, 10) : 90;
+    const parsedLimit = limit ? parseInt(limit, 10) : 10;
+    return this.shopperAnalytics.getDemandGaps(
+      Number.isFinite(parsedDays) ? parsedDays : 90,
+      Number.isFinite(parsedLimit) ? parsedLimit : 10,
+    );
   }
 
   @Get('insights/thresholds')

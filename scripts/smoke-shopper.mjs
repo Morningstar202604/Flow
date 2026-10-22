@@ -157,6 +157,30 @@ try {
   assert(orderedAfter >= 1, `下单阶段应识别到该会话订单，实际 ${orderedAfter}`);
   ok(`导购漏斗：打开 ${stageMap.viewed} → 推荐 ${stageMap.recommended} → 加购 ${stageMap.cart_confirmed} → 下单 ${orderedAfter}`);
 
+  // 零结果搜索 → 需求缺口（不污染 recommended 阶段）
+  // 用新会话：同一会话已有 search_products 历史，会干扰"首轮搜索"判定
+  const missConversation = await api('POST', '/api/shopper/conversations', { json: {} });
+  const missKeyword = `机械键盘${runId.slice(-4)}`;
+  const missRes = await api('POST', `/api/shopper/conversations/${missConversation.body.id}/messages`, {
+    json: { content: `帮我找一下没有的商品：${missKeyword}` },
+    expect: [200, 201],
+  });
+  assert(missRes.status === 201, `零结果搜索应正常返回，实际 ${missRes.status}`);
+
+  const gaps = await (async () => {
+    const res = await fetch(`${BASE}/api/copilot/shopper-demand-gaps?days=90`, {
+      headers: { Cookie: seller.cookie },
+    });
+    return res.json();
+  })();
+  assert(Array.isArray(gaps), '需求缺口接口应返回数组');
+  assert(gaps.some((gap) => gap.keyword === missKeyword), `缺口应包含刚搜的零结果词 ${missKeyword}，实际 ${JSON.stringify(gaps)}`);
+  assert(gaps.every((gap) => typeof gap.keyword === 'string' && gap.misses > 0), '每条缺口应有关键词与次数');
+  if (gaps.length > 1) {
+    assert(gaps[0].misses >= gaps[1].misses, '缺口应按搜索次数降序');
+  }
+  ok(`需求缺口：${gaps.length} 个零结果关键词`);
+
   // 会话隔离
   const foreign = await api('GET', `/api/shopper/conversations/${conversationId}`, {
     sessionId: `other-${runId}-session-9999`,

@@ -301,10 +301,12 @@ ${buildToolCatalog(SHOPPER_TOOLS)}
         toolTrace.push({ tool: tool.name, kind: 'read', ok: result.ok });
 
         if (tool.name === 'search_products') {
+          // 零结果单独记 search_miss：这是"买家在找但店里没有"的需求信号，喂给选品 Agent
+          const resultCount = result.resultCount ?? 0;
           await this.analytics.track({
             userId: ctx.userId ?? null,
             sessionId: ctx.sessionId ?? null,
-            stage: 'recommended',
+            stage: resultCount > 0 ? 'recommended' : 'search_miss',
             conversationId,
             keyword: String(validation.args.keyword ?? ''),
           });

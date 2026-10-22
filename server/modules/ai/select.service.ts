@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq, desc, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService } from './ai-gateway.service';
 import { parseLlmJson } from './llm-json';
-import { products, productVariants, categories } from '../../database/schema';
+import { products, productVariants, categories, shopperEvents } from '../../database/schema';
 import type { AISelectResponse } from '../../../shared/api.interface';
 
 @Injectable()
@@ -61,9 +61,14 @@ export class SelectService {
 
     const systemPrompt = '你是专业的跨境电商选品专家，擅长基于销售数据和市场趋势给出选品建议。请用中文输出严格的 JSON 格式。';
 
+    // 真实需求信号：买家在导购里搜了但店里没有的词（查不到就静默降级，不影响选品）
+    const demandGapSection = await this.buildDemandGapSection();
+
     const userPrompt = `基于以下店铺现有类目和销售数据，推荐 5-8 个值得上架的细分品。
 
-## 现有数据
+${demandGapSection ? `${demandGapSection}
+
+` : ''}## 现有数据
 ${dataContext}
 
 ## 输出格式要求
@@ -95,5 +100,37 @@ confidence 是 0-1 之间的数字，表示推荐置信度。
     return {
       items: Array.isArray(parsed.items) ? parsed.items : [],
     };
+  }
+
+  /** 近 90 天导购零结果搜索 → 提示词段落；无数据/查询失败时返回空串 */
+  private async buildDemandGapSection(): Promise<string> {
+    try {
+      const since = new Date(Date.now() - 90 * 24 * 3600 * 1000);
+      const rows = await this.db
+        .select({
+          keyword: shopperEvents.keyword,
+          misses: sql<number>`COUNT(*)::int`,
+          sessions: sql<number>`COUNT(DISTINCT COALESCE(${shopperEvents.userId}::text, ${shopperEvents.sessionId}))::int`,
+        })
+        .from(shopperEvents)
+        .where(and(
+          eq(shopperEvents.stage, 'search_miss'),
+          gte(shopperEvents.createdAt, since),
+          sql`${shopperEvents.keyword} IS NOT NULL`,
+          sql`${shopperEvents.keyword} <> ''`,
+        ))
+        .groupBy(shopperEvents.keyword)
+        .orderBy(sql`COUNT(*) DESC`)
+        .limit(10);
+
+      if (rows.length === 0) return '';
+      return [
+        '## 真实买家未满足需求（来自导购搜索零结果，按需求强度排序）',
+        ...rows.map((row) => `- ${row.keyword}（搜索 ${Number(row.misses)} 次，${Number(row.sessions)} 位买家，零结果）`),
+        '请在推荐中优先考虑这些词对应的细分品（这是本店真实的未成交需求）。',
+      ].join('\n');
+    } catch {
+      return '';
+    }
   }
 }

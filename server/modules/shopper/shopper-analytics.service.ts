@@ -1,14 +1,15 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { orders, shopperEvents } from '../../database/schema';
 import type {
+  ShopperDemandGap,
   ShopperFunnelResponse,
   ShopperFunnelStage,
   ShopperTopQuery,
 } from '../../../shared/api.interface';
 
-export type ShopperStage = 'viewed' | 'recommended' | 'cart_confirmed' | 'ordered';
+export type ShopperStage = 'viewed' | 'recommended' | 'search_miss' | 'cart_confirmed' | 'ordered';
 
 /**
  * 导购转化漏斗：只做"阶段打点 + 去重计数"，不采集搜索词以外的个人信息。
@@ -44,6 +45,43 @@ export class ShopperAnalyticsService {
         `导购埋点写入失败（${params.stage}）：${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  /**
+   * 需求缺口：搜索零结果的词（按出现次数降序）。
+   * 这是"买家在找、店里没有"的直接信号，供选品 Agent 与卖家补货参考。
+   */
+  async getDemandGaps(days = 30, limit = 10): Promise<ShopperDemandGap[]> {
+    const safeDays = Math.max(1, Math.min(365, Math.round(days)));
+    const safeLimit = Math.max(1, Math.min(50, Math.round(limit)));
+    const since = new Date(Date.now() - safeDays * 24 * 3600 * 1000);
+
+    const rows = await this.db
+      .select({
+        keyword: shopperEvents.keyword,
+        misses: sql<number>`COUNT(*)::int`,
+        sessions: sql<number>`COUNT(DISTINCT COALESCE(${shopperEvents.userId}::text, ${shopperEvents.sessionId}))::int`,
+        lastSeenAt: sql<string>`MAX(${shopperEvents.createdAt})::text`,
+      })
+      .from(shopperEvents)
+      .where(and(
+        eq(shopperEvents.stage, 'search_miss'),
+        gte(shopperEvents.createdAt, since),
+        sql`${shopperEvents.keyword} IS NOT NULL`,
+        sql`${shopperEvents.keyword} <> ''`,
+      ))
+      .groupBy(shopperEvents.keyword)
+      .orderBy(sql`COUNT(*) DESC`)
+      .limit(safeLimit);
+
+    return rows
+      .filter((row) => !!row.keyword)
+      .map((row) => ({
+        keyword: row.keyword as string,
+        misses: Number(row.misses),
+        sessions: Number(row.sessions),
+        lastSeenAt: row.lastSeenAt,
+      }));
   }
 
   /** 漏斗统计（近 N 天），返回各阶段去重会话数、转化率与热词 */
