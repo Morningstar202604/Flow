@@ -11,7 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, Length, Matches, Max, MaxLength, Min } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -88,8 +88,8 @@ export class UpdateWatchSettingsDto {
   intervalMinutes?: number;
 
   @IsOptional()
-  @IsIn(['webhook', 'none'])
-  notifyKind?: 'webhook' | 'none';
+  @IsIn(['webhook', 'email', 'none'])
+  notifyKind?: 'webhook' | 'email' | 'none';
 
   @IsOptional()
   @IsString()
@@ -100,6 +100,15 @@ export class UpdateWatchSettingsDto {
   @IsOptional()
   @IsBoolean()
   notifyOnlyOnNew?: boolean;
+
+  @IsOptional()
+  @IsObject()
+  notifySmtp?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  notifySubjectTemplate?: string;
 }
 
 export class CreateDraftFromGapDto {
@@ -184,7 +193,10 @@ export class CopilotController {
     @Body() dto: UpdateWatchSettingsDto,
   ): Promise<WatchSettings> {
     const actor = this.getActor(req);
-    const updated = await this.watchService.updateSettings(dto, actor.userId);
+    const updated = await this.watchService.updateSettings(
+      dto as unknown as Partial<import('./copilot-watch.service').WatchSettings>,
+      actor.userId,
+    );
     void this.auditService.log({
       action: 'copilot.watch_update',
       entity: 'ai_settings',

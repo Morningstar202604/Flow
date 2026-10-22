@@ -493,6 +493,37 @@ export class ProductsService {
 
   // ── Delete product ───────────────────────────
 
+  /**
+   * 批量上架体检：扫描已有 active 商品（历史遗留可能不完整），
+   * 返回不合规商品与缺失项。只读，不自动改状态——由卖家决定下架或补齐。
+   */
+  async auditActiveProducts(limit = 200): Promise<Array<{
+    id: string;
+    title: string;
+    missing: string[];
+  }>> {
+    const rows = await this.db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.status, 'active'))
+      .orderBy(desc(products.createdAt))
+      .limit(Math.max(1, Math.min(1000, Math.round(limit))));
+
+    const results: Array<{ id: string; title: string; missing: string[] }> = [];
+    for (const row of rows) {
+      const product = await this.findOne(row.id);
+      const readiness = evaluatePublishReadiness(product);
+      if (!readiness.ready) {
+        results.push({
+          id: product.id,
+          title: product.titleZh || product.titleEn,
+          missing: readiness.checks.filter((check) => !check.ok).map((check) => check.label),
+        });
+      }
+    }
+    return results;
+  }
+
   async remove(id: string): Promise<{ id: string }> {
     const deleted = await this.db.delete(products).where(eq(products.id, id)).returning({ id: products.id });
     if (deleted.length === 0) throw new NotFoundException('商品不存在');

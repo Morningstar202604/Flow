@@ -105,9 +105,19 @@ export async function getShopperDemandGaps(days = 90): Promise<ShopperDemandGap[
 export interface WatchSettingsView {
   enabled: boolean;
   intervalMinutes: number;
-  notifyKind: 'webhook' | 'none';
+  notifyKind: 'webhook' | 'email' | 'none';
   notifyUrl?: string;
+  notifySmtp?: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user?: string;
+    pass?: string;
+    from: string;
+    to: string;
+  };
   notifyOnlyOnNew: boolean;
+  notifySubjectTemplate: string;
 }
 
 export async function getWatchSettings(): Promise<WatchSettingsView> {
@@ -139,6 +149,14 @@ export async function createDraftFromGap(
   const { data } = await http.post<{ conversationId: string; id: string; summary: string }>(
     '/api/copilot/shopper-demand-gaps/draft',
     { keyword, categoryId },
+  );
+  return data;
+}
+
+export async function auditActiveProducts(limit = 200): Promise<Array<{ id: string; title: string; missing: string[] }>> {
+  const { data } = await http.get<Array<{ id: string; title: string; missing: string[] }>>(
+    '/api/products/audit/active',
+    { params: { limit } },
   );
   return data;
 }

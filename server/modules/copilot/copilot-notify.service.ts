@@ -10,31 +10,28 @@ import {
   type BreakerState,
   type RetryPolicy,
 } from './copilot-notify-retry';
+import {
+  NotifyTransport,
+  type NotifyConfig,
+  type NotifyKind,
+  type NotifyResult,
+  type SmtpConfig,
+} from './copilot-notify-transport';
 
-export type NotifyChannelKind = 'webhook' | 'none';
-
-export interface NotifyConfig {
-  kind: NotifyChannelKind;
-  /** Webhook 地址（飞书/企业微信/钉钉/Slack 通用：POST JSON { text }） */
-  url?: string;
-}
-
-export interface NotifyResult {
-  ok: boolean;
-  channel: NotifyChannelKind;
-  message: string;
-  /** 实际尝试次数（含首次） */
-  attempts?: number;
-}
+export type NotifyChannelKind = NotifyKind;
+export type { NotifyConfig, NotifyResult, SmtpConfig };
 
 /**
- * 巡检通知出口：只用 HTTP webhook（零新依赖，覆盖飞书/企微/钉钉/Slack）。
+ * 巡检通知出口（带重试与熔断）。
  *
- * 可靠性：
- * - 指数退避重试（默认 3 次：立即 → ~0.4s → ~0.8s）
- * - 连续失败达阈值的通道熔断 5 分钟，避免每轮巡检都打一个坏端点
+ * 分层：
+ * - `NotifyTransport`：只管"发一次"，返回是否可重试
+ * - 本类：重试编排 + 按通道（webhook URL / SMTP host）隔离的熔断器
+ *
+ * 约束：
  * - 失败绝不抛出——通知失败不能影响巡检本身
- * - 只对**配置本身**（URL/格式）做永久性失败判定，网络/5xx 才重试
+ * - 永久性失败（配置错误/认证失败）不重试，直接计入熔断
+ * - 熔断按通道隔离，一个坏 webhook 不影响邮件通道
  */
 @Injectable()
 export class CopilotNotifyService {
@@ -42,40 +39,32 @@ export class CopilotNotifyService {
   private readonly breakers = new Map<string, BreakerState>();
   private readonly policy: RetryPolicy = DEFAULT_RETRY_POLICY;
 
-  async send(config: NotifyConfig, text: string): Promise<NotifyResult> {
-    if (config.kind === 'none' || !config.url) {
-      return { ok: false, channel: 'none', message: '未配置通知渠道' };
+  constructor(private readonly transport: NotifyTransport) {}
+
+  async send(config: NotifyConfig, text: string, subject = '店铺巡检报告'): Promise<NotifyResult> {
+    if (config.kind === 'none') {
+      return { ok: false, channel: 'none', message: '未配置通知渠道', permanent: true };
     }
 
-    if (!/^https?:\/\//i.test(config.url)) {
-      return { ok: false, channel: config.kind, message: 'Webhook 地址必须以 http(s):// 开头' };
-    }
-
-    const key = config.url;
+    const key = this.breakerKey(config);
     const breaker = this.breakers.get(key) ?? initialBreaker();
     const now = Date.now();
     if (!canAttempt(breaker, now)) {
-      return {
-        ok: false,
-        channel: config.kind,
-        message: formatBreakerNotice(breaker),
-        attempts: 0,
-      };
+      return { ok: false, channel: config.kind, message: formatBreakerNotice(breaker), attempts: 0 };
     }
 
-    let lastMessage = '';
+    let last: NotifyResult = { ok: false, channel: config.kind, message: '未执行' };
     for (let attempt = 1; attempt <= this.policy.maxAttempts; attempt += 1) {
-      const result = await this.attemptOnce(config.url, text);
-      if (result.ok) {
+      last = await this.transport.deliver(config, subject, text);
+      if (last.ok) {
         this.breakers.set(key, recordSuccess());
-        return { ...result, attempts: attempt };
+        return { ...last, attempts: attempt };
       }
 
-      lastMessage = result.message;
-      // 配置类错误（非瞬态）不重试
-      if (!result.retryable) {
-        this.breakers.set(key, recordFailure(breaker, Date.now()));
-        return { ...result, attempts: attempt };
+      if (last.permanent) {
+        const failedNow = recordFailure(breaker, Date.now());
+        this.breakers.set(key, failedNow);
+        return { ...last, attempts: attempt };
       }
 
       if (attempt < this.policy.maxAttempts) {
@@ -87,49 +76,22 @@ export class CopilotNotifyService {
     this.breakers.set(key, failed);
     const notice = formatBreakerNotice(failed);
     return {
-      ok: false,
-      channel: config.kind,
-      message: notice ? `${lastMessage}；${notice}` : lastMessage,
+      ...last,
+      message: notice ? `${last.message}；${notice}` : last.message,
       attempts: this.policy.maxAttempts,
     };
   }
 
-  /** 当前某通道的熔断状态（供巡检摘要/排查使用） */
-  getBreakerState(url: string): BreakerState {
-    return this.breakers.get(url) ?? initialBreaker();
+  /** 通道级熔断状态（供巡检摘要/排查） */
+  getBreakerState(config: NotifyConfig): BreakerState {
+    return this.breakers.get(this.breakerKey(config)) ?? initialBreaker();
   }
 
-  private async attemptOnce(
-    url: string,
-    text: string,
-  ): Promise<{ ok: boolean; channel: NotifyChannelKind; message: string; retryable: boolean }> {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, msgtype: 'text', content: { text } }),
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          return {
-            ok: false,
-            channel: 'webhook',
-            message: `Webhook 返回 HTTP ${response.status}`,
-            retryable: response.status >= 500 || response.status === 429,
-          };
-        }
-        return { ok: true, channel: 'webhook', message: '通知已发送', retryable: false };
-      } finally {
-        clearTimeout(timeout);
-      }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`巡检通知发送失败：${message}`);
-      return { ok: false, channel: 'webhook', message: `通知发送失败：${message}`, retryable: true };
-    }
+  /** 熔断键：同类通道按目标隔离（不同 webhook / 不同 SMTP 各自独立） */
+  private breakerKey(config: NotifyConfig): string {
+    if (config.kind === 'webhook') return `webhook:${config.url ?? ''}`;
+    if (config.kind === 'email') return `email:${config.smtp?.host ?? ''}:${config.smtp?.to ?? ''}`;
+    return 'none';
   }
 }
 

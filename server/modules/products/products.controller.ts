@@ -343,6 +343,13 @@ export class ProductsController {
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
+  @Get('audit/active')
+  async auditActive(@Query('limit') limit?: string) {
+    const parsed = limit ? parseInt(limit, 10) : 200;
+    return this.productsService.auditActiveProducts(Number.isFinite(parsed) ? parsed : 200);
+  }
+
+  @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get(':id/publish-readiness')
   async getPublishReadiness(@Param('id') id: string) {
     const product = await this.productsService.findOne(id);

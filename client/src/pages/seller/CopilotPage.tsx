@@ -87,13 +87,25 @@ const CopilotPage: React.FC = () => {
   const [watch, setWatch] = useState<{
     enabled: boolean;
     intervalMinutes: number;
-    notifyKind: 'webhook' | 'none';
+    notifyKind: 'webhook' | 'email' | 'none';
     notifyUrl?: string;
+    notifySmtp?: {
+      host: string;
+      port: number;
+      secure: boolean;
+      user?: string;
+      pass?: string;
+      from: string;
+      to: string;
+    };
     notifyOnlyOnNew: boolean;
+    notifySubjectTemplate: string;
   } | null>(null);
   const [watchSaving, setWatchSaving] = useState<boolean>(false);
   const [watchRunning, setWatchRunning] = useState<boolean>(false);
   const [draftingKeyword, setDraftingKeyword] = useState<string | null>(null);
+  const [auditResult, setAuditResult] = useState<Array<{ id: string; title: string; missing: string[] }> | null>(null);
+  const [auditing, setAuditing] = useState<boolean>(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const fetchInsights = useCallback(async (): Promise<void> => {
@@ -132,9 +144,19 @@ const CopilotPage: React.FC = () => {
   const saveWatch = async (patch: Partial<{
     enabled: boolean;
     intervalMinutes: number;
-    notifyKind: 'webhook' | 'none';
+    notifyKind: 'webhook' | 'email' | 'none';
     notifyUrl?: string;
+    notifySmtp?: {
+      host: string;
+      port: number;
+      secure: boolean;
+      user?: string;
+      pass?: string;
+      from: string;
+      to: string;
+    };
     notifyOnlyOnNew: boolean;
+    notifySubjectTemplate: string;
   }>): Promise<void> => {
     if (!watch) return;
     try {
@@ -172,6 +194,17 @@ const CopilotPage: React.FC = () => {
       notifyError(err, extractErrorMessage(err, '生成草稿失败'));
     } finally {
       setDraftingKeyword(null);
+    }
+  };
+
+  const auditActive = async (): Promise<void> => {
+    try {
+      setAuditing(true);
+      setAuditResult(await copilotApi.auditActiveProducts());
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '体检失败'));
+    } finally {
+      setAuditing(false);
     }
   };
 
@@ -883,6 +916,35 @@ const CopilotPage: React.FC = () => {
                 )}
               </div>
               <div>
+                <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
+                  <span>在售商品体检</span>
+                  <button
+                    type="button"
+                    className="text-xs font-normal text-[#00C2B8] hover:underline"
+                    onClick={() => void auditActive()}
+                    disabled={auditing}
+                  >
+                    {auditing ? '检查中…' : '立即检查'}
+                  </button>
+                </div>
+                {auditResult === null ? (
+                  <div className="text-xs text-slate-400">点击检查，找出信息不完整的历史在售商品</div>
+                ) : auditResult.length === 0 ? (
+                  <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
+                    全部在售商品信息完整
+                  </div>
+                ) : (
+                  <div className="max-h-32 space-y-1 overflow-y-auto">
+                    {auditResult.map((item) => (
+                      <div key={item.id} className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                        <div className="font-medium">{item.title}</div>
+                        <div className="opacity-80">缺：{item.missing.join('、')}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
                 <div className="mb-1 text-xs font-semibold text-slate-600">买家热搜词 TOP 10</div>
                 {funnel.topQueries.length === 0 ? (
                   <div className="text-xs text-slate-400">暂无搜索记录</div>
@@ -943,13 +1005,14 @@ const CopilotPage: React.FC = () => {
                   value={watch.notifyKind}
                   disabled={watchSaving}
                   onChange={(event) => {
-                    const kind = event.target.value as 'webhook' | 'none';
+                    const kind = event.target.value as 'webhook' | 'email' | 'none';
                     setWatch({ ...watch, notifyKind: kind });
                     void saveWatch({ notifyKind: kind });
                   }}
                 >
                   <option value="none">只写日志</option>
                   <option value="webhook">Webhook（飞书/企微/钉钉/Slack）</option>
+                  <option value="email">邮件（SMTP）</option>
                 </select>
               </div>
               {watch.notifyKind === 'webhook' && (
@@ -975,6 +1038,76 @@ const CopilotPage: React.FC = () => {
                     仅在出现新增告警时通知
                   </label>
                 </>
+              )}
+              {watch.notifyKind === 'email' && (
+                <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
+                  {[
+                    { key: 'host' as const, label: 'SMTP 主机', placeholder: 'smtp.example.com' },
+                    { key: 'port' as const, label: '端口', placeholder: '587' },
+                    { key: 'from' as const, label: '发件人', placeholder: 'bot@example.com' },
+                    { key: 'to' as const, label: '收件人', placeholder: 'owner@example.com' },
+                    { key: 'user' as const, label: '用户名（可选）', placeholder: 'bot@example.com' },
+                    { key: 'pass' as const, label: '密码（可选）', placeholder: '••••••' },
+                  ].map((field) => (
+                    <div key={field.key} className="flex items-center justify-between gap-2">
+                      <span className="shrink-0 text-xs text-slate-600">{field.label}</span>
+                      <Input
+                        className="h-8 flex-1 text-xs"
+                        placeholder={field.placeholder}
+                        value={
+                          field.key === 'port'
+                            ? String(watch.notifySmtp?.port ?? 587)
+                            : String(watch.notifySmtp?.[field.key] ?? '')
+                        }
+                        disabled={watchSaving}
+                        onChange={(event) => {
+                          const smtp = {
+                            host: watch.notifySmtp?.host ?? '',
+                            port: watch.notifySmtp?.port ?? 587,
+                            secure: watch.notifySmtp?.secure ?? false,
+                            user: watch.notifySmtp?.user,
+                            pass: watch.notifySmtp?.pass,
+                            from: watch.notifySmtp?.from ?? '',
+                            to: watch.notifySmtp?.to ?? '',
+                          };
+                          if (field.key === 'port') {
+                            smtp.port = Number(event.target.value) || 587;
+                          } else {
+                            (smtp as Record<string, unknown>)[field.key] = event.target.value;
+                          }
+                          setWatch({ ...watch, notifySmtp: smtp });
+                        }}
+                        onBlur={() => void saveWatch({ notifySmtp: watch.notifySmtp })}
+                      />
+                    </div>
+                  ))}
+                  <label className="flex items-center gap-2 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={watch.notifySmtp?.secure ?? false}
+                      disabled={watchSaving}
+                      onChange={(event) => {
+                        const secure = event.target.checked;
+                        if (!watch.notifySmtp) return;
+                        const next = { ...watch.notifySmtp, secure };
+                        setWatch({ ...watch, notifySmtp: next });
+                        void saveWatch({ notifySmtp: next });
+                      }}
+                    />
+                    使用 SSL/TLS（465 端口通常需要）
+                  </label>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-600">邮件主题模板</span>
+                    <Input
+                      className="h-8 flex-1 text-xs"
+                      placeholder="【Flow 店铺巡检】{{count}} 项待处理"
+                      value={watch.notifySubjectTemplate}
+                      disabled={watchSaving}
+                      onChange={(event) => setWatch({ ...watch, notifySubjectTemplate: event.target.value })}
+                      onBlur={() => void saveWatch({ notifySubjectTemplate: watch.notifySubjectTemplate })}
+                    />
+                  </div>
+                </div>
               )}
               <Button size="sm" variant="outline" className="w-full" onClick={() => void runWatch()} disabled={watchRunning}>
                 {watchRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}

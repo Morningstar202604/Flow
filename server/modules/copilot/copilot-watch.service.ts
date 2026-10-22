@@ -3,7 +3,8 @@ import { eq, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { aiSettings } from '../../database/schema';
 import { CopilotInsightsService } from './copilot-insights.service';
-import { CopilotNotifyService, type NotifyConfig } from './copilot-notify.service';
+import { CopilotNotifyService } from './copilot-notify.service';
+import type { SmtpConfig } from './copilot-notify-transport';
 import { diffNewInsights, formatInsightDigest } from './copilot-insight-digest';
 import type { CopilotInsight } from '../../../shared/api.interface';
 
@@ -12,11 +13,15 @@ export interface WatchSettings {
   enabled: boolean;
   /** 巡检间隔（分钟，5-1440） */
   intervalMinutes: number;
-  /** 通知渠道（webhook 覆盖飞书/企微/钉钉/Slack；none=只写日志） */
-  notifyKind: 'webhook' | 'none';
+  /** 通知渠道（webhook 覆盖飞书/企微/钉钉/Slack；email 走 SMTP；none=只写日志） */
+  notifyKind: 'webhook' | 'email' | 'none';
   notifyUrl?: string;
+  /** SMTP 配置（notifyKind=email 时使用） */
+  notifySmtp?: SmtpConfig;
   /** 只在有新增告警时通知（默认 true，避免无变化也刷屏） */
   notifyOnlyOnNew: boolean;
+  /** 邮件主题模板（支持 {{count}} / {{critical}} / {{newCount}} 占位） */
+  notifySubjectTemplate: string;
 }
 
 export const WATCH_SETTINGS_KEY = 'copilot_watch_settings';
@@ -25,6 +30,7 @@ export const DEFAULT_WATCH_SETTINGS: WatchSettings = {
   intervalMinutes: 30,
   notifyKind: 'none',
   notifyOnlyOnNew: true,
+  notifySubjectTemplate: '【Flow 店铺巡检】{{count}} 项待处理（严重 {{critical}} / 新增 {{newCount}}）',
 };
 /** 上次巡检快照（用于 diff 出新告警） */
 const WATCH_SNAPSHOT_KEY = 'copilot_watch_last_snapshot';
@@ -75,9 +81,13 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
       return {
         enabled: parsed.enabled === true,
         intervalMinutes: clampInterval(parsed.intervalMinutes),
-        notifyKind: parsed.notifyKind === 'webhook' ? 'webhook' : 'none',
+        notifyKind: normalizeNotifyKind(parsed.notifyKind),
         notifyUrl: typeof parsed.notifyUrl === 'string' ? parsed.notifyUrl.slice(0, 500) : undefined,
+        notifySmtp: normalizeSmtp(parsed.notifySmtp),
         notifyOnlyOnNew: parsed.notifyOnlyOnNew !== false,
+        notifySubjectTemplate: typeof parsed.notifySubjectTemplate === 'string' && parsed.notifySubjectTemplate.trim()
+          ? parsed.notifySubjectTemplate.slice(0, 200)
+          : DEFAULT_WATCH_SETTINGS.notifySubjectTemplate,
       };
     } catch {
       return { ...DEFAULT_WATCH_SETTINGS };
@@ -91,9 +101,13 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
       intervalMinutes: input.intervalMinutes === undefined
         ? current.intervalMinutes
         : clampInterval(input.intervalMinutes),
-      notifyKind: input.notifyKind === undefined ? current.notifyKind : input.notifyKind === 'webhook' ? 'webhook' : 'none',
+      notifyKind: input.notifyKind === undefined ? current.notifyKind : normalizeNotifyKind(input.notifyKind),
       notifyUrl: input.notifyUrl === undefined ? current.notifyUrl : (input.notifyUrl.trim() || undefined),
+      notifySmtp: input.notifySmtp === undefined ? current.notifySmtp : normalizeSmtp(input.notifySmtp),
       notifyOnlyOnNew: input.notifyOnlyOnNew === undefined ? current.notifyOnlyOnNew : input.notifyOnlyOnNew === true,
+      notifySubjectTemplate: input.notifySubjectTemplate === undefined
+        ? current.notifySubjectTemplate
+        : (input.notifySubjectTemplate.trim().slice(0, 200) || DEFAULT_WATCH_SETTINGS.notifySubjectTemplate),
     };
     await this.db
       .insert(aiSettings)
@@ -150,16 +164,23 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
         this.logger.log(digest.replace(/\n/g, ' | '));
 
         const settings = await this.getSettings();
-        const shouldNotify = settings.notifyKind === 'webhook'
-          && !!settings.notifyUrl
-          && (!settings.notifyOnlyOnNew || newInsights.length > 0);
+        const channelReady = settings.notifyKind === 'email'
+          ? !!settings.notifySmtp?.host
+          : settings.notifyKind === 'webhook' ? !!settings.notifyUrl : false;
+        const shouldNotify = channelReady && (!settings.notifyOnlyOnNew || newInsights.length > 0);
         let notifyNote = '';
         if (shouldNotify) {
+          const subject = renderSubject(settings.notifySubjectTemplate, insights, newInsights);
           const sent = await this.notifyService.send(
-            { kind: settings.notifyKind, url: settings.notifyUrl },
+            settings.notifyKind === 'email'
+              ? { kind: 'email', smtp: settings.notifySmtp }
+              : { kind: 'webhook', url: settings.notifyUrl },
             digest,
+            subject,
           );
-          notifyNote = sent.ok ? '（已推送通知）' : `（通知未发送：${sent.message}）`;
+          notifyNote = sent.ok
+            ? `（已推送${sent.channel === 'email' ? '邮件' : '通知'}）`
+            : `（通知未发送：${sent.message}）`;
         }
 
         return { ran: true, message: digest + notifyNote };
@@ -226,6 +247,45 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
         set: { value, updatedAt: new Date() },
       });
   }
+}
+
+function normalizeNotifyKind(value: unknown): WatchSettings['notifyKind'] {
+  if (value === 'webhook') return 'webhook';
+  if (value === 'email') return 'email';
+  return 'none';
+}
+
+function normalizeSmtp(value: unknown): SmtpConfig | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const host = typeof raw.host === 'string' ? raw.host.trim().slice(0, 200) : '';
+  const from = typeof raw.from === 'string' ? raw.from.trim().slice(0, 200) : '';
+  const to = typeof raw.to === 'string' ? raw.to.trim().slice(0, 500) : '';
+  if (!host || !from || !to) return undefined;
+  const port = typeof raw.port === 'number' && Number.isFinite(raw.port) ? Math.round(raw.port) : 587;
+  return {
+    host,
+    port: Math.max(1, Math.min(65535, port)),
+    secure: raw.secure === true,
+    user: typeof raw.user === 'string' ? raw.user.slice(0, 200) : undefined,
+    pass: typeof raw.pass === 'string' ? raw.pass.slice(0, 500) : undefined,
+    from,
+    to,
+  };
+}
+
+/** 邮件主题模板渲染：{{count}} / {{critical}} / {{newCount}} */
+export function renderSubject(
+  template: string,
+  insights: ReadonlyArray<{ severity: string }>,
+  newInsights: ReadonlyArray<unknown>,
+): string {
+  const critical = insights.filter((insight) => insight.severity === 'critical').length;
+  return template
+    .replace(/\{\{count\}\}/g, String(insights.length))
+    .replace(/\{\{critical\}\}/g, String(critical))
+    .replace(/\{\{newCount\}\}/g, String(newInsights.length))
+    .slice(0, 200);
 }
 
 function clampInterval(value: unknown): number {

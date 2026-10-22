@@ -14,6 +14,7 @@ import { CopilotToolService } from './copilot-tool.service';
 import { CopilotInsightsService } from './copilot-insights.service';
 import { CopilotWatchService } from './copilot-watch.service';
 import { CopilotNotifyService } from './copilot-notify.service';
+import { NotifyTransport } from './copilot-notify-transport';
 
 @Module({
   imports: [
@@ -28,7 +29,7 @@ import { CopilotNotifyService } from './copilot-notify.service';
     ShopperModule,
   ],
   controllers: [CopilotController],
-  providers: [CopilotService, CopilotToolService, CopilotInsightsService, CopilotWatchService, CopilotNotifyService],
+  providers: [CopilotService, CopilotToolService, CopilotInsightsService, CopilotWatchService, CopilotNotifyService, NotifyTransport],
   exports: [CopilotService],
 })
 export class CopilotModule {}

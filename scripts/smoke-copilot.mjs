@@ -384,7 +384,50 @@ try {
   assert(published.status === 'active', `商品应为 active，实际 ${published.status}`);
   ok('上架门禁：缺图零库存被拒 → 补齐后通过 → 状态 active');
 
-  // ---------- 11. 越权 ----------
+  // ---------- 11. 邮件通道（配置校验路径：SMTP 不通时应诚实降级，不影响巡检） ----------
+  const emailCfg = await api('PUT', '/api/copilot/watch', {
+    cookie: seller.cookie,
+    json: {
+      enabled: true,
+      notifyKind: 'email',
+      notifyUrl: '',
+      notifySmtp: {
+        host: '127.0.0.1',
+        port: 2525,
+        secure: false,
+        from: 'bot@test.dev',
+        to: 'owner@test.dev',
+      },
+      notifyOnlyOnNew: false,
+      notifySubjectTemplate: '【巡检】{{count}} 项 / 严重 {{critical}}',
+    },
+  });
+  assert(emailCfg.body.notifyKind === 'email', '邮件通道应保存成功');
+  assert(emailCfg.body.notifySubjectTemplate.includes('{{count}}'), '主题模板应保存');
+
+  const emailRun = await api('POST', '/api/copilot/watch/run', { cookie: seller.cookie });
+  assert(emailRun.body.ran === true, '邮件模式下巡检仍应执行');
+  assert(
+    emailRun.body.message.includes('通知未发送') || emailRun.body.message.includes('已推送邮件'),
+    `邮件不可达时应诚实降级，实际 ${emailRun.body.message.slice(-60)}`,
+  );
+  ok('邮件通道：配置保存 → 巡检执行 → SMTP 不可达时诚实降级不阻断');
+
+  await api('PUT', '/api/copilot/watch', {
+    cookie: seller.cookie,
+    json: { enabled: false, notifyKind: 'none', notifyUrl: '' },
+  });
+
+  // ---------- 12. 批量上架体检 ----------
+  const audit = await api('GET', '/api/products/audit/active?limit=200', { cookie: seller.cookie });
+  assert(Array.isArray(audit.body), '体检应返回数组');
+  for (const item of audit.body) {
+    assert(typeof item.id === 'string' && typeof item.title === 'string', '每条应含 id/title');
+    assert(Array.isArray(item.missing) && item.missing.length > 0, '不完整商品应列出缺失项');
+  }
+  ok(`在售商品体检：${audit.body.length} 个商品信息不完整`);
+
+  // ---------- 13. 越权 ----------
   const forbidden = await api('GET', '/api/copilot/conversations', {
     cookie: buyer.cookie,
     expect: [403],

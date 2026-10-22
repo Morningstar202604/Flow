@@ -5,6 +5,34 @@
 
 ---
 
+## [1.17.0] — 2026-10-22
+
+SMTP 邮件通知 + 邮件主题模板 + 在售商品批量体检。
+
+### Added
+- **SMTP 邮件通道**（`nodemailer@7.0.9`，零运行时依赖，1.7MB）
+  - 通知分层重构：`NotifyTransport`（只负责发一次，标注是否可重试）+ `CopilotNotifyService`（重试/熔断编排）
+  - 邮件连接/握手/套接字分别 8s/8s/10s 超时；认证类错误（EAUTH/EENVELOPE）判为永久失败不重试
+  - 熔断键按通道隔离（不同 webhook / 不同 SMTP 互不影响）
+- **邮件主题模板**：支持 `{{count}}` / `{{critical}}` / `{{newCount}}` 占位，默认「【Flow 店铺巡检】N 项待处理（严重 X / 新增 Y）」
+- **在售商品批量体检**：`GET /api/products/audit/active?limit=200`
+  - 扫描已有 active 商品，返回不合规商品与缺失项（只读，不自动改状态）
+  - 副驾漏斗弹窗内「在售商品体检 → 立即检查」可一键列出历史遗留的不完整在售商品
+- 巡检设置界面新增邮件通道表单（SMTP 主机/端口/发件人/收件人/账号/密码/SSL/主题模板）
+
+### Verification
+- 单测 **131/131**（新增 6 例：主题模板渲染与截断、通知重试/永久失败/熔断隔离、邮件配置校验）
+- `npm run lint` 0 问题、双端 `type:check` 0 错误、`npm run build` 通过
+
+### NOT VERIFIED（本轮环境故障，必须复测）
+- **端到端冒烟未跑通**：本机 Docker Desktop 引擎在验证阶段异常（`docker ps` 返回 500，Postgres 连接超时），
+  `smoke:copilot`（含新增的邮件通道与批量体检断言）、`smoke:shopper`、`smoke:workflows` 本轮**未执行**。
+  恢复 Docker 后请依次执行：
+  `npm run build && npm run mock:providers` + 应用启动，然后 `npm run smoke:copilot` / `smoke:shopper` / `smoke:workflows`。
+- 真实 SMTP 服务器未测试（仅配置校验路径与单测覆盖）
+
+---
+
 ## [1.16.0] — 2026-10-22
 
 通知可靠性（重试 + 熔断）与草稿上架门禁。
