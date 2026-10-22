@@ -15,7 +15,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 [![GitHub](https://img.shields.io/badge/GitHub-X33834%2FGlobalEcom--AI-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![Gitee](https://img.shields.io/badge/Gitee-badhope%2FGlobalEcom--AI-C71D23?style=flat-square&logo=gitee&logoColor=white)](https://gitee.com/badhope/GlobalEcom-AI)
 [![GitCode](https://img.shields.io/badge/GitCode-badhope%2FGlobalEcom--AI-2F6BFF?style=flat-square&logo=git&logoColor=white)](https://gitcode.com/badhope/GlobalEcom-AI)
-[![Version](https://img.shields.io/badge/version-v1.11.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.11.0)
+[![Version](https://img.shields.io/badge/version-v1.12.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.12.0)
 [![Stars](https://img.shields.io/github/stars/X33834/GlobalEcom-AI?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![CI](https://img.shields.io/github/actions/workflow/status/X33834/GlobalEcom-AI/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/X33834/GlobalEcom-AI/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -33,7 +33,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 - **品牌定位 / Positioning**：出口电商平台 · Cross-Border Commerce Platform
 - **主传播语 / Tagline**：让跨境生意更简单 · Cross-Border Commerce, Simplified
 - **主色 / Brand Colors**：深海军蓝 `#0B1F3A` + 科技青 `#00C2B8`
-- **当前版本 / Version**：v1.11.0（[CHANGELOG.md](CHANGELOG.md)）
+- **当前版本 / Version**：v1.12.0（[CHANGELOG.md](CHANGELOG.md)）
 
 ---
 
@@ -127,7 +127,8 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 
 - **11 个工具**：5 个只读（店铺概况 / 订单 / 商品 / 低库存 / 待审批退款）+ 6 个写操作（改订单状态 / 批准退款 / 拒绝退款 / 商品上下架 / 建优惠券 / 回复咨询）
 - **多步计划**：一句"清库存促销"自动串起「查低库存 → 建清仓券 → 下架商品」，多项动作共享批次、一次批准整批执行（失败即停）
-- **店铺巡检**：常驻面板自动识别低库存 / 超时退款 / 未支付订单 / 长期未签收，点一条即可让副驾接手
+- **店铺巡检**：常驻面板自动识别低库存 / 超时退款 / 未支付订单 / 长期未签收，点一条即可让副驾接手；阈值可在面板内调整
+- **导购转化漏斗**：打开 → 推荐 → 加购 → 下单 四阶段转化率 + 买家热搜词，下单阶段联真实订单而非推断
 - **人工审批门禁（fail-closed）**：写工具在模型循环内**永不执行**，只落 `copilot_actions(pending)`；只有会话所有者点"批准执行"才经既有业务服务落地（订单状态机、库存回补、积分回滚、审计日志与手动操作完全一致）
 - **参数强校验**：每个工具声明 JSON Schema 式参数（类型 / 枚举 / 范围 / 正则 / 长度），未知参数一律拒绝，防模型幻觉与参数注入
 - **全链路可回看**：对话、工具结果、动作与执行结果逐条落库，待确认数量在会话列表可见

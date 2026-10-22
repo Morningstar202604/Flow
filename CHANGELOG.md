@@ -5,6 +5,26 @@
 
 ---
 
+## [1.12.0] — 2026-10-22
+
+巡检可配置化 + 导购转化漏斗。
+
+### Added
+- **巡检阈值可配置**：4 项阈值（低库存 / 退款超时 / 未支付超时 / 未签收天数）存入 `ai_settings`，副驾侧栏「巡检设置」可视化调整
+  - `GET/PUT /api/copilot/insights/thresholds`；逐字段区间校验，非法 JSON/越界值回退默认（fail-safe）；变更写审计
+- **导购转化漏斗**：`shopper_events` 记录 viewed / recommended / cart_confirmed，下单阶段联真实订单（登录按 userId、匿名按订单快照 sessionId）
+  - `GET /api/copilot/shopper-funnel?days=30`：四阶段去重会话数 + 逐级转化率 + 整体转化 + 买家热搜词 TOP 10
+  - 副驾侧栏「导购漏斗」面板：条形漏斗 + 热词标签
+- 迁移 `0005_shopper_funnel.sql`（`shopper_events` 表 + 3 个索引）
+
+### Verification
+- 单测 99/99（新增 10 例：阈值合并/裁剪/脏数据回退、漏斗转化率/空数据/热词过滤/days 裁剪）
+- `npm run lint` / `npm run type:check` / `npm run build` 全绿
+- `smoke:copilot` 11 步（新增阈值保存→生效→越界拒绝→复原）、`smoke:shopper` 7 步（新增漏斗四阶段含真实订单）、`smoke:workflows` 16 步全通过
+- 真浏览器：巡检设置弹窗保存生效；导购漏斗弹窗四阶段与热词正确渲染，控制台无错误
+
+---
+
 ## [1.11.0] — 2026-10-22
 
 新增 **买家端 AI 导购**：与卖家副驾共用 Agent 框架，工具集物理隔离。

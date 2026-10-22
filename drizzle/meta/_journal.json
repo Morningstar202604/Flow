@@ -36,6 +36,13 @@
       "when": 1792620777029,
       "tag": "0004_shopper_channel",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792635751755,
+      "tag": "0005_shopper_funnel",
+      "breakpoints": true
     }
   ]
 }

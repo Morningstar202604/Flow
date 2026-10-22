@@ -612,10 +612,55 @@ export interface CopilotInsight {
   entityId?: string;
 }
 
+// ==================== AI 导购 · 转化漏斗 ====================
+
+export type ShopperFunnelStageKey = 'viewed' | 'recommended' | 'cart_confirmed' | 'ordered';
+
+export interface ShopperFunnelStage {
+  stage: ShopperFunnelStageKey;
+  label: string;
+  /** 该阶段去重会话数 */
+  sessions: number;
+  /** 相对上一阶段的转化率（0-1，两位小数） */
+  conversionFromPrevious: number;
+}
+
+export interface ShopperTopQuery {
+  keyword: string;
+  count: number;
+}
+
+export interface ShopperFunnelResponse {
+  since: string;
+  days: number;
+  stages: ShopperFunnelStage[];
+  /** 打开导购 → 完成下单 的整体转化率 */
+  overallConversion: number;
+  topQueries: ShopperTopQuery[];
+}
+
+export interface CopilotInsightThresholds {
+  /** 总库存低于该值视为低库存 */
+  lowStock: number;
+  /** 退款申请超过该小时数未处理视为超时 */
+  pendingRefundHours: number;
+  /** 订单创建超过该小时数未支付视为超时 */
+  unpaidOrderHours: number;
+  /** 发货超过该天数未签收视为异常 */
+  staleShippedDays: number;
+}
+
 export interface CopilotInsightsView {
   generatedAt: string;
-  thresholds: Record<string, number>;
+  thresholds: CopilotInsightThresholds;
   insights: CopilotInsight[];
+}
+
+export interface UpdateCopilotInsightThresholdsRequest {
+  lowStock?: number;
+  pendingRefundHours?: number;
+  unpaidOrderHours?: number;
+  staleShippedDays?: number;
 }
 
 export type PaymentProvider = 'stripe' | 'paypal' | 'demo';

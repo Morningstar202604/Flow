@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ShopperService } from './shopper.service';
 import type { AiGatewayService } from '../ai/ai-gateway.service';
 import type { ShopperToolService } from './shopper-tool.service';
+import type { ShopperAnalyticsService } from './shopper-analytics.service';
 import { copilotActions, copilotConversations, copilotMessages } from '../../database/schema';
 
 interface Row extends Record<string, unknown> {
@@ -62,6 +63,10 @@ function fakeDb(seed: { conversations?: Row[]; actions?: Row[]; messages?: Row[]
   };
 }
 
+function analytics(): ShopperAnalyticsService {
+  return { track: vi.fn(async () => undefined), getFunnel: vi.fn() } as unknown as ShopperAnalyticsService;
+}
+
 function gateway(script: Array<Record<string, unknown>>, configured = true) {
   let index = 0;
   return {
@@ -93,6 +98,7 @@ describe('ShopperService', () => {
       fakeDb({ conversations: [conversation] }) as never,
       gateway([{ tool: 'add_to_cart', args: { productId: '11111111-1111-4111-8111-111111111111', quantity: 1 } }, { final: '请确认加购' }]),
       tools,
+      analytics(),
     );
 
     const result = await service.sendMessage({ userId: 'buyer-1' }, 'conv-shopper', '把这个加入购物车');
@@ -125,6 +131,7 @@ describe('ShopperService', () => {
       fakeDb({ conversations: [conversation], actions: [action] }) as never,
       gateway([{ final: 'ok' }]),
       tools,
+      analytics(),
     );
 
     const result = await service.resolveAction({ userId: 'buyer-1' }, 'act-1', true);
@@ -152,6 +159,7 @@ describe('ShopperService', () => {
       fakeDb({ conversations: [conversation], actions: [action] }) as never,
       gateway([{ final: 'ok' }]),
       { runReadTool: vi.fn(), runWriteTool: vi.fn() } as unknown as ShopperToolService,
+      analytics(),
     );
 
     await expect(service.resolveAction({ userId: 'buyer-1' }, 'act-2', true)).rejects.toThrow('操作不存在');
@@ -171,6 +179,7 @@ describe('ShopperService', () => {
       fakeDb({ conversations: [anonConversation] }) as never,
       gateway([{ final: 'ok' }]),
       { runReadTool: vi.fn(), runWriteTool: vi.fn() } as unknown as ShopperToolService,
+      analytics(),
     );
 
     const ok = await service.getConversationDetail({ sessionId: 'session-abc-123' }, 'conv-anon');
@@ -186,6 +195,7 @@ describe('ShopperService', () => {
       fakeDb({ conversations: [conversation] }) as never,
       gateway([{ final: 'ok' }], false),
       { runReadTool: vi.fn(), runWriteTool: vi.fn() } as unknown as ShopperToolService,
+      analytics(),
     );
 
     await expect(

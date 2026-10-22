@@ -615,6 +615,27 @@ export const copilotActions = pgTable('copilot_actions', {
   sessionIdx: index('copilot_actions_session_idx').on(t.sessionId, t.status),
 }));
 
+// ==================== AI 导购转化漏斗 ====================
+
+// 每次进入一个阶段记一行；漏斗 = 按 (sessionId | userId) 去重后逐级计数。
+// 只记录阶段与商品，不含搜索词原文以外的内容，避免收集买家隐私。
+export const shopperEvents = pgTable('shopper_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  sessionId: varchar('session_id', { length: 64 }),
+  /** viewed=打开导购 / recommended=收到推荐 / cart_confirmed=确认加购 / ordered=该会话下单 */
+  stage: varchar('stage', { length: 24 }).notNull(),
+  conversationId: uuid('conversation_id').references(() => copilotConversations.id, { onDelete: 'set null' }),
+  productId: uuid('product_id').references(() => products.id, { onDelete: 'set null' }),
+  /** 搜索关键词（仅 recommended 阶段有值，用于看"买家在找什么"） */
+  keyword: varchar('keyword', { length: 100 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  stageCreatedIdx: index('shopper_events_stage_created_idx').on(t.stage, t.createdAt),
+  sessionIdx: index('shopper_events_session_idx').on(t.sessionId, t.stage),
+  userIdx: index('shopper_events_user_idx').on(t.userId, t.stage),
+}));
+
 // ==================== 页面访问（访客统计） ====================
 
 export const visits = pgTable('visits', {

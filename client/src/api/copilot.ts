@@ -4,9 +4,12 @@ import type {
   CopilotBatchResolveResult,
   CopilotConversation,
   CopilotConversationDetail,
+  CopilotInsightThresholds,
   CopilotInsightsView,
   CopilotSendResult,
   CopilotToolsView,
+  ShopperFunnelResponse,
+  UpdateCopilotInsightThresholdsRequest,
 } from '@shared/api.interface';
 
 export async function getCopilotTools(): Promise<CopilotToolsView> {
@@ -70,5 +73,22 @@ export async function resolveCopilotBatch(
 
 export async function getCopilotInsights(): Promise<CopilotInsightsView> {
   const { data } = await http.get<CopilotInsightsView>('/api/copilot/insights');
+  return data;
+}
+
+export async function getCopilotInsightThresholds(): Promise<CopilotInsightThresholds> {
+  const { data } = await http.get<CopilotInsightThresholds>('/api/copilot/insights/thresholds');
+  return data;
+}
+
+export async function updateCopilotInsightThresholds(
+  body: UpdateCopilotInsightThresholdsRequest,
+): Promise<CopilotInsightThresholds> {
+  const { data } = await http.put<CopilotInsightThresholds>('/api/copilot/insights/thresholds', body);
+  return data;
+}
+
+export async function getShopperFunnel(days = 30): Promise<ShopperFunnelResponse> {
+  const { data } = await http.get<ShopperFunnelResponse>('/api/copilot/shopper-funnel', { params: { days } });
   return data;
 }

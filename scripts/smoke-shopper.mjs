@@ -123,6 +123,40 @@ try {
   assert(cartAfter.body.items[0].productId === product.id, '购物车应是刚加的商品');
   ok('加购：确认后真实写入购物车');
 
+  // 漏斗：viewed / recommended / cart_confirmed 都应被记录并去重
+  const funnel = await (async () => {
+    const res = await fetch(`${BASE}/api/copilot/shopper-funnel?days=30`, {
+      headers: { Cookie: seller.cookie },
+    });
+    return { status: res.status, body: await res.json() };
+  })();
+  assert(funnel.status === 200, `漏斗接口应 200，实际 ${funnel.status}`);
+  const stageMap = Object.fromEntries(funnel.body.stages.map((stage) => [stage.stage, stage.sessions]));
+  assert(stageMap.viewed >= 1, `打开导购会话数应 ≥1，实际 ${stageMap.viewed}`);
+  assert(stageMap.recommended >= 1, `获得推荐会话数应 ≥1，实际 ${stageMap.recommended}`);
+  assert(stageMap.cart_confirmed >= 1, `确认加购会话数应 ≥1，实际 ${stageMap.cart_confirmed}`);
+  assert(funnel.body.topQueries.some((item) => item.keyword.includes('耳机')), '热搜词应包含"耳机"');
+  assert(typeof funnel.body.overallConversion === 'number', '应有整体转化率');
+
+  // 下单阶段：为这个匿名会话造一笔真实订单，漏斗的 ordered 应变为 1
+  await sql`
+    INSERT INTO orders (order_no, status, subtotal, total_amount, payment_method, address_snapshot)
+    VALUES (
+      ${'ORDSHOP' + runId.toUpperCase()},
+      'paid',
+      39.90,
+      39.90,
+      'demo',
+      ${JSON.stringify({ receiverName: 'Shopper Buyer', addressLine1: '1 Test Rd', city: 'Testville', country: 'US', sessionId: SESSION })}
+    )`;
+  const funnelAfterOrder = await (async () => {
+    const res = await fetch(`${BASE}/api/copilot/shopper-funnel?days=30`, { headers: { Cookie: seller.cookie } });
+    return res.json();
+  })();
+  const orderedAfter = funnelAfterOrder.stages.find((stage) => stage.stage === 'ordered')?.sessions ?? 0;
+  assert(orderedAfter >= 1, `下单阶段应识别到该会话订单，实际 ${orderedAfter}`);
+  ok(`导购漏斗：打开 ${stageMap.viewed} → 推荐 ${stageMap.recommended} → 加购 ${stageMap.cart_confirmed} → 下单 ${orderedAfter}`);
+
   // 会话隔离
   const foreign = await api('GET', `/api/shopper/conversations/${conversationId}`, {
     sessionId: `other-${runId}-session-9999`,

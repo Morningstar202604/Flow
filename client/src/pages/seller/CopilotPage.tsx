@@ -9,6 +9,8 @@ import {
   MessageSquarePlus,
   RefreshCw,
   Send,
+  Settings2,
+  TrendingUp,
   ShieldAlert,
   Sparkles,
   Trash2,
@@ -36,8 +38,10 @@ import type {
   CopilotConversation,
   CopilotConversationDetail,
   CopilotInsight,
+  CopilotInsightThresholds,
   CopilotInsightsView,
   CopilotMessage,
+  ShopperFunnelResponse,
 } from '@shared/api.interface';
 import { toast } from 'sonner';
 import { extractErrorMessage, notifyError } from '@/lib/error-feedback';
@@ -69,6 +73,12 @@ const CopilotPage: React.FC = () => {
   const [rejectReason, setRejectReason] = useState<string>('');
   const [insights, setInsights] = useState<CopilotInsightsView | null>(null);
   const [insightsLoading, setInsightsLoading] = useState<boolean>(false);
+  const [thresholdsOpen, setThresholdsOpen] = useState<boolean>(false);
+  const [thresholdsDraft, setThresholdsDraft] = useState<CopilotInsightThresholds | null>(null);
+  const [thresholdsSaving, setThresholdsSaving] = useState<boolean>(false);
+  const [funnel, setFunnel] = useState<ShopperFunnelResponse | null>(null);
+  const [funnelLoading, setFunnelLoading] = useState<boolean>(false);
+  const [funnelOpen, setFunnelOpen] = useState<boolean>(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const fetchInsights = useCallback(async (): Promise<void> => {
@@ -81,6 +91,45 @@ const CopilotPage: React.FC = () => {
       setInsightsLoading(false);
     }
   }, []);
+
+  const openFunnel = async (): Promise<void> => {
+    setFunnelOpen(true);
+    if (funnel) return;
+    try {
+      setFunnelLoading(true);
+      setFunnel(await copilotApi.getShopperFunnel(30));
+    } catch (err) {
+      notifyError(err, '读取导购漏斗失败');
+    } finally {
+      setFunnelLoading(false);
+    }
+  };
+
+  const openThresholds = async (): Promise<void> => {
+    try {
+      const current = await copilotApi.getCopilotInsightThresholds();
+      setThresholdsDraft(current);
+      setThresholdsOpen(true);
+    } catch (err) {
+      notifyError(err, '读取巡检设置失败');
+    }
+  };
+
+  const saveThresholds = async (): Promise<void> => {
+    if (!thresholdsDraft) return;
+    try {
+      setThresholdsSaving(true);
+      const saved = await copilotApi.updateCopilotInsightThresholds(thresholdsDraft);
+      setThresholdsDraft(saved);
+      setThresholdsOpen(false);
+      toast.success('巡检阈值已保存，立即生效');
+      await fetchInsights();
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '保存失败'));
+    } finally {
+      setThresholdsSaving(false);
+    }
+  };
 
   const fetchConversations = useCallback(async (): Promise<CopilotConversation[]> => {
     try {
@@ -477,15 +526,33 @@ const CopilotPage: React.FC = () => {
                 </Badge>
               )}
             </div>
-            <button
-              type="button"
-              aria-label="刷新巡检"
-              className="text-slate-400 hover:text-slate-600"
-              onClick={() => void fetchInsights()}
-              disabled={insightsLoading}
-            >
-              <RefreshCw className={`h-3 w-3 ${insightsLoading ? 'animate-spin' : ''}`} />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                aria-label="导购漏斗"
+                className="text-slate-400 hover:text-slate-600"
+                onClick={() => void openFunnel()}
+              >
+                <TrendingUp className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                aria-label="巡检设置"
+                className="text-slate-400 hover:text-slate-600"
+                onClick={() => void openThresholds()}
+              >
+                <Settings2 className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                aria-label="刷新巡检"
+                className="text-slate-400 hover:text-slate-600"
+                onClick={() => void fetchInsights()}
+                disabled={insightsLoading}
+              >
+                <RefreshCw className={`h-3 w-3 ${insightsLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
           </div>
           <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
             {insightsLoading && !insights && (
@@ -620,6 +687,124 @@ const CopilotPage: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={funnelOpen} onOpenChange={setFunnelOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>AI 导购转化漏斗（近 30 天）</DialogTitle>
+            <DialogDescription>按会话去重统计；数据来自导购实际对话与加购确认。</DialogDescription>
+          </DialogHeader>
+          {funnelLoading && !funnel && (
+            <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
+            </div>
+          )}
+          {funnel && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                {funnel.stages.map((stage, index) => {
+                  const max = funnel.stages[0]?.sessions || 1;
+                  const width = Math.max(4, Math.round((stage.sessions / max) * 100));
+                  return (
+                    <div key={stage.stage}>
+                      <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+                        <span>
+                          {index + 1}. {stage.label}
+                        </span>
+                        <span>
+                          {stage.sessions} 会话
+                          {index > 0 && (
+                            <span className="ml-2 text-slate-400">
+                              转化 {(stage.conversionFromPrevious * 100).toFixed(1)}%
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="h-2.5 w-full rounded bg-slate-100">
+                        <div
+                          className="h-2.5 rounded bg-[#00C2B8]"
+                          style={{ width: `${width}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                整体转化（打开 → 下单）：
+                <span className="ml-1 font-semibold text-[#0B1F3A]">
+                  {(funnel.overallConversion * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-slate-600">买家热搜词 TOP 10</div>
+                {funnel.topQueries.length === 0 ? (
+                  <div className="text-xs text-slate-400">暂无搜索记录</div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {funnel.topQueries.map((item) => (
+                      <Badge key={item.keyword} variant="secondary" className="text-xs">
+                        {item.keyword} · {item.count}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFunnelOpen(false)}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={thresholdsOpen} onOpenChange={setThresholdsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>巡检设置</DialogTitle>
+            <DialogDescription>调整告警阈值，保存后立即生效（留空或超范围会被拒绝）。</DialogDescription>
+          </DialogHeader>
+          {thresholdsDraft && (
+            <div className="space-y-3">
+              {[
+                { key: 'lowStock' as const, label: '低库存阈值（件）', hint: '总库存低于该值告警' },
+                { key: 'pendingRefundHours' as const, label: '退款超时（小时）', hint: '待审批退款超过该时长告警' },
+                { key: 'unpaidOrderHours' as const, label: '未支付超时（小时）', hint: '订单创建后超过该时长未付告警' },
+                { key: 'staleShippedDays' as const, label: '发货未签收（天）', hint: '发货超过该天数仍为已发货告警' },
+              ].map((field) => (
+                <div key={field.key} className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-slate-700">{field.label}</div>
+                    <div className="text-xs text-slate-500">{field.hint}</div>
+                  </div>
+                  <Input
+                    type="number"
+                    className="w-24"
+                    value={thresholdsDraft[field.key]}
+                    onChange={(event) =>
+                      setThresholdsDraft({
+                        ...thresholdsDraft,
+                        [field.key]: Number(event.target.value),
+                      })
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setThresholdsOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={() => void saveThresholds()} disabled={thresholdsSaving}>
+              {thresholdsSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!rejectTarget} onOpenChange={(open) => !open && setRejectTarget(null)}>
         <DialogContent>

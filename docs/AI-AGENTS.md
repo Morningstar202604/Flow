@@ -122,6 +122,8 @@ Content-Type: application/json
 | 落库 | `copilot_conversations` / `copilot_messages` / `copilot_actions`（含 `batch_id`） |
 | 多步计划 | 同一轮多个写动作共享 `batch_id`；`POST /api/copilot/batches/:batchId/resolve` 整批按序执行、**失败即停** |
 | 店铺巡检 | `GET /api/copilot/insights`：低库存 / 超时退款 / 未支付订单 / 长期未签收（纯 SQL，不调用 LLM） |
+| 巡检阈值 | `GET/PUT /api/copilot/insights/thresholds`：4 项阈值存 `ai_settings`，逐字段校验 + 越界拒绝 + 审计 |
+| 导购漏斗 | `GET /api/copilot/shopper-funnel?days=30`：打开→推荐→加购→下单 四阶段按会话去重；下单阶段联真实订单（登录按 userId、匿名按订单快照 sessionId） |
 
 ### 工具清单（`server/modules/copilot/copilot-tools.ts`）
 

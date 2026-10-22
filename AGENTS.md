@@ -75,7 +75,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - AI 分析中心 `/seller/ai-center` - **模型设置**、用量统计、历史报告、**我的 Agent（自定义）**
 - 优惠券 / 运费模板 / 集合 / CMS 页面 / 审计日志
 
-## 数据库表（共 38 张，以 `server/database/schema.ts` 为准）
+## 数据库表（共 39 张，以 `server/database/schema.ts` 为准）
 
 - 用户与地址：`users` `addresses`
 - 商品：`categories` `products` `productVariants` `stockMovements`
@@ -84,7 +84,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - 购物车：`cartItems` `cartRecoveryCodes`
 - 内容与咨询：`cmsPages` `redirects` `inquirySessions` `inquiryMessages`
 - AI 与运营：`aiSettings` `aiAgents` `aiReports` `aiUsageLog` `pointTransactions` `visits` `auditLogs`
-- AI 运营副驾 / 导购：`copilotConversations` `copilotMessages` `copilotActions`（`channel` 区分 seller / shopper）
+- AI 运营副驾 / 导购：`copilotConversations` `copilotMessages` `copilotActions`（`channel` 区分 seller / shopper）`shopperEvents`
 
 ## AI Agent
 
@@ -110,11 +110,13 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - `copilot.service.ts`：ReAct 循环（上限 6 步）；写工具在循环内只落 `copilot_actions(pending)`，**审批端点**才执行，且校验动作所有者
 - `copilot-insights.service.ts`：店铺巡检（低库存 / 超时退款 / 未支付订单 / 长期未签收），纯 SQL 聚合、不调 LLM
 - 多步计划：同轮写动作共享 `batchId`，`POST /api/copilot/batches/:batchId/resolve` 整批按序执行、失败即停
+- 巡检阈值：`ai_settings` 键 `copilot_insight_thresholds`，GET/PUT `/api/copilot/insights/thresholds`
+- 导购漏斗：`shopper_events` 打点 + `GET /api/copilot/shopper-funnel`（下单阶段联真实订单）
 - 安全约束：`@RolesGuard(['seller','admin'])` 覆盖全部端点；未注册工具名直接拒绝；参数在执行前二次校验
 
 ## 验证入口
 
-- `npm run lint` / `npm run type:check` / `npm test`（89 例单测）/ `npm run build`
+- `npm run lint` / `npm run type:check` / `npm test`（99 例单测）/ `npm run build`
 - `npm run smoke:workflows`（16 步全业务工作流）/ `npm run smoke:degraded`（无 Key 降级）/ `npm run smoke`（19 步交易闭环）
 - `npm run smoke:copilot`（副驾：读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 巡检 → 多步计划 → 越权 403）
 - `npm run smoke:shopper`（导购：工具隔离 → 搜索/详情 → 加购确认 → 会话隔离）

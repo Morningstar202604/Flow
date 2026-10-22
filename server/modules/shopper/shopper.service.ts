@@ -9,6 +9,7 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { copilotActions, copilotConversations, copilotMessages } from '../../database/schema';
 import { AiGatewayService } from '../ai/ai-gateway.service';
+import { ShopperAnalyticsService } from './shopper-analytics.service';
 import { ShopperToolService } from './shopper-tool.service';
 import { SHOPPER_TOOLS, getShopperTool } from './shopper-tools';
 import {
@@ -49,6 +50,7 @@ export class ShopperService {
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly gateway: AiGatewayService,
     private readonly tools: ShopperToolService,
+    private readonly analytics: ShopperAnalyticsService,
   ) {}
 
   /** 买家没有 userId 时用 sessionId 作为会话归属键 */
@@ -84,6 +86,14 @@ export class ShopperService {
         channel: 'shopper',
       })
       .returning();
+
+    await this.analytics.track({
+      userId: ctx.userId ?? null,
+      sessionId: ctx.sessionId ?? null,
+      stage: 'viewed',
+      conversationId: inserted[0].id,
+    });
+
     return this.mapConversation(inserted[0]);
   }
 
@@ -289,6 +299,17 @@ ${buildToolCatalog(SHOPPER_TOOLS)}
         });
         newMessages.push(this.mapMessage(messageRow));
         toolTrace.push({ tool: tool.name, kind: 'read', ok: result.ok });
+
+        if (tool.name === 'search_products') {
+          await this.analytics.track({
+            userId: ctx.userId ?? null,
+            sessionId: ctx.sessionId ?? null,
+            stage: 'recommended',
+            conversationId,
+            keyword: String(validation.args.keyword ?? ''),
+          });
+        }
+
         messages.push({ role: 'assistant', content: completion.content });
         messages.push({ role: 'user', content: `[工具 ${tool.name} 的执行结果]\n${content}` });
         continue;
@@ -406,6 +427,17 @@ ${buildToolCatalog(SHOPPER_TOOLS)}
         })
         .where(eq(copilotActions.id, actionId))
         .returning();
+
+      if (result.ok && tool.name === 'add_to_cart') {
+        await this.analytics.track({
+          userId: ctx.userId ?? null,
+          sessionId: ctx.sessionId ?? null,
+          stage: 'cart_confirmed',
+          conversationId: actionRow.conversationId,
+          productId: typeof validation.args.productId === 'string' ? validation.args.productId : null,
+        });
+      }
+
       return { action: this.mapAction(updated[0]), ok: result.ok, message: result.content };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

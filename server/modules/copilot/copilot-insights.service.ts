@@ -1,16 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { orders, products, refunds } from '../../database/schema';
-import type { CopilotInsight, CopilotInsightsView } from '../../../shared/api.interface';
+import { aiSettings, orders, products, refunds } from '../../database/schema';
+import type {
+  CopilotInsight,
+  CopilotInsightThresholds,
+  CopilotInsightsView,
+} from '../../../shared/api.interface';
+import { mergeInsightThresholds } from './copilot-insight-thresholds';
 
-/** 巡检阈值（集中定义，便于后续做成卖家可配置项） */
-export const INSIGHT_THRESHOLDS = {
-  lowStock: 10,
-  pendingRefundHours: 48,
-  unpaidOrderHours: 24,
-  staleShippedDays: 14,
-} as const;
+/** ai_settings 中保存巡检阈值的键（JSON） */
+export const INSIGHT_THRESHOLDS_KEY = 'copilot_insight_thresholds';
 
 /**
  * 店铺巡检：纯 SQL 聚合出的可执行告警，不调用 LLM。
@@ -20,12 +20,22 @@ export const INSIGHT_THRESHOLDS = {
 export class CopilotInsightsService {
   constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
 
+  async getThresholds(): Promise<CopilotInsightThresholds> {
+    const rows = await this.db
+      .select({ value: aiSettings.value })
+      .from(aiSettings)
+      .where(eq(aiSettings.key, INSIGHT_THRESHOLDS_KEY))
+      .limit(1);
+    return mergeInsightThresholds(rows[0]?.value);
+  }
+
   async getInsights(): Promise<CopilotInsightsView> {
+    const thresholds = await this.getThresholds();
     const [lowStock, staleRefunds, unpaidOrders, staleShipments] = await Promise.all([
-      this.lowStock(),
-      this.staleRefunds(),
-      this.unpaidOrders(),
-      this.staleShipments(),
+      this.lowStock(thresholds),
+      this.staleRefunds(thresholds),
+      this.unpaidOrders(thresholds),
+      this.staleShipments(thresholds),
     ]);
 
     const insights = [...lowStock, ...staleRefunds, ...unpaidOrders, ...staleShipments].sort(
@@ -34,12 +44,39 @@ export class CopilotInsightsService {
 
     return {
       generatedAt: new Date().toISOString(),
-      thresholds: { ...INSIGHT_THRESHOLDS },
+      thresholds,
       insights,
     };
   }
 
-  private async lowStock(): Promise<CopilotInsight[]> {
+  /** 保存阈值（叠加在当前配置上；未变化时直接返回，不写库） */
+  async updateThresholds(
+    input: Partial<CopilotInsightThresholds>,
+    actorId: string,
+  ): Promise<CopilotInsightThresholds> {
+    const current = await this.getThresholds();
+    const next: CopilotInsightThresholds = { ...current, ...input };
+
+    const changed = (Object.keys(next) as Array<keyof CopilotInsightThresholds>)
+      .some((key) => next[key] !== current[key]);
+    if (!changed) return current;
+
+    await this.db
+      .insert(aiSettings)
+      .values({
+        key: INSIGHT_THRESHOLDS_KEY,
+        value: JSON.stringify(next),
+        updatedBy: actorId,
+      })
+      .onConflictDoUpdate({
+        target: aiSettings.key,
+        set: { value: JSON.stringify(next), updatedBy: actorId, updatedAt: new Date() },
+      });
+
+    return next;
+  }
+
+  private async lowStock(thresholds: CopilotInsightThresholds): Promise<CopilotInsight[]> {
     const rows = await this.db
       .select({
         id: products.id,
@@ -48,7 +85,7 @@ export class CopilotInsightsService {
         totalSold: products.totalSold,
       })
       .from(products)
-      .where(and(eq(products.status, 'active'), sql`${products.totalStock} < ${INSIGHT_THRESHOLDS.lowStock}`))
+      .where(and(eq(products.status, 'active'), sql`${products.totalStock} < ${thresholds.lowStock}`))
       .orderBy(asc(products.totalStock))
       .limit(10);
 
@@ -64,8 +101,8 @@ export class CopilotInsightsService {
     }));
   }
 
-  private async staleRefunds(): Promise<CopilotInsight[]> {
-    const cutoff = new Date(Date.now() - INSIGHT_THRESHOLDS.pendingRefundHours * 3600 * 1000);
+  private async staleRefunds(thresholds: CopilotInsightThresholds): Promise<CopilotInsight[]> {
+    const cutoff = new Date(Date.now() - thresholds.pendingRefundHours * 3600 * 1000);
     const rows = await this.db
       .select({
         id: refunds.id,
@@ -86,15 +123,15 @@ export class CopilotInsightsService {
       type: 'stale_refund' as const,
       severity: 'critical' as const,
       title: '退款超时未处理',
-      detail: `退款单 ${row.refundNo}（订单 ${row.orderNo ?? '未知'}，$${row.amount}）已等待超过 ${INSIGHT_THRESHOLDS.pendingRefundHours} 小时：${row.reason}`,
+      detail: `退款单 ${row.refundNo}（订单 ${row.orderNo ?? '未知'}，$${row.amount}）已等待超过 ${thresholds.pendingRefundHours} 小时：${row.reason}`,
       suggestion: '尽快审批或拒绝并说明原因',
       prompt: `退款单 ${row.refundNo} 已超时，帮我查看详情并给出处理建议`,
       entityId: row.id,
     }));
   }
 
-  private async unpaidOrders(): Promise<CopilotInsight[]> {
-    const cutoff = new Date(Date.now() - INSIGHT_THRESHOLDS.unpaidOrderHours * 3600 * 1000);
+  private async unpaidOrders(thresholds: CopilotInsightThresholds): Promise<CopilotInsight[]> {
+    const cutoff = new Date(Date.now() - thresholds.unpaidOrderHours * 3600 * 1000);
     const rows = await this.db
       .select({
         id: orders.id,
@@ -119,8 +156,8 @@ export class CopilotInsightsService {
     }));
   }
 
-  private async staleShipments(): Promise<CopilotInsight[]> {
-    const cutoff = new Date(Date.now() - INSIGHT_THRESHOLDS.staleShippedDays * 24 * 3600 * 1000);
+  private async staleShipments(thresholds: CopilotInsightThresholds): Promise<CopilotInsight[]> {
+    const cutoff = new Date(Date.now() - thresholds.staleShippedDays * 24 * 3600 * 1000);
     const rows = await this.db
       .select({
         id: orders.id,
@@ -142,9 +179,9 @@ export class CopilotInsightsService {
       type: 'stale_shipment' as const,
       severity: 'info' as const,
       title: '发货后长期未签收',
-      detail: `订单 ${row.orderNo} 已发货 ${INSIGHT_THRESHOLDS.staleShippedDays} 天以上（运单 ${row.trackingNumber ?? '未填'}），仍未标记送达`,
+      detail: `订单 ${row.orderNo} 已发货 ${thresholds.staleShippedDays} 天以上（运单 ${row.trackingNumber ?? '未填'}），仍未标记送达`,
       suggestion: '核对物流后标记送达或联系买家',
-      prompt: `订单 ${row.orderNo} 发货超过 ${INSIGHT_THRESHOLDS.staleShippedDays} 天，帮我核对物流状态`,
+      prompt: `订单 ${row.orderNo} 发货超过 ${thresholds.staleShippedDays} 天，帮我核对物流状态`,
       entityId: row.id,
     }));
   }

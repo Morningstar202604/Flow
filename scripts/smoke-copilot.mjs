@@ -229,7 +229,39 @@ try {
   assert(planCoupon.length === 1, '清仓券应已创建');
   ok(`多步计划：${batchApproved.body.actions.length} 步整批执行完成`);
 
-  // ---------- 7. 越权 ----------
+  // ---------- 7. 巡检阈值可配置 ----------
+  const thresholdsBefore = await api('GET', '/api/copilot/insights/thresholds', { cookie: seller.cookie });
+  assert(thresholdsBefore.body.lowStock === 10, `默认低库存阈值应为 10，实际 ${thresholdsBefore.body.lowStock}`);
+
+  const saved = await api('PUT', '/api/copilot/insights/thresholds', {
+    cookie: seller.cookie,
+    json: { lowStock: 50 },
+  });
+  assert(saved.body.lowStock === 50, `保存后阈值应为 50，实际 ${saved.body.lowStock}`);
+
+  // 造一个库存 30 的商品：默认阈值 10 下不告警，阈值 50 下应告警（证明阈值真的生效）
+  const [midProduct] = await sql`
+    INSERT INTO products (seller_id, title_zh, title_en, status, total_stock)
+    VALUES (${sellerId}, ${'中库存商品' + runId}, ${'Mid Stock ' + runId}, 'active', 30) RETURNING id`;
+
+  const insightsAfter = await api('GET', '/api/copilot/insights', { cookie: seller.cookie });
+  assert(insightsAfter.body.thresholds.lowStock === 50, '巡检应使用新阈值');
+  const stillFlagged = insightsAfter.body.insights.find(
+    (i) => i.type === 'low_stock' && i.entityId === midProduct.id,
+  );
+  assert(!!stillFlagged, '阈值 50 下库存 30 的商品应被识别为低库存');
+
+  const invalid = await api('PUT', '/api/copilot/insights/thresholds', {
+    cookie: seller.cookie,
+    json: { lowStock: 999999 },
+    expect: [400],
+  });
+  assert(invalid.status === 400, '越界阈值应被 400 拒绝');
+
+  await api('PUT', '/api/copilot/insights/thresholds', { cookie: seller.cookie, json: { lowStock: 10 } });
+  ok('巡检阈值：默认 10 → 保存 50 → 巡检生效 → 越界拒绝 → 复原');
+
+  // ---------- 8. 越权 ----------
   const forbidden = await api('GET', '/api/copilot/conversations', {
     cookie: buyer.cookie,
     expect: [403],
