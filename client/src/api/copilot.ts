@@ -105,6 +105,9 @@ export async function getShopperDemandGaps(days = 90): Promise<ShopperDemandGap[
 export interface WatchSettingsView {
   enabled: boolean;
   intervalMinutes: number;
+  notifyKind: 'webhook' | 'none';
+  notifyUrl?: string;
+  notifyOnlyOnNew: boolean;
 }
 
 export async function getWatchSettings(): Promise<WatchSettingsView> {

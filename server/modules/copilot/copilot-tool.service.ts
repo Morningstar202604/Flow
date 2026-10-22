@@ -13,6 +13,7 @@ import { ProductsService } from '../products/products.service';
 import { RefundsService } from '../refunds/refunds.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { InquiryService } from '../inquiry/inquiry.service';
+import { CopywriterService } from '../ai/copywriter.service';
 import type { OrderStatus } from '../../../shared/api.interface';
 
 export interface ToolExecutionResult {
@@ -40,6 +41,7 @@ export class CopilotToolService {
     private readonly refundsService: RefundsService,
     private readonly couponsService: CouponsService,
     private readonly inquiryService: InquiryService,
+    private readonly copywriterService: CopywriterService,
   ) {}
 
   async runReadTool(tool: CopilotToolDefinition, args: Record<string, unknown>): Promise<ToolExecutionResult> {
@@ -358,9 +360,35 @@ export class CopilotToolService {
       actor.userId,
     );
 
+    // AI 补全：有模型时自动生成英文文案并写回草稿；失败不影响商品创建（诚实降级）
+    let copyNote = '';
+    try {
+      const copy = await this.copywriterService.generate(
+        {
+          productNameZh: titleZh,
+          category: categoryId,
+          targetMarket: '北美市场',
+        },
+        actor.userId,
+      );
+      const patch: Record<string, unknown> = {};
+      if (copy.titleEn) patch.titleEn = copy.titleEn.slice(0, 200);
+      if (copy.longDescription) patch.longDescEn = copy.longDescription;
+      if (copy.bulletPoints.length > 0) patch.bulletPointsEn = copy.bulletPoints;
+      if (copy.seoKeywords) patch.seoKeywordsEn = copy.seoKeywords;
+      if (Object.keys(patch).length > 0) {
+        await this.productsService.update(product.id, patch, actor.userId, { role: actor.role });
+        copyNote = ' 已用 AI 生成英文文案（标题/卖点/描述/SEO），请复核后补图上架。';
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`草稿文案 AI 补全失败（商品已创建）：${message}`);
+      copyNote = ' （AI 文案未生成：模型未配置或调用失败，可稍后在商品管理里用「AI 生成文案」补全）';
+    }
+
     return {
       ok: true,
-      content: `草稿商品《${product.titleZh}》已创建（状态 draft，售价 $${product.minPrice ?? price}）。请补充图片与详情后再上架。`,
+      content: `草稿商品《${product.titleZh}》已创建（状态 draft，售价 $${product.minPrice ?? price}）。${copyNote}`,
       summary: `草稿商品 ${product.id.slice(0, 8)}…`,
     };
   }

@@ -5,6 +5,30 @@
 
 ---
 
+## [1.15.0] — 2026-10-22
+
+巡检通知外发 + 草稿商品 AI 补全 + 多副本互斥实测。
+
+### Added
+- **巡检通知**：`CopilotNotifyService`（零新依赖，原生 fetch）
+  - `POST` JSON `{text, msgtype, content:{text}}`，同时兼容飞书 / 企业微信 / 钉钉 / Slack 的文本消息格式
+  - `notifyKind`（none|webhook）/ `notifyUrl` / `notifyOnlyOnNew`（默认 true，无新增不打扰）
+  - 8 秒超时；发送失败返回原因并降级为"通知未发送"，**绝不影响巡检主流程**
+- **草稿商品 AI 补全**：批准 `create_draft_product` 后自动调 CopywriterAgent
+  - 生成英文标题 / 卖点 / 长描述 / SEO 关键词并写回草稿
+  - 模型未配置或调用失败时诚实提示，商品仍会创建（降级不阻断）
+- 前端：巡检设置新增「通知渠道 / Webhook 地址 / 仅新增时通知」控件
+- 验证脚本：`npm run verify:watch-mutex`（两个实例同库并发 8 次巡检，断言仅 1 次执行、7 次被互斥跳过）
+
+### Verification
+- 单测 114/114（新增 5 例：通知未配置/非法地址/成功载荷/上游 5xx/网络异常）
+- `npm run lint` / `npm run type:check` / `npm run build` 全绿
+- `smoke:copilot` 13 步（新增：webhook 真实推送 + 草稿 AI 文案断言）、`smoke:shopper` 9 步、`smoke:workflows` 16 步全通过
+- `verify:watch-mutex`：并发 8 次 → 执行 1 次 / 跳过 7 次，快照与锁释放均正确
+- 真浏览器：巡检设置显示通知渠道下拉、Webhook 输入、仅新增开关，控制台无错误
+
+---
+
 ## [1.14.0] — 2026-10-22
 
 定时巡检（零新依赖）+ 缺口一键建草稿 + 商品级漏斗。

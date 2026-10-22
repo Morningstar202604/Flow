@@ -287,8 +287,29 @@ try {
   assert(watchRun2.body.ran === true, '第二次巡检也应执行');
   assert(watchRun2.body.message.includes('新增 0 项'), '第二次不应有新告警');
 
-  await api('PUT', '/api/copilot/watch', { cookie: seller.cookie, json: { enabled: false } });
-  ok('定时巡检：默认关闭 → 开启 15 分钟 → 手动执行 → 二次不重复告警 → 关闭');
+  // 通知渠道：指向 mock 的 /webhook/notify，再跑一次应真的推送到
+  const notifyUrl = `${MOCK}/webhook/notify`;
+  await api('PUT', '/api/copilot/watch', {
+    cookie: seller.cookie,
+    json: { enabled: true, notifyKind: 'webhook', notifyUrl, notifyOnlyOnNew: false },
+  });
+  const notifyRun = await api('POST', '/api/copilot/watch/run', { cookie: seller.cookie });
+  assert(notifyRun.body.ran === true, '通知巡检应执行');
+  assert(notifyRun.body.message.includes('已推送通知'), `应提示已推送，实际 ${notifyRun.body.message.slice(-40)}`);
+
+  const mockState = await (async () => {
+    const res = await fetch(`${MOCK}/_mock/state`);
+    return res.json();
+  })();
+  assert(Array.isArray(mockState.webhook.received) && mockState.webhook.received.length >= 1, 'mock 应收到通知');
+  const notified = mockState.webhook.received[mockState.webhook.received.length - 1];
+  assert(typeof notified.text === 'string' && notified.text.includes('巡检'), '通知正文应为巡检摘要');
+
+  await api('PUT', '/api/copilot/watch', {
+    cookie: seller.cookie,
+    json: { enabled: false, notifyKind: 'none', notifyUrl: '' },
+  });
+  ok('定时巡检：默认关闭 → 开启 15 分钟 → 手动执行 → 二次不重复告警 → webhook 推送成功 → 关闭');
 
   // ---------- 9. 需求缺口 → 草稿商品 ----------
   const gapKeyword = `测试缺口${runId.slice(-4)}`;
@@ -315,7 +336,16 @@ try {
     SELECT id, status, total_stock FROM products WHERE title_zh = ${gapKeyword}`;
   assert(afterDraftRows.length === 1, '批准后应创建 1 个商品');
   assert(afterDraftRows[0].status === 'draft', `新商品应为 draft，实际 ${afterDraftRows[0].status}`);
-  ok('需求缺口：一键建草稿 → 审批前无商品 → 批准后为 draft 状态');
+
+  // AI 补全：mock LLM 会返回英文文案，应写回草稿
+  const [draftCopy] = await sql`
+    SELECT title_en, bullet_points_en, long_desc_en, seo_keywords_en
+    FROM products WHERE id = ${afterDraftRows[0].id}`;
+  assert(draftCopy.title_en === 'Mock Title EN', `英文标题应被 AI 补全，实际 ${draftCopy.title_en}`);
+  assert(Array.isArray(draftCopy.bullet_points_en) && draftCopy.bullet_points_en.length >= 2, '英文卖点应被补全');
+  assert((draftCopy.long_desc_en ?? '').length > 10, '英文长描述应被补全');
+  assert((draftCopy.seo_keywords_en ?? '').length > 0, '英文 SEO 关键词应被补全');
+  ok('需求缺口：一键建草稿 → 审批 → draft 状态 + AI 英文文案补全');
 
   // ---------- 10. 越权 ----------
   const forbidden = await api('GET', '/api/copilot/conversations', {

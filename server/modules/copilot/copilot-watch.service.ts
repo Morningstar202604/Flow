@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { aiSettings } from '../../database/schema';
 import { CopilotInsightsService } from './copilot-insights.service';
+import { CopilotNotifyService, type NotifyConfig } from './copilot-notify.service';
 import { diffNewInsights, formatInsightDigest } from './copilot-insight-digest';
 import type { CopilotInsight } from '../../../shared/api.interface';
 
@@ -11,10 +12,20 @@ export interface WatchSettings {
   enabled: boolean;
   /** 巡检间隔（分钟，5-1440） */
   intervalMinutes: number;
+  /** 通知渠道（webhook 覆盖飞书/企微/钉钉/Slack；none=只写日志） */
+  notifyKind: 'webhook' | 'none';
+  notifyUrl?: string;
+  /** 只在有新增告警时通知（默认 true，避免无变化也刷屏） */
+  notifyOnlyOnNew: boolean;
 }
 
 export const WATCH_SETTINGS_KEY = 'copilot_watch_settings';
-export const DEFAULT_WATCH_SETTINGS: WatchSettings = { enabled: false, intervalMinutes: 30 };
+export const DEFAULT_WATCH_SETTINGS: WatchSettings = {
+  enabled: false,
+  intervalMinutes: 30,
+  notifyKind: 'none',
+  notifyOnlyOnNew: true,
+};
 /** 上次巡检快照（用于 diff 出新告警） */
 const WATCH_SNAPSHOT_KEY = 'copilot_watch_last_snapshot';
 /** 跨进程互斥锁（多副本部署时只有一个实例执行巡检） */
@@ -25,7 +36,7 @@ const WATCH_LOCK_KEY = 'copilot_watch_lock';
  * - 默认关闭，卖家在副驾「巡检设置」里开启
  * - 每个周期重新读配置，改完即时生效
  * - 用 ai_settings 行级锁做跨进程互斥，多副本安全
- * - 只记录"新增告警"与摘要日志；通知渠道（邮件/IM）留给后续接入
+ * - 只对"新增告警"出摘要；可配置 webhook 外发（飞书/企微/钉钉/Slack）
  */
 @Injectable()
 export class CopilotWatchService implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -37,6 +48,7 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly insightsService: CopilotInsightsService,
+    private readonly notifyService: CopilotNotifyService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -63,6 +75,9 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
       return {
         enabled: parsed.enabled === true,
         intervalMinutes: clampInterval(parsed.intervalMinutes),
+        notifyKind: parsed.notifyKind === 'webhook' ? 'webhook' : 'none',
+        notifyUrl: typeof parsed.notifyUrl === 'string' ? parsed.notifyUrl.slice(0, 500) : undefined,
+        notifyOnlyOnNew: parsed.notifyOnlyOnNew !== false,
       };
     } catch {
       return { ...DEFAULT_WATCH_SETTINGS };
@@ -76,6 +91,9 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
       intervalMinutes: input.intervalMinutes === undefined
         ? current.intervalMinutes
         : clampInterval(input.intervalMinutes),
+      notifyKind: input.notifyKind === undefined ? current.notifyKind : input.notifyKind === 'webhook' ? 'webhook' : 'none',
+      notifyUrl: input.notifyUrl === undefined ? current.notifyUrl : (input.notifyUrl.trim() || undefined),
+      notifyOnlyOnNew: input.notifyOnlyOnNew === undefined ? current.notifyOnlyOnNew : input.notifyOnlyOnNew === true,
     };
     await this.db
       .insert(aiSettings)
@@ -131,7 +149,20 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
         await this.writeSnapshot(insights);
         this.logger.log(digest.replace(/\n/g, ' | '));
 
-        return { ran: true, message: digest };
+        const settings = await this.getSettings();
+        const shouldNotify = settings.notifyKind === 'webhook'
+          && !!settings.notifyUrl
+          && (!settings.notifyOnlyOnNew || newInsights.length > 0);
+        let notifyNote = '';
+        if (shouldNotify) {
+          const sent = await this.notifyService.send(
+            { kind: settings.notifyKind, url: settings.notifyUrl },
+            digest,
+          );
+          notifyNote = sent.ok ? '（已推送通知）' : `（通知未发送：${sent.message}）`;
+        }
+
+        return { ran: true, message: digest + notifyNote };
       } finally {
         await this.releaseLock();
       }

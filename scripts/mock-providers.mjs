@@ -21,6 +21,7 @@ const state = {
   stripe: { intents: [], refunds: [] },
   paypal: { orders: [], refunds: [], tokens: 0 },
   llm: { calls: 0, agents: {} },
+  webhook: { received: [] },
 };
 
 const seq = { stripe: 0, paypal: 0, event: 0 };
@@ -329,6 +330,7 @@ const server = createServer(async (req, res) => {
       state.paypal.refunds = [];
       state.llm.calls = 0;
       state.llm.agents = {};
+      state.webhook.received = [];
       return json(res, 200, { ok: true });
     }
 
@@ -407,6 +409,13 @@ const server = createServer(async (req, res) => {
     }
 
     // ---------- LLM（OpenAI 兼容） ----------
+    // ---------- 通知 webhook 收集器（供巡检通知冒烟断言） ----------
+    if (method === 'POST' && path === '/webhook/notify') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      state.webhook.received.push(body);
+      return json(res, 200, { ok: true });
+    }
+
     if (method === 'POST' && path === '/llm/v1/chat/completions') {
       const body = JSON.parse((await readBody(req)) || '{}');
       const agent = classifyAgent(body);

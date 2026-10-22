@@ -84,7 +84,13 @@ const CopilotPage: React.FC = () => {
   const [funnelOpen, setFunnelOpen] = useState<boolean>(false);
   const [demandGaps, setDemandGaps] = useState<ShopperDemandGap[]>([]);
   const [productFunnel, setProductFunnel] = useState<ShopperProductFunnelResponse | null>(null);
-  const [watch, setWatch] = useState<{ enabled: boolean; intervalMinutes: number } | null>(null);
+  const [watch, setWatch] = useState<{
+    enabled: boolean;
+    intervalMinutes: number;
+    notifyKind: 'webhook' | 'none';
+    notifyUrl?: string;
+    notifyOnlyOnNew: boolean;
+  } | null>(null);
   const [watchSaving, setWatchSaving] = useState<boolean>(false);
   const [watchRunning, setWatchRunning] = useState<boolean>(false);
   const [draftingKeyword, setDraftingKeyword] = useState<string | null>(null);
@@ -123,7 +129,13 @@ const CopilotPage: React.FC = () => {
     }
   };
 
-  const saveWatch = async (patch: Partial<{ enabled: boolean; intervalMinutes: number }>): Promise<void> => {
+  const saveWatch = async (patch: Partial<{
+    enabled: boolean;
+    intervalMinutes: number;
+    notifyKind: 'webhook' | 'none';
+    notifyUrl?: string;
+    notifyOnlyOnNew: boolean;
+  }>): Promise<void> => {
     if (!watch) return;
     try {
       setWatchSaving(true);
@@ -165,8 +177,12 @@ const CopilotPage: React.FC = () => {
 
   const openThresholds = async (): Promise<void> => {
     try {
-      const current = await copilotApi.getCopilotInsightThresholds();
+      const [current, watchData] = await Promise.all([
+        copilotApi.getCopilotInsightThresholds(),
+        copilotApi.getWatchSettings(),
+      ]);
       setThresholdsDraft(current);
+      setWatch(watchData);
       setThresholdsOpen(true);
     } catch (err) {
       notifyError(err, '读取巡检设置失败');
@@ -920,6 +936,46 @@ const CopilotPage: React.FC = () => {
                   onBlur={() => void saveWatch({ intervalMinutes: watch.intervalMinutes })}
                 />
               </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-slate-600">通知渠道</span>
+                <select
+                  className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
+                  value={watch.notifyKind}
+                  disabled={watchSaving}
+                  onChange={(event) => {
+                    const kind = event.target.value as 'webhook' | 'none';
+                    setWatch({ ...watch, notifyKind: kind });
+                    void saveWatch({ notifyKind: kind });
+                  }}
+                >
+                  <option value="none">只写日志</option>
+                  <option value="webhook">Webhook（飞书/企微/钉钉/Slack）</option>
+                </select>
+              </div>
+              {watch.notifyKind === 'webhook' && (
+                <>
+                  <Input
+                    placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
+                    value={watch.notifyUrl ?? ''}
+                    disabled={watchSaving}
+                    onChange={(event) => setWatch({ ...watch, notifyUrl: event.target.value })}
+                    onBlur={() => void saveWatch({ notifyUrl: watch.notifyUrl ?? '' })}
+                  />
+                  <label className="flex items-center gap-2 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={watch.notifyOnlyOnNew}
+                      disabled={watchSaving}
+                      onChange={(event) => {
+                        const onlyNew = event.target.checked;
+                        setWatch({ ...watch, notifyOnlyOnNew: onlyNew });
+                        void saveWatch({ notifyOnlyOnNew: onlyNew });
+                      }}
+                    />
+                    仅在出现新增告警时通知
+                  </label>
+                </>
+              )}
               <Button size="sm" variant="outline" className="w-full" onClick={() => void runWatch()} disabled={watchRunning}>
                 {watchRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 立即执行一次巡检

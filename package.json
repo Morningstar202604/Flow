@@ -1,6 +1,6 @@
 {
   "name": "flow",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "description": "AI 原生跨境出货台 · AI-Native Cross-Border Commerce Platform",
   "license": "MIT",
   "private": true,
@@ -32,6 +32,7 @@
     "smoke:workflows": "node scripts/smoke-workflows.mjs",
     "smoke:copilot": "node scripts/smoke-copilot.mjs",
     "smoke:shopper": "node scripts/smoke-shopper.mjs",
+    "verify:watch-mutex": "node scripts/verify-watch-mutex.mjs",
     "capture": "node scripts/capture/screenshots.mjs",
     "capture:video": "node scripts/capture/record-demo.mjs"
   },

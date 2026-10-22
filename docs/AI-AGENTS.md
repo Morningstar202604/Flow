@@ -128,6 +128,8 @@ Content-Type: application/json
 | 缺口建草稿 | `POST /api/copilot/shopper-demand-gaps/draft`：从缺口词生成 `create_draft_product` 待确认动作（仍走审批，批准后为 draft 状态） |
 | 商品级漏斗 | `GET /api/copilot/shopper-product-funnel?days=30`：每个商品被推荐/加购/下单的会话数与加购转化率，按推荐量降序 |
 | 定时巡检 | `GET/PUT /api/copilot/watch` + `POST /api/copilot/watch/run`：原生定时器（零新依赖），默认关闭；间隔 5-1440 分钟；`ai_settings` 行级租约做跨实例互斥；只对**新增**告警记摘要 |
+| 巡检通知 | `notifyKind=webhook` + `notifyUrl`：POST JSON `{text, content:{text}}`，兼容飞书/企微/钉钉/Slack；`notifyOnlyOnNew` 控制无变化不打扰；发送失败只降级提示，不影响巡检 |
+| 草稿 AI 补全 | 批准 `create_draft_product` 后自动调 CopywriterAgent 生成英文标题/卖点/长描述/SEO 并写回；模型未配置时诚实降级提示 |
 
 ### 工具清单（`server/modules/copilot/copilot-tools.ts`）
 

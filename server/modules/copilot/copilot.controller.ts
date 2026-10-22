@@ -11,7 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { IsBoolean, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -86,6 +86,20 @@ export class UpdateWatchSettingsDto {
   @Min(5)
   @Max(1440)
   intervalMinutes?: number;
+
+  @IsOptional()
+  @IsIn(['webhook', 'none'])
+  notifyKind?: 'webhook' | 'none';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  @Matches(/^(https?:\/\/|$)/i, { message: '通知地址需以 http(s):// 开头' })
+  notifyUrl?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  notifyOnlyOnNew?: boolean;
 }
 
 export class CreateDraftFromGapDto {
