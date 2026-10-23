@@ -32,12 +32,14 @@ export class CouponsController {
   @Get()
   @UseGuards(new RolesGuard(['seller', 'admin']))
   async list(
+    @Req() req: Request,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ): Promise<CouponListResponse> {
     return this.couponsService.list(
       page ? parseInt(page, 10) : 1,
       pageSize ? parseInt(pageSize, 10) : 20,
+      { sellerId: req.user?.id, role: req.user?.role },
     );
   }
 
@@ -57,10 +59,14 @@ export class CouponsController {
   @Patch(':id')
   @UseGuards(new RolesGuard(['seller', 'admin']))
   async update(
+    @Req() req: Request,
     @Param('id') id: string,
     @Body() body: UpdateCouponDto,
   ): Promise<Coupon> {
-    return this.couponsService.update(id, body);
+    return this.couponsService.update(id, body, {
+      sellerId: req.user?.id,
+      role: req.user?.role,
+    });
   }
 
   @Post('generate-bulk')

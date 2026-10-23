@@ -20,6 +20,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { PaymentsService } from '../payments/payments.service';
 import { resolveProviderRefundAmount } from '../payments/refund-amount';
+import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
 
 /** Parsed shape of the refunds.items JSON field */
 interface RefundItemEntry {
@@ -92,6 +93,19 @@ export class RefundsService {
       throw new NotFoundException('退款记录不存在');
     }
     return refundRows[0];
+  }
+
+  /** 退款归属：退款所属订单的卖家必须是当前操作者（管理员除外）。 */
+  private async assertSellerOwnsRefund(
+    refund: { orderId: string },
+    sellerId: string,
+    role?: string,
+  ): Promise<void> {
+    if (isPlatformAdmin(role)) return;
+    const orderRow = await this.loadOrder(refund.orderId);
+    if (!orderRow.sellerId || orderRow.sellerId !== sellerId) {
+      throw new ForbiddenException('无权处理该退款');
+    }
   }
 
   // ==================== Buyer: Request Refund ====================
@@ -216,8 +230,10 @@ export class RefundsService {
     refundId: string,
     sellerId: string,
     dto?: { reply?: string },
+    actorRole?: string,
   ) {
     const refund = await this.loadRefund(refundId);
+    this.assertSellerOwnsRefund(refund, sellerId, actorRole);
 
     if (refund.status !== 'requested') {
       throw new BadRequestException('仅待处理退款可审批');
@@ -406,8 +422,10 @@ export class RefundsService {
     refundId: string,
     sellerId: string,
     dto: { reply: string },
+    actorRole?: string,
   ) {
     const refund = await this.loadRefund(refundId);
+    this.assertSellerOwnsRefund(refund, sellerId, actorRole);
 
     if (refund.status !== 'requested') {
       throw new BadRequestException('仅待处理退款可拒绝');
@@ -450,9 +468,16 @@ export class RefundsService {
   async listForSeller(
     sellerId: string,
     query: { status?: string; page?: string; pageSize?: string; keyword?: string },
+    role?: string,
   ) {
-    void sellerId;
     const whereConditions = [];
+
+    // 卖家只能看到自己订单的退款（管理员可跨店）
+    if (!isPlatformAdmin(role)) {
+      whereConditions.push(
+        sql`EXISTS (SELECT 1 FROM ${orders} o WHERE o.id = ${refunds.orderId} AND o.seller_id = ${sellerId})`,
+      );
+    }
 
     // Filter by status
     if (query.status) {
@@ -539,8 +564,17 @@ export class RefundsService {
 
   // ==================== Get Detail ====================
 
-  async getDetail(refundId: string, userId?: string) {
+  async getDetail(
+    refundId: string,
+    userId?: string,
+    seller?: { sellerId: string; role?: string },
+  ) {
     const refund = await this.loadRefund(refundId);
+
+    // 卖家侧：只能查看自己订单的退款（管理员可跨店）
+    if (seller) {
+      await this.assertSellerOwnsRefund(refund, seller.sellerId, seller.role);
+    }
 
     // If userId provided, check ownership
     if (userId && refund.userId !== userId) {

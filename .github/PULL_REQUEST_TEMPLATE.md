@@ -21,7 +21,7 @@
 
 - [ ] 本地运行 `npm run lint`
 - [ ] 本地运行 `npm run type:check`
-- [ ] 本地运行 `npm run build:prod`
+- [ ] 本地运行 `npm run build`
 - [ ] 功能手动验证（描述步骤）
 - [ ] 涉及 UI 改动已附截图
 

@@ -113,6 +113,8 @@ export interface ProductListParams {
   maxPrice?: number;
   sortBy?: 'price_asc' | 'price_desc' | 'sold_desc' | 'newest';
   status?: string;
+  /** 卖家工作台：mine = 只看自己店铺全部状态商品（仅卖家/管理员生效） */
+  scope?: 'mine';
 }
 
 export interface ProductListResponse {

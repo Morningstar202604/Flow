@@ -13,6 +13,7 @@ import { AuditService } from '../audit/audit.service';
 import { ShippingService } from '../shipping/shipping.service';
 import { PaymentsService } from '../payments/payments.service';
 import { computeOrderPricing } from '../../common/pricing/order-pricing';
+import { isPlatformAdmin, resolveSingleSellerId } from '../../common/tenant/tenant-scope';
 import { canTransitionOrderStatus } from './order-status';
 import type {
   Order,
@@ -227,8 +228,14 @@ export class OrdersService {
     pageSize: number,
     status?: OrderStatus,
     keyword?: string,
+    actor?: { actorId?: string; role?: string },
   ): Promise<OrderListResponse> {
     const whereConditions = [];
+    // 卖家只能看到自己店铺的订单；管理员可跨店查看
+    if (actor && !isPlatformAdmin(actor.role)) {
+      if (!actor.actorId) return { items: [], total: 0, page, pageSize };
+      whereConditions.push(eq(orders.sellerId, actor.actorId));
+    }
     if (status) {
       whereConditions.push(eq(orders.status, status));
     }
@@ -368,6 +375,27 @@ export class OrdersService {
     ));
 
     return { items, total, page, pageSize };
+  }
+
+  /**
+   * 卖家订单详情：仅允许查看自己店铺的订单（管理员可跨店）。
+   */
+  async getSellerOrderDetail(
+    id: string,
+    actorId: string | undefined,
+    role?: string,
+  ): Promise<Order> {
+    const rows = await this.db
+      .select({ sellerId: orders.sellerId })
+      .from(orders)
+      .where(eq(orders.id, id));
+    if (rows.length === 0) {
+      throw new NotFoundException('订单不存在');
+    }
+    if (!isPlatformAdmin(role) && (!actorId || rows[0].sellerId !== actorId)) {
+      throw new ForbiddenException('无权访问该订单');
+    }
+    return this.getOrderDetail(id, undefined, undefined, true);
   }
 
   async getOrderDetail(
@@ -553,6 +581,14 @@ export class OrdersService {
 
     const productMap = new Map(productRows.map((p) => [p.id, p]));
 
+    // 订单归属：同一订单只能包含同一卖家的商品（跨卖家合单会破坏卖家看板与退款归属）
+    const { sellerId: orderSellerId, crossSeller } = resolveSingleSellerId(
+      productRows.map((p) => p.sellerId),
+    );
+    if (crossSeller) {
+      throw new BadRequestException('同一订单只能包含同一店铺的商品，请分开下单');
+    }
+
     // Load all variants for these products
     const variantRows = await this.db
       .select()
@@ -566,14 +602,20 @@ export class OrdersService {
       variantsByProduct.set(v.productId, arr);
     }
 
-    // Resolve variantId for each item
-    const itemVariantIds: Array<{ itemId: string; variantId: string }> = [];
-    for (const item of dto.items) {
+    // Resolve variantId for each item（按行索引对应，避免同商品多规格互相覆盖）
+    const itemVariantIds: Array<{ index: number; variantId: string }> = [];
+    dto.items.forEach((item, index) => {
+      const variants = variantsByProduct.get(item.productId) ?? [];
       let variantId: string | undefined;
       if (item.variantId) {
-        variantId = item.variantId;
+        // 规格必须属于该商品，防止用其他商品的低价规格下单
+        const matched = variants.find((v) => v.id === item.variantId);
+        if (!matched) {
+          const product = productMap.get(item.productId)!;
+          throw new BadRequestException(`商品 ${product.titleEn} 的规格不存在`);
+        }
+        variantId = matched.id;
       } else {
-        const variants = variantsByProduct.get(item.productId) ?? [];
         const activeVariant = variants.find((v) => v.status === 'active');
         variantId = activeVariant?.id ?? variants[0]?.id;
       }
@@ -581,13 +623,13 @@ export class OrdersService {
         const product = productMap.get(item.productId)!;
         throw new BadRequestException(`商品 ${product.titleEn} 没有可用的规格`);
       }
-      itemVariantIds.push({ itemId: item.productId, variantId });
-    }
+      itemVariantIds.push({ index, variantId });
+    });
 
     // Map variantId → variant row for quick lookup
     const variantMap = new Map(variantRows.map((v) => [v.id, v]));
 
-    for (const item of dto.items) {
+    dto.items.forEach((item, index) => {
       if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
         throw new BadRequestException('商品数量必须是正整数');
       }
@@ -598,12 +640,12 @@ export class OrdersService {
       if (product.status !== 'active') {
         throw new BadRequestException(`商品 ${product.titleEn} 已下架`);
       }
-      const entry = itemVariantIds.find((e) => e.itemId === item.productId);
+      const entry = itemVariantIds.find((e) => e.index === index);
       const variant = variantMap.get(entry!.variantId);
       if (!variant || variant.stock < item.quantity) {
         throw new BadRequestException(`商品 ${product.titleEn} 库存不足`);
       }
-    }
+    });
 
     const orderNo = await this.generateUniqueOrderNo();
 
@@ -620,9 +662,9 @@ export class OrdersService {
       subtotal: string;
     }> = [];
 
-    for (const item of dto.items) {
+    dto.items.forEach((item, index) => {
       const product = productMap.get(item.productId)!;
-      const entry = itemVariantIds.find((e) => e.itemId === item.productId);
+      const entry = itemVariantIds.find((e) => e.index === index);
       const variant = variantMap.get(entry!.variantId)!;
       const unitPrice = new Decimal(variant.price as string);
       const itemSubtotal = unitPrice.mul(item.quantity);
@@ -638,7 +680,7 @@ export class OrdersService {
         quantity: item.quantity,
         subtotal: itemSubtotal.toFixed(2),
       });
-    }
+    });
 
     const subtotalStr = subtotal.toFixed(2);
     let couponId: string | null = null;
@@ -700,6 +742,7 @@ export class OrdersService {
         .values({
           orderNo,
           userId: userId ?? null,
+          sellerId: orderSellerId,
           subtotal: pricing.subtotal,
           shippingFee: pricing.shippingFee,
           discountAmount: pricing.discountAmount,
@@ -733,8 +776,8 @@ export class OrdersService {
       );
 
       // 下单即锁定库存；销量（sold）在支付成功入账时累计（见 PaymentsService.markOrderPaid）
-      for (const item of dto.items) {
-        const entry = itemVariantIds.find((e) => e.itemId === item.productId);
+      for (const [index, item] of dto.items.entries()) {
+        const entry = itemVariantIds.find((e) => e.index === index);
         const variantId = entry!.variantId;
         const updated = await tx
           .update(productVariants)

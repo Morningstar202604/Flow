@@ -33,14 +33,14 @@ Thanks for your interest in contributing to **Flow**! Every kind of help makes t
 ## 开发环境
 
 ```bash
-# 前置要求：Node.js ≥ 20、Docker ≥ 24.x、PostgreSQL 16（或直接使用 docker-compose 中的 postgres）
+# 前置要求：Node.js ≥ 22、Docker ≥ 24.x、PostgreSQL 16（或直接使用 docker-compose 中的 postgres）
 
 npm install
 cp .env.example .env        # 至少设置 JWT_SECRET
 npm run dev                 # 前端 Vite + 后端 NestJS watch 同时启动
 
 # 验证
-npm run lint                # ESLint + Stylelint
+npm run lint                # ESLint
 npm run type:check          # 前后端 TypeScript 类型检查
 ```
 
@@ -50,11 +50,11 @@ npm run type:check          # 前后端 TypeScript 类型检查
 
 - **语言**：TypeScript 严格模式；禁止 `as any` 绕过类型检查（后端 Controller 尤其注意）。
 - **前端**：React 19 + Tailwind CSS + shadcn/ui 组件体系；页面放在 `client/src/pages/`。
-- **后端**：NestJS 10 模块化结构；业务逻辑在 `server/src/modules/<module>/`。
+- **后端**：NestJS 模块化结构；业务逻辑在 `server/modules/<module>/`。
 - **金额**：一律使用 `decimal.js` 精确运算，禁止 `Number` 浮点计算。
-- **数据库**：表结构在 `server/src/database/schema.ts`（Drizzle ORM），新增字段同步更新文档。
+- **数据库**：表结构在 `server/database/schema.ts`（Drizzle ORM），新增字段同步更新文档。
 - **安全**：写接口保持 CSRF 头校验；订单/支付类接口必须做归属校验（防 IDOR）。
-- **AI Agent**：一律经 `server/src/modules/ai/ai-gateway.service.ts` 收口，**禁止硬编码假数据冒充 AI 结果**。
+- **AI Agent**：一律经 `server/modules/ai/ai-gateway.service.ts` 收口，**禁止硬编码假数据冒充 AI 结果**。
 
 ## 提交信息格式
 

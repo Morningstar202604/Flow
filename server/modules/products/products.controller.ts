@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { resolveClientIp } from '../../common/http/client-ip';
 import {
   IsString,
   IsOptional,
@@ -81,6 +82,11 @@ class ProductListQueryDto implements ProductListParams {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['mine'])
+  scope?: 'mine';
 }
 
 class CreateProductDto implements CreateProductRequest {
@@ -305,12 +311,7 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   private getClientIp(req: Request): string {
-    const xff = req.headers['x-forwarded-for'];
-    if (typeof xff === 'string' && xff) {
-      return xff.split(',')[0].trim();
-    }
-    const ip = req.socket?.remoteAddress;
-    return ip || 'unknown';
+    return resolveClientIp(req);
   }
 
   @Get('featured')
@@ -319,8 +320,14 @@ export class ProductsController {
   }
 
   @Get()
-  async findAll(@Query() query: ProductListQueryDto): Promise<ProductListResponse> {
-    return this.productsService.findAll(query);
+  async findAll(
+    @Req() req: Request,
+    @Query() query: ProductListQueryDto,
+  ): Promise<ProductListResponse> {
+    return this.productsService.findAll(query, {
+      sellerId: req.user?.id,
+      role: req.user?.role,
+    });
   }
 
   @Get('import-template')
@@ -388,8 +395,11 @@ export class ProductsController {
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Delete(':id')
-  async remove(@Param('id') id: string): Promise<{ id: string }> {
-    return this.productsService.remove(id);
+  async remove(@Req() req: Request, @Param('id') id: string): Promise<{ id: string }> {
+    return this.productsService.remove(id, {
+      userId: req.user?.id,
+      role: req.user?.role,
+    });
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))

@@ -5,6 +5,52 @@
 
 ---
 
+## [1.20.0] — 2026-10-23
+
+多租户数据隔离加固 + 商品查询能力补全 + 死代码与依赖清理 + 仓库治理。
+
+### Added
+- **多租户数据隔离（fail-closed）**，新公共模块 `server/common/tenant/tenant-scope.ts`
+  （`isPlatformAdmin` / `canAccessSellerResource` / `resolveSingleSellerId`）
+  - 商品：公开列表强制 `status=active`（`?status=draft` 不再泄露草稿）；卖家 `scope=mine` 仅见本店；
+    更新 / 删除校验归属（非本店商品 403）
+  - 订单：卖家列表仅返回本店订单；`GET /api/orders/seller/:id` 详情归属校验；跨卖家购物车禁止合单
+  - 优惠券：卖家列表只返回本店券，更新校验归属
+  - 退款：列表 / 详情 / 批准 / 拒绝全链路 `assertSellerOwnsRefund`（管理员可跨店）
+  - **副驾读工具按卖家隔离**：`list_orders` / `list_products` / `list_low_stock` / `list_pending_refunds`
+    只返回本店数据（admin 可跨店），与写工具归属校验同口径——模型不再基于别家商品生成无法执行的动作
+- **商品查询能力**（`product-query.ts` / `product-visibility.ts`，纯函数 + 单测）
+  - 价格区间过滤（EXISTS 匹配在售规格，参数化 SQL）+ `price_asc` / `price_desc` 排序（NULLS LAST）
+  - 排序白名单 `normalizeSortBy`（未知值回退 newest）；`validatePriceRange` 拒绝负数 / NaN / 区间倒挂
+- **客户端 IP 唯一出口** `server/common/http/client-ip.ts`：orders / products 控制器去重；
+  不再直接信任 `X-Forwarded-For`（未配反代时可被伪造绕过限流与审计）
+- **前端首屏优化**：路由级代码分割（React.lazy + Suspense）+ vendor manualChunks（react / radix 分包）
+- **仓库治理**：GitHub Actions CI（lint / typecheck / test:coverage / build + postgres:16-alpine 容器跑
+  workflows / degraded / 交易闭环三套 E2E）、Dependabot（npm 周更分组、拒绝 semver-major 自动升级）、
+  `.editorconfig` / `.gitattributes`(LF) / `.nvmrc`(22)、Prettier（`npm run format` / `format:check`）、
+  `GOVERNANCE.md` / `SUPPORT.md` / PR 模板
+
+### Removed
+- 66 个未使用的前端组件文件：shadcn/ui 组件（accordion / alert-dialog / avatar / breadcrumb /
+  carousel / chart / command / drawer 等）与文件图标
+- 依赖清理 27 项：17 个未用 Radix 包 + `dayjs` / `recharts` / `cmdk` / `vaul` /
+  `embla-carousel-react` / `react-day-picker` / `react-resizable-panels` / `next-themes` /
+  `input-otp` / `@tailwindcss/vite`
+
+### Fixed
+- 依赖清单与实际使用不符：`nanoid`（coupons 在用）未声明；`react` / `react-dom` / `echarts-for-react`
+  错放在 devDependencies；`@types/bcrypt` / `postcss-import` 归位 devDependencies
+- `npm run smoke` 脚本入口缺失（`scripts/smoke.mjs` 一直存在但没有 package.json 条目）
+
+### Verification
+- 单测 **162/162**（新增 17 例：client-ip 4 / tenant-scope 5 / product-query 3 / product-visibility 5）
+- `npm run lint` 0 问题、双端 `type:check` 0 错误、`npm run build` 通过
+- E2E 全量（embedded-postgres 17.5 + mock LLM 双实例）：`smoke:workflows` 16 步、`smoke:degraded`、
+  `smoke` 19 步交易闭环、`smoke:copilot` 19 步、`smoke:shopper` 9 步全部通过
+- 冒烟过程实测发现并修复：副驾读工具未按卖家隔离，多步计划整批批准时引用演示卖家商品被 403 拒绝
+
+---
+
 ## [1.19.0] — 2026-10-23
 
 通知预览、AI 文案质量抽检、PG 环境对拍。

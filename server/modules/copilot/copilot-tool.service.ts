@@ -14,6 +14,7 @@ import { RefundsService } from '../refunds/refunds.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { InquiryService } from '../inquiry/inquiry.service';
 import { CopywriterService } from '../ai/copywriter.service';
+import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
 import type { OrderStatus } from '../../../shared/api.interface';
 
 export interface ToolExecutionResult {
@@ -25,7 +26,8 @@ export interface ToolExecutionResult {
 
 /**
  * 工具执行器：读写分离。
- * - 读工具：仅做查询，返回压缩后的结构化文本
+ * - 读工具：仅做查询，返回压缩后的结构化文本；列表类读工具按卖家隔离（admin 可跨店），
+ *   保证模型只能基于自己店铺的数据决策，与写工具的归属校验同一口径
  * - 写工具：全部委托既有业务服务（订单状态机 / 退款审批 / 商品状态 / 优惠券 / 咨询），
  *   不在此处重写任何业务规则，确保库存、积分、审计等副作用与卖家手动操作一致。
  */
@@ -44,19 +46,23 @@ export class CopilotToolService {
     private readonly copywriterService: CopywriterService,
   ) {}
 
-  async runReadTool(tool: CopilotToolDefinition, args: Record<string, unknown>): Promise<ToolExecutionResult> {
+  async runReadTool(
+    tool: CopilotToolDefinition,
+    args: Record<string, unknown>,
+    actor: { userId: string; role: string },
+  ): Promise<ToolExecutionResult> {
     try {
       switch (tool.name) {
         case 'get_store_overview':
           return await this.getStoreOverview();
         case 'list_orders':
-          return await this.listOrders(args);
+          return await this.listOrders(args, actor);
         case 'list_products':
-          return await this.listProducts(args);
+          return await this.listProducts(args, actor);
         case 'list_low_stock':
-          return await this.listLowStock(args);
+          return await this.listLowStock(args, actor);
         case 'list_pending_refunds':
-          return await this.listPendingRefunds();
+          return await this.listPendingRefunds(actor);
         default:
           return { ok: false, content: `未知工具：${tool.name}` };
       }
@@ -111,12 +117,17 @@ export class CopilotToolService {
     };
   }
 
-  private async listOrders(args: Record<string, unknown>): Promise<ToolExecutionResult> {
+  private async listOrders(
+    args: Record<string, unknown>,
+    actor: { userId: string; role: string },
+  ): Promise<ToolExecutionResult> {
     const status = typeof args.status === 'string' ? args.status : undefined;
     const keyword = typeof args.keyword === 'string' ? args.keyword : undefined;
     const limit = typeof args.limit === 'number' ? args.limit : 10;
 
     const conditions = [];
+    // 卖家只能读取自己店铺的订单（与写工具归属校验同一口径）
+    if (!isPlatformAdmin(actor.role)) conditions.push(eq(orders.sellerId, actor.userId));
     if (status) conditions.push(eq(orders.status, status as OrderStatus));
     if (keyword) conditions.push(ilike(orders.orderNo, `%${keyword}%`));
 
@@ -142,12 +153,16 @@ export class CopilotToolService {
     return { ok: true, content: `共 ${rows.length} 条订单：\n${lines.join('\n')}` };
   }
 
-  private async listProducts(args: Record<string, unknown>): Promise<ToolExecutionResult> {
+  private async listProducts(
+    args: Record<string, unknown>,
+    actor: { userId: string; role: string },
+  ): Promise<ToolExecutionResult> {
     const keyword = typeof args.keyword === 'string' ? args.keyword : undefined;
     const status = typeof args.status === 'string' ? args.status : 'active';
     const limit = typeof args.limit === 'number' ? args.limit : 10;
 
     const conditions = [eq(products.status, status)];
+    if (!isPlatformAdmin(actor.role)) conditions.push(eq(products.sellerId, actor.userId));
     if (keyword) {
       conditions.push(sql`(${ilike(products.titleZh, `%${keyword}%`)} OR ${ilike(products.titleEn, `%${keyword}%`)})`);
     }
@@ -174,8 +189,13 @@ export class CopilotToolService {
     return { ok: true, content: `共 ${rows.length} 条商品：\n${lines.join('\n')}` };
   }
 
-  private async listLowStock(args: Record<string, unknown>): Promise<ToolExecutionResult> {
+  private async listLowStock(
+    args: Record<string, unknown>,
+    actor: { userId: string; role: string },
+  ): Promise<ToolExecutionResult> {
     const threshold = typeof args.threshold === 'number' ? args.threshold : 10;
+    const conditions = [eq(products.status, 'active'), sql`${products.totalStock} < ${threshold}`];
+    if (!isPlatformAdmin(actor.role)) conditions.push(eq(products.sellerId, actor.userId));
     const rows = await this.db
       .select({
         id: products.id,
@@ -185,7 +205,7 @@ export class CopilotToolService {
         totalSold: products.totalSold,
       })
       .from(products)
-      .where(and(eq(products.status, 'active'), sql`${products.totalStock} < ${threshold}`))
+      .where(and(...conditions))
       .orderBy(asc(products.totalStock))
       .limit(20);
 
@@ -200,7 +220,9 @@ export class CopilotToolService {
     };
   }
 
-  private async listPendingRefunds(): Promise<ToolExecutionResult> {
+  private async listPendingRefunds(actor: { userId: string; role: string }): Promise<ToolExecutionResult> {
+    const conditions = [eq(refunds.status, 'requested')];
+    if (!isPlatformAdmin(actor.role)) conditions.push(eq(orders.sellerId, actor.userId));
     const rows = await this.db
       .select({
         refundNo: refunds.refundNo,
@@ -212,7 +234,7 @@ export class CopilotToolService {
       })
       .from(refunds)
       .leftJoin(orders, eq(refunds.orderId, orders.id))
-      .where(eq(refunds.status, 'requested'))
+      .where(and(...conditions))
       .orderBy(desc(refunds.createdAt))
       .limit(20);
 
@@ -263,7 +285,7 @@ export class CopilotToolService {
     const refund = await this.findRefundByNo(refundNo);
     const reply = typeof args.reply === 'string' ? args.reply : undefined;
 
-    await this.refundsService.approveRefund(refund.id, actor.userId, reply ? { reply } : undefined);
+    await this.refundsService.approveRefund(refund.id, actor.userId, reply ? { reply } : undefined, actor.role);
     return {
       ok: true,
       content: `退款单 ${refundNo}（$${refund.amount}）已批准并完成原路退回。`,
@@ -279,7 +301,7 @@ export class CopilotToolService {
     const reply = String(args.reply);
     const refund = await this.findRefundByNo(refundNo);
 
-    await this.refundsService.rejectRefund(refund.id, actor.userId, { reply });
+    await this.refundsService.rejectRefund(refund.id, actor.userId, { reply }, actor.role);
     return {
       ok: true,
       content: `退款单 ${refundNo} 已拒绝，原因已回复买家。`,

@@ -1,38 +1,45 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { AuthProvider } from './contexts/AuthContext';
 import BuyerLayout from './components/BuyerLayout';
-import HomePage from './pages/Home/HomePage';
-import ProductListPage from './pages/ProductList/ProductListPage';
-import ProductDetailPage from './pages/ProductDetail/ProductDetailPage';
-import CartPage from './pages/Cart/CartPage';
-import CheckoutPage from './pages/Checkout/CheckoutPage';
-import OrdersPage from './pages/Orders/OrdersPage';
-import FavoritesPage from './pages/Favorites/FavoritesPage';
-import AddressesPage from './pages/AddressesPage';
-import LoginPage from './pages/Login/LoginPage';
-import RegisterPage from './pages/Register/RegisterPage';
 import SellerLayout from './components/SellerLayout';
 import SellerRouteGuard from './components/SellerRouteGuard';
-import DashboardPage from './pages/seller/DashboardPage';
-import ProductManagePage from './pages/seller/ProductManagePage';
-import OrderManagePage from './pages/seller/OrderManagePage';
-import InquiryManagePage from './pages/seller/InquiryManagePage';
-import AICenterPage from './pages/seller/AICenterPage';
-import CopilotPage from './pages/seller/CopilotPage';
-import CouponsPage from './pages/seller/CouponsPage/CouponsPage';
-import RefundsManagePage from './pages/seller/RefundsManagePage';
-import ShippingTemplatesPage from './pages/seller/ShippingTemplatesPage';
-import CollectionsPage from './pages/seller/CollectionsPage';
-import CmsPagesPage from './pages/seller/CmsPagesPage';
-import AuditLogPage from './pages/seller/AuditLogPage';
-import CmsPageView from './pages/CmsPageView';
-import CollectionDetailPage from './pages/CollectionDetail/CollectionDetailPage';
-import NotFound from './pages/NotFound/NotFound';
+import HomePage from './pages/Home/HomePage';
 import ChatWidget from './components/ChatWidget';
 import { reportVisitOnce } from './lib/visit-beacon';
+
+const ProductListPage = lazy(() => import('./pages/ProductList/ProductListPage'));
+const ProductDetailPage = lazy(() => import('./pages/ProductDetail/ProductDetailPage'));
+const CartPage = lazy(() => import('./pages/Cart/CartPage'));
+const CheckoutPage = lazy(() => import('./pages/Checkout/CheckoutPage'));
+const OrdersPage = lazy(() => import('./pages/Orders/OrdersPage'));
+const FavoritesPage = lazy(() => import('./pages/Favorites/FavoritesPage'));
+const AddressesPage = lazy(() => import('./pages/AddressesPage'));
+const LoginPage = lazy(() => import('./pages/Login/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/Register/RegisterPage'));
+const DashboardPage = lazy(() => import('./pages/seller/DashboardPage'));
+const ProductManagePage = lazy(() => import('./pages/seller/ProductManagePage'));
+const OrderManagePage = lazy(() => import('./pages/seller/OrderManagePage'));
+const InquiryManagePage = lazy(() => import('./pages/seller/InquiryManagePage'));
+const AICenterPage = lazy(() => import('./pages/seller/AICenterPage'));
+const CopilotPage = lazy(() => import('./pages/seller/CopilotPage'));
+const CouponsPage = lazy(() => import('./pages/seller/CouponsPage/CouponsPage'));
+const RefundsManagePage = lazy(() => import('./pages/seller/RefundsManagePage'));
+const ShippingTemplatesPage = lazy(() => import('./pages/seller/ShippingTemplatesPage'));
+const CollectionsPage = lazy(() => import('./pages/seller/CollectionsPage'));
+const CmsPagesPage = lazy(() => import('./pages/seller/CmsPagesPage'));
+const AuditLogPage = lazy(() => import('./pages/seller/AuditLogPage'));
+const CmsPageView = lazy(() => import('./pages/CmsPageView'));
+const CollectionDetailPage = lazy(() => import('./pages/CollectionDetail/CollectionDetailPage'));
+const NotFound = lazy(() => import('./pages/NotFound/NotFound'));
+
+const RouteFallback: React.FC = () => (
+  <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+    加载中…
+  </div>
+);
 
 const RoutesComponent = () => {
   // 会话内每日一次访问上报（卖家看板访客数）
@@ -43,47 +50,49 @@ const RoutesComponent = () => {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          {/* Public CMS pages */}
-          <Route path="/page/:slug" element={<CmsPageView />} />
-          {/* Public collection detail */}
-          <Route path="/collections/:slug" element={<CollectionDetailPage />} />
-          <Route element={<BuyerLayout />}>
-            <Route index element={<HomePage />} />
-            <Route path="products" element={<ProductListPage />} />
-            <Route path="products/:id" element={<ProductDetailPage />} />
-            <Route path="cart" element={<CartPage />} />
-            <Route path="checkout" element={<CheckoutPage />} />
-            <Route path="orders" element={<OrdersPage />} />
-            <Route path="favorites" element={<FavoritesPage />} />
-            <Route path="addresses" element={<AddressesPage />} />
-          </Route>
-          <Route
-            path="seller"
-            element={
-              <SellerRouteGuard>
-                <SellerLayout />
-              </SellerRouteGuard>
-            }
-          >
-            <Route index element={<DashboardPage />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="products" element={<ProductManagePage />} />
-            <Route path="orders" element={<OrderManagePage />} />
-            <Route path="inquiries" element={<InquiryManagePage />} />
-            <Route path="copilot" element={<CopilotPage />} />
-            <Route path="ai-center" element={<AICenterPage />} />
-            <Route path="coupons" element={<CouponsPage />} />
-            <Route path="refunds" element={<RefundsManagePage />} />
-            <Route path="shipping-templates" element={<ShippingTemplatesPage />} />
-            <Route path="collections" element={<CollectionsPage />} />
-            <Route path="cms-pages" element={<CmsPagesPage />} />
-            <Route path="audit-logs" element={<AuditLogPage />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            {/* Public CMS pages */}
+            <Route path="/page/:slug" element={<CmsPageView />} />
+            {/* Public collection detail */}
+            <Route path="/collections/:slug" element={<CollectionDetailPage />} />
+            <Route element={<BuyerLayout />}>
+              <Route index element={<HomePage />} />
+              <Route path="products" element={<ProductListPage />} />
+              <Route path="products/:id" element={<ProductDetailPage />} />
+              <Route path="cart" element={<CartPage />} />
+              <Route path="checkout" element={<CheckoutPage />} />
+              <Route path="orders" element={<OrdersPage />} />
+              <Route path="favorites" element={<FavoritesPage />} />
+              <Route path="addresses" element={<AddressesPage />} />
+            </Route>
+            <Route
+              path="seller"
+              element={
+                <SellerRouteGuard>
+                  <SellerLayout />
+                </SellerRouteGuard>
+              }
+            >
+              <Route index element={<DashboardPage />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="products" element={<ProductManagePage />} />
+              <Route path="orders" element={<OrderManagePage />} />
+              <Route path="inquiries" element={<InquiryManagePage />} />
+              <Route path="copilot" element={<CopilotPage />} />
+              <Route path="ai-center" element={<AICenterPage />} />
+              <Route path="coupons" element={<CouponsPage />} />
+              <Route path="refunds" element={<RefundsManagePage />} />
+              <Route path="shipping-templates" element={<ShippingTemplatesPage />} />
+              <Route path="collections" element={<CollectionsPage />} />
+              <Route path="cms-pages" element={<CmsPagesPage />} />
+              <Route path="audit-logs" element={<AuditLogPage />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
         <ChatWidget />
         <Toaster position="top-right" />
       </AuthProvider>

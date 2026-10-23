@@ -38,11 +38,6 @@ const MAX_STEPS = 6;
 /** 单轮最多生成 3 个待审批动作，避免一次刷出大量确认卡片 */
 const MAX_PENDING_ACTIONS_PER_TURN = 3;
 
-interface Actor {
-  userId: string;
-  role: string;
-}
-
 /**
  * AI 运营副驾：工具调用 Agent（ReAct 循环）+ 人工审批门禁。
  *
@@ -130,7 +125,6 @@ export class CopilotService {
 
   async sendMessage(userId: string, role: string, conversationId: string, input: string): Promise<CopilotSendResult> {
     const conversation = await this.loadConversation(userId, conversationId);
-    const actor: Actor = { userId, role };
 
     if (!(await this.gateway.isConfigured())) {
       throw new BadRequestException(
@@ -211,7 +205,7 @@ export class CopilotService {
       }
 
       if (tool.kind === 'read') {
-        const result = await this.tools.runReadTool(tool, validation.args);
+        const result = await this.tools.runReadTool(tool, validation.args, { userId, role });
         const content = result.ok ? result.content : `执行失败：${result.content}`;
         const messageRow = await this.insertMessage({
           conversationId,

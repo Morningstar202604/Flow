@@ -262,6 +262,7 @@ describe('CopilotService 审批门禁', () => {
     expect(tools.runReadTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'get_store_overview' }),
       {},
+      { userId: 'seller-1', role: 'seller' },
     );
     expect(tools.runWriteTool).not.toHaveBeenCalled();
     expect(result.reply).toBe('店铺 GMV 为 $100');

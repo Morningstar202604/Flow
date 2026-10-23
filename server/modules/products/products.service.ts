@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, Logger, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { products, categories, productVariants, reviews, stockMovements } from '../../database/schema';
 import { eq, and, count, desc, asc, ilike, sql, inArray, type SQL } from 'drizzle-orm';
@@ -12,6 +12,9 @@ import type {
 import { AuditService } from '../audit/audit.service';
 import { evaluatePublishReadiness } from './product-publish-check';
 import { evaluateCopyQuality, type CopyQualityReport } from './copy-quality';
+import { planProductQuery } from './product-visibility';
+import { buildPriceRangeCondition, normalizeSortBy, priceOrderExpression } from './product-query';
+import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
 import Papa from 'papaparse';
 
 export interface ImportFailure { row: number; reason: string; }
@@ -97,24 +100,36 @@ export class ProductsService {
 
   // ── Query helpers ────────────────────────────
 
-  private buildWhere(params: ProductListParams) {
+  private buildWhere(
+    params: ProductListParams,
+    scope?: { sellerId?: string; role?: string },
+  ) {
     const conditions: SQL[] = [];
-    if (params.status !== undefined) {
-      conditions.push(eq(products.status, params.status));
-    } else {
-      conditions.push(eq(products.status, 'active'));
+    const plan = planProductQuery(params, scope);
+    if (plan.mine && plan.sellerId) {
+      conditions.push(eq(products.sellerId, plan.sellerId));
+    }
+    if (plan.status !== undefined) {
+      conditions.push(eq(products.status, plan.status));
     }
     if (params.categoryId) conditions.push(eq(products.categoryId, params.categoryId));
     if (params.keyword) {
       const escaped = params.keyword.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
       conditions.push(sql`(${ilike(products.titleZh, `%${escaped}%`)} OR ${ilike(products.titleEn, `%${escaped}%`)})`);
     }
+    const priceCondition = buildPriceRangeCondition({
+      minPrice: params.minPrice,
+      maxPrice: params.maxPrice,
+    });
+    if (priceCondition) conditions.push(priceCondition);
     return conditions;
   }
 
   private getOrderBy(sortBy: ProductListParams['sortBy']) {
-    switch (sortBy) {
+    switch (normalizeSortBy(sortBy)) {
       case 'sold_desc': return [desc(products.totalSold)];
+      case 'price_asc': return [priceOrderExpression('asc')];
+      case 'price_desc': return [priceOrderExpression('desc')];
       case 'newest': default: return [desc(products.createdAt)];
     }
   }
@@ -137,11 +152,14 @@ export class ProductsService {
 
   // ── List products ────────────────────────────
 
-  async findAll(params: ProductListParams): Promise<ProductListResponse> {
+  async findAll(
+    params: ProductListParams,
+    scope?: { sellerId?: string; role?: string },
+  ): Promise<ProductListResponse> {
     const page = params.page ?? 1;
     const pageSize = params.pageSize ?? 20;
     const offset = (page - 1) * pageSize;
-    const conditions = this.buildWhere(params);
+    const conditions = this.buildWhere(params, scope);
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const orderBy = this.getOrderBy(params.sortBy);
 
@@ -400,6 +418,17 @@ export class ProductsService {
     userId: string,
     auditMeta?: { role?: string; ip?: string },
   ): Promise<Product> {
+    if (!isPlatformAdmin(auditMeta?.role)) {
+      const ownerRows = await this.db
+        .select({ sellerId: products.sellerId })
+        .from(products)
+        .where(eq(products.id, id));
+      if (ownerRows.length === 0) throw new NotFoundException('商品不存在');
+      if (ownerRows[0].sellerId !== userId) {
+        throw new ForbiddenException('无权修改该商品');
+      }
+    }
+
     const existingRows = await this.db.select({ status: products.status }).from(products).where(eq(products.id, id));
     if (existingRows.length === 0) throw new NotFoundException('商品不存在');
     const oldStatus = existingRows[0].status as string;
@@ -642,7 +671,17 @@ export class ProductsService {
     return { id };
   }
 
-  async remove(id: string): Promise<{ id: string }> {
+  async remove(id: string, actor?: { userId?: string; role?: string }): Promise<{ id: string }> {
+    if (actor && !isPlatformAdmin(actor.role)) {
+      const ownerRows = await this.db
+        .select({ sellerId: products.sellerId })
+        .from(products)
+        .where(eq(products.id, id));
+      if (ownerRows.length === 0) throw new NotFoundException('商品不存在');
+      if (ownerRows[0].sellerId !== actor.userId) {
+        throw new ForbiddenException('无权删除该商品');
+      }
+    }
     const deleted = await this.db.delete(products).where(eq(products.id, id)).returning({ id: products.id });
     if (deleted.length === 0) throw new NotFoundException('商品不存在');
     return { id };

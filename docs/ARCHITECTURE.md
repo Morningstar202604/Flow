@@ -81,7 +81,7 @@ GlobalEcom-AI/
 ## 三、前后端分层
 
 ### 前端（client/）
-- **路由层**：React Router v6，买家端 `/`、卖家端 `/seller/*` 由 `SellerRouteGuard` 渲染期拦截。
+- **路由层**：React Router v7，买家端 `/`、卖家端 `/seller/*` 由 `SellerRouteGuard` 渲染期拦截。
 - **数据层**：`src/api/*.ts` 统一 `fetch(..., { credentials: include, headers: { 'X-Requested-With': 'XMLHttpRequest' } })`，token 完全不落地 localStorage。
 - **状态层**：`AuthContext`（当前用户）、`LanguageContext`（四语言切换）。
 - **UI 层**：Tailwind CSS + shadcn/ui 原子组件 + ECharts 图表。

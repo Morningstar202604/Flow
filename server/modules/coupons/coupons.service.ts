@@ -14,6 +14,7 @@ import { computeCouponDiscount, type CouponDiscountType } from './coupon-discoun
 import { nanoid } from 'nanoid';
 
 import { coupons, couponUsage } from '../../database/schema';
+import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
 import type {
   Coupon,
   CouponListResponse,
@@ -50,18 +51,26 @@ export class CouponsService {
   async list(
     page: number = 1,
     pageSize: number = 20,
+    scope?: { sellerId?: string; role?: string },
   ): Promise<CouponListResponse> {
     const skip = (page - 1) * pageSize;
+    const whereClause =
+      scope && !isPlatformAdmin(scope.role) && scope.sellerId
+        ? eq(coupons.sellerId, scope.sellerId)
+        : undefined;
+
     const rows = await this.db
       .select()
       .from(coupons)
+      .where(whereClause)
       .orderBy(desc(coupons.createdAt))
       .limit(pageSize)
       .offset(skip);
 
     const countResult = await this.db
       .select({ count: count() })
-      .from(coupons);
+      .from(coupons)
+      .where(whereClause);
 
     return {
       items: rows.map((row) => this.mapCoupon(row)),
@@ -140,10 +149,17 @@ export class CouponsService {
     return coupon;
   }
 
-  async update(id: string, dto: UpdateCouponRequest): Promise<Coupon> {
+  async update(
+    id: string,
+    dto: UpdateCouponRequest,
+    scope?: { sellerId?: string; role?: string },
+  ): Promise<Coupon> {
     const rows = await this.db.select().from(coupons).where(eq(coupons.id, id));
     if (rows.length === 0) {
       throw new NotFoundException('优惠券不存在');
+    }
+    if (scope && !isPlatformAdmin(scope.role) && rows[0].sellerId !== scope.sellerId) {
+      throw new ForbiddenException('无权修改该优惠券');
     }
 
     const patch: Partial<typeof coupons.$inferInsert> = {};

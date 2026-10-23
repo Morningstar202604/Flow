@@ -5,13 +5,11 @@ import {
   Param,
   Post,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { IsBoolean, IsOptional, IsString, Length } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 
-import { RolesGuard } from '../../common/guards/roles.guard';
 import { ShopperService, type ShopperContext } from './shopper.service';
 import type {
   CopilotActionResolveResult,

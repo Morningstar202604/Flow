@@ -15,7 +15,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 [![GitHub](https://img.shields.io/badge/GitHub-X33834%2FGlobalEcom--AI-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![Gitee](https://img.shields.io/badge/Gitee-badhope%2FGlobalEcom--AI-C71D23?style=flat-square&logo=gitee&logoColor=white)](https://gitee.com/badhope/GlobalEcom-AI)
 [![GitCode](https://img.shields.io/badge/GitCode-badhope%2FGlobalEcom--AI-2F6BFF?style=flat-square&logo=git&logoColor=white)](https://gitcode.com/badhope/GlobalEcom-AI)
-[![Version](https://img.shields.io/badge/version-v1.19.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.19.0)
+[![Version](https://img.shields.io/badge/version-v1.20.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.20.0)
 [![Stars](https://img.shields.io/github/stars/X33834/GlobalEcom-AI?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![CI](https://img.shields.io/github/actions/workflow/status/X33834/GlobalEcom-AI/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/X33834/GlobalEcom-AI/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -33,7 +33,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 - **品牌定位 / Positioning**：出口电商平台 · Cross-Border Commerce Platform
 - **主传播语 / Tagline**：让跨境生意更简单 · Cross-Border Commerce, Simplified
 - **主色 / Brand Colors**：深海军蓝 `#0B1F3A` + 科技青 `#00C2B8`
-- **当前版本 / Version**：v1.19.0（[CHANGELOG.md](CHANGELOG.md)）
+- **当前版本 / Version**：v1.20.0（[CHANGELOG.md](CHANGELOG.md)）
 
 ---
 
@@ -125,7 +125,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 
 前 5 个 Agent 只产出内容，**运营副驾（Copilot）直接操作店铺**：卖家说人话，Agent 调工具读真实数据，需要改动时先生成"待确认动作"，卖家点批准才执行。
 
-- **11 个工具**：5 个只读（店铺概况 / 订单 / 商品 / 低库存 / 待审批退款）+ 6 个写操作（改订单状态 / 批准退款 / 拒绝退款 / 商品上下架 / 建优惠券 / 回复咨询）
+- **12 个工具**：5 个只读（店铺概况 / 订单 / 商品 / 低库存 / 待审批退款）+ 7 个写操作（改订单状态 / 批准退款 / 拒绝退款 / 商品上下架 / 建优惠券 / 建草稿商品 / 回复咨询）
 - **多步计划**：一句"清库存促销"自动串起「查低库存 → 建清仓券 → 下架商品」，多项动作共享批次、一次批准整批执行（失败即停）
 - **店铺巡检**：常驻面板自动识别低库存 / 超时退款 / 未支付订单 / 长期未签收，点一条即可让副驾接手；阈值可在面板内调整
 - **导购转化漏斗**：打开 → 推荐 → 加购 → 下单 四阶段转化率 + 买家热搜词，下单阶段联真实订单而非推断
@@ -160,7 +160,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 
 | 层 · Layer | 技术 · Technology |
 |---|---|
-| 前端 Frontend | React 19 · TypeScript · Vite · Tailwind CSS · shadcn/ui · React Router v6 · ECharts |
+| 前端 Frontend | React 19 · TypeScript · Vite · Tailwind CSS · shadcn/ui · React Router v7 · ECharts |
 | 后端 Backend | NestJS 12（Express 5）· TypeScript strict · Drizzle ORM |
 | 数据库 Database | PostgreSQL 16（`pg_trgm` 模糊搜索扩展） |
 | AI 调用 AI | OpenAI 兼容协议（DeepSeek / 火山方舟 / OpenAI / 通义 / 智谱等） |
@@ -267,7 +267,7 @@ cp .env.example .env # 本地开发至少设置 DATABASE_URL 与 JWT_SECRET（NO
 npm install          # 安装依赖
 npm run db:migrate   # 初始化 / 升级数据库结构（Drizzle 迁移）
 npm run dev          # 同时启动前端 (Vite) 与后端 (NestJS watch)
-npm run test         # 单元测试（Vitest：金额/退款/运费/状态机/验签，30 例）
+npm run test         # 单元测试（Vitest：金额/退款/运费/状态机/验签/租户隔离，162 例）
 npm run test:coverage# 单元测试 + 覆盖率报告
 npm run lint         # ESLint
 npm run type:check   # 前后端 TypeScript 类型检查

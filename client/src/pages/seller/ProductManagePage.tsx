@@ -174,6 +174,7 @@ const ProductManagePage: React.FC = () => {
           pageSize: PAGE_SIZE,
           keyword: keyword || undefined,
           categoryId: categoryFilter || undefined,
+          scope: 'mine',
           ...params,
         });
         setProducts(result.items);

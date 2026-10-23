@@ -114,7 +114,11 @@ export class RefundsController {
     @Query('keyword') keyword?: string,
   ) {
     const sellerId = this.getSellerId(req);
-    return this.refundsService.listForSeller(sellerId, { status, page, pageSize, keyword });
+    return this.refundsService.listForSeller(
+      sellerId,
+      { status, page, pageSize, keyword },
+      req.user?.role,
+    );
   }
 
   /**
@@ -123,8 +127,11 @@ export class RefundsController {
    */
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get('refunds/:id')
-  async getRefundDetail(@Param('id') id: string) {
-    return this.refundsService.getDetail(id);
+  async getRefundDetail(@Req() req: Request, @Param('id') id: string) {
+    return this.refundsService.getDetail(id, undefined, {
+      sellerId: this.getSellerId(req),
+      role: req.user?.role,
+    });
   }
 
   /**
@@ -139,7 +146,7 @@ export class RefundsController {
     @Body() body: { reply?: string },
   ) {
     const sellerId = this.getSellerId(req);
-    return this.refundsService.approveRefund(id, sellerId, { reply: body.reply });
+    return this.refundsService.approveRefund(id, sellerId, { reply: body.reply }, req.user?.role);
   }
 
   /**
@@ -157,6 +164,6 @@ export class RefundsController {
     if (!body.reply?.trim()) {
       throw new BadRequestException('拒绝退款需要说明原因');
     }
-    return this.refundsService.rejectRefund(id, sellerId, { reply: body.reply });
+    return this.refundsService.rejectRefund(id, sellerId, { reply: body.reply }, req.user?.role);
   }
 }

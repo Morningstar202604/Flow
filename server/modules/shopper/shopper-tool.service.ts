@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import type { CopilotToolDefinition } from '../copilot/copilot-protocol';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { categories, productVariants, products } from '../../database/schema';
+import { productVariants, products } from '../../database/schema';
 import { CartService } from '../cart/cart.service';
 import { CategoriesService } from '../categories/categories.service';
 

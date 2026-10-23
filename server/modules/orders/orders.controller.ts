@@ -3,6 +3,7 @@ import type { Request } from 'express';
 
 import { OrdersService } from './orders.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { resolveClientIp } from '../../common/http/client-ip';
 import type {
   Order,
   OrderListResponse,
@@ -25,17 +26,13 @@ export class OrdersController {
   }
 
   private getClientIp(req: Request): string {
-    const xff = req.headers['x-forwarded-for'];
-    if (typeof xff === 'string' && xff) {
-      return xff.split(',')[0].trim();
-    }
-    const ip = req.socket?.remoteAddress;
-    return ip || 'unknown';
+    return resolveClientIp(req);
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get()
   async getOrderList(
+    @Req() req: Request,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('status') status?: OrderStatus,
@@ -46,7 +43,10 @@ export class OrdersController {
     const safePage = Math.max(1, pageNum);
     const safePageSize = Math.min(50, Math.max(1, pageSizeNum));
 
-    return this.ordersService.getOrderList(safePage, safePageSize, status, keyword);
+    return this.ordersService.getOrderList(safePage, safePageSize, status, keyword, {
+      actorId: req.user?.id,
+      role: req.user?.role,
+    });
   }
 
   @Get('buyer')
@@ -70,8 +70,8 @@ export class OrdersController {
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get('seller/:id')
-  async getSellerOrderDetail(@Param('id') id: string): Promise<Order> {
-    return this.ordersService.getOrderDetail(id, undefined, undefined, true);
+  async getSellerOrderDetail(@Req() req: Request, @Param('id') id: string): Promise<Order> {
+    return this.ordersService.getSellerOrderDetail(id, req.user?.id, req.user?.role);
   }
 
   @Get(':id')
