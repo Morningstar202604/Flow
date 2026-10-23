@@ -98,6 +98,8 @@ export const products = pgTable('products', {
   reviewCount: integer('review_count').notNull().default(0),
   totalStock: integer('total_stock').notNull().default(0),
   totalSold: integer('total_sold').notNull().default(0),
+  // 文案来源：manual=卖家手写 / ai=AI 生成待复核 / reviewed=已人工复核
+  copySource: varchar('copy_source', { length: 16 }).notNull().default('manual'),
   updatedBy: uuid('updated_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

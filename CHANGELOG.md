@@ -5,6 +5,36 @@
 
 ---
 
+## [1.19.0] — 2026-10-23
+
+通知预览、AI 文案质量抽检、PG 环境对拍。
+
+### Added
+- **通知预览**：`GET /api/copilot/watch/preview?format=plain|markdown|html`
+  - 用**当前真实告警数据**渲染（不发任何通知），设置页可实时看效果
+  - 邮件表单内新增「预览 markdown / 预览 HTML」按钮
+- **AI 文案质量抽检**（`copy-quality.ts`，纯启发式、零 LLM 成本）
+  - 6 类检查：英文标题长度、卖点数量与长度、长描述长度、SEO 关键词数、占位词/空泛套话、英文标题混入中文
+  - 每命中一项扣 15 分，输出问题清单与总分；`needsReview` 标记进入人工复核队列
+  - `GET /api/copilot/products/copy-quality`、`POST /api/copilot/products/:id/mark-reviewed`
+- 数据库：`products.copy_source`（manual / ai / reviewed，迁移 `0006_copy_review.sql`）
+  - 一键补全后自动标记为 `ai`；复核通过标记为 `reviewed` 并移出队列
+
+### Verification
+- 单测 **145/145**（新增 7 例：质量评估各项规则与边界）
+- `npm run lint` / `npm run type:check` / `npm run build` 全绿
+- `smoke:copilot` **19 步**（新增：通知三格式预览、文案抽检 2 个待复核 + 复核标记生效）
+- `smoke:shopper` 9 步、`smoke:workflows` 16 步、`smoke:providers` 18 步全部通过
+- 真浏览器：漏斗弹窗显示「AI 文案质量抽检 1 个待复核 / 70 分 / 卖点不足、长描述不足」+ 复核通过按钮；
+  设置页「预览 markdown」渲染出真实告警（含 emoji 级别与统计行），控制台无错误
+- 环境对拍：embedded-postgres 17.5 与 compose 的 `postgres:17-alpine` 同大版本，`pg_trgm` 可用，同一套迁移与冒烟结论一致
+
+### Fixed
+- 商品 `update()` 的字段白名单未包含 `copySource`，导致补全标记被静默丢弃（抽检一直是 0 个）
+- `smoke:copilot` 增加幂等清理（遗留固定优惠码、巡检配置），可重复执行
+
+---
+
 ## [1.18.0] — 2026-10-23
 
 通知分层排版 + 体检一键补全 + 环境故障后的完整 E2E 复验。

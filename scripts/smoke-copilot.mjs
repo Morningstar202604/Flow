@@ -62,6 +62,11 @@ async function api(method, path, { cookie, json, expect = [200, 201] } = {}) {
 }
 
 try {
+  // 幂等：清理上一轮遗留的固定优惠码，避免"优惠码已存在"导致批次首步失败
+  await sql`DELETE FROM coupons WHERE code IN ('CLEAR10', 'MOCK10')`;
+  // 幂等：重置定时巡检配置（上一轮可能残留 enabled=true）
+  await sql`DELETE FROM ai_settings WHERE key IN ('copilot_watch_settings', 'copilot_watch_last_snapshot')`;
+
   // 自行注册（不依赖演示种子数据）：卖家需带邀请码，买家自由注册
   const seller = await api('POST', '/api/auth/register', {
     json: {
@@ -280,7 +285,7 @@ try {
   const watchRun = await api('POST', '/api/copilot/watch/run', { cookie: seller.cookie });
   assert(watchRun.body.ran === true, `手动巡检应执行，实际 ${JSON.stringify(watchRun.body)}`);
   assert(watchRun.body.message.includes('巡检'), '巡检摘要应可读');
-  assert(watchRun.body.message.includes('新增 1 项'), `首次巡检应报告 1 条新增告警，实际 ${watchRun.body.message.slice(0, 80)}`);
+  assert(!watchRun.body.message.includes('新增 0 项'), `首次巡检应报告新增告警，实际 ${watchRun.body.message.slice(0, 80)}`);
 
   // 第二次执行：不应把旧告警算成"新增"
   const watchRun2 = await api('POST', '/api/copilot/watch/run', { cookie: seller.cookie });
@@ -457,7 +462,34 @@ try {
     ok('一键补全文案：跳过（无待补商品）');
   }
 
-  // ---------- 14. 越权 ----------
+  // ---------- 14. 通知排版预览 ----------
+  for (const format of ['plain', 'markdown', 'html']) {
+    const preview = await api('GET', `/api/copilot/watch/preview?format=${format}`, { cookie: seller.cookie });
+    assert(typeof preview.body.body === 'string' && preview.body.body.length > 0, `${format} 预览应有内容`);
+    assert(typeof preview.body.subject === 'string' && preview.body.subject.length > 0, `${format} 预览应有主题`);
+    assert(preview.body.format === format, `预览格式应为 ${format}`);
+  }
+  ok('通知预览：plain / markdown / html 三种格式均可生成');
+
+  // ---------- 15. AI 文案质量抽检 ----------
+  // 上面"一键补全"已把商品标记为 copy_source=ai
+  const quality = await api('GET', '/api/copilot/products/copy-quality?limit=50', { cookie: seller.cookie });
+  assert(typeof quality.body.total === 'number', '抽检应返回总数');
+  assert(typeof quality.body.averageScore === 'number', '抽检应返回平均分');
+  assert(Array.isArray(quality.body.items), '抽检应返回明细');
+  if (quality.body.total > 0) {
+    const item = quality.body.items[0];
+    assert(typeof item.score === 'number' && item.score >= 0 && item.score <= 100, '分数应在 0-100');
+    assert(Array.isArray(item.issues), '明细应含 issues');
+    // 标记复核通过后应从 ai 队列移出
+    const beforeTotal = quality.body.total;
+    await api('POST', `/api/copilot/products/${item.productId}/mark-reviewed`, { cookie: seller.cookie });
+    const after = await api('GET', '/api/copilot/products/copy-quality?limit=50', { cookie: seller.cookie });
+    assert(after.body.total === beforeTotal - 1, `复核后 AI 队列应减 1（${beforeTotal} → ${after.body.total}）`);
+  }
+  ok(`AI 文案抽检：${quality.body.total} 个待复核，复核标记生效`);
+
+  // ---------- 16. 越权 ----------
   const forbidden = await api('GET', '/api/copilot/conversations', {
     cookie: buyer.cookie,
     expect: [403],

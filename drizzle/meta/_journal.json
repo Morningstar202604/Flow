@@ -43,6 +43,13 @@
       "when": 1792635751755,
       "tag": "0005_shopper_funnel",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792716877274,
+      "tag": "0006_copy_review",
+      "breakpoints": true
     }
   ]
 }

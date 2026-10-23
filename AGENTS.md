@@ -122,13 +122,15 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - 上架体检：`GET /api/products/audit/active` 扫描历史在售商品缺失项（只读）
 - 一键补全：`POST /api/copilot/products/backfill-copy` 只补空缺文案字段
 - 通知排版：`copilot-digest-format.ts`（webhook=markdown / email=HTML / 日志=plain，HTML 转义）
+- 通知预览：`GET /api/copilot/watch/preview?format=...`（真实告警数据，不发请求）
+- 文案质量抽检：`copy-quality.ts` 6 项启发式 + `copy_source`（manual/ai/reviewed）复核队列
 - 上架门禁：`product-publish-check.ts` 6 项校验；PATCH status=active 未通过返回 400
 - 草稿 AI 补全：批准 `create_draft_product` 后自动生成英文文案（失败不阻断创建）
 - 安全约束：`@RolesGuard(['seller','admin'])` 覆盖全部端点；未注册工具名直接拒绝；参数在执行前二次校验
 
 ## 验证入口
 
-- `npm run lint` / `npm run type:check` / `npm test`（138 例单测）/ `npm run build`
+- `npm run lint` / `npm run type:check` / `npm test`（145 例单测）/ `npm run build`
 - `npm run smoke:workflows`（16 步全业务工作流）/ `npm run smoke:degraded`（无 Key 降级）/ `npm run smoke`（19 步交易闭环）
 - `npm run smoke:copilot`（副驾：读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 巡检 → 多步计划 → 越权 403）
 - `npm run smoke:shopper`（导购：工具隔离 → 搜索/详情 → 加购确认 → 会话隔离）

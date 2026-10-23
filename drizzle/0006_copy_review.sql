@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD COLUMN "copy_source" varchar(16) DEFAULT 'manual' NOT NULL;

@@ -134,6 +134,9 @@ Content-Type: application/json
 | 上架体检 | `GET /api/products/audit/active?limit=200`：扫描 active 商品缺失项（只读，不自动改状态） |
 | 一键补全 | `POST /api/copilot/products/backfill-copy {ids}`：对体检出的商品批量生成英文标题/卖点/长描述/SEO（只补空缺字段，图片与库存仍需人工） |
 | 通知排版 | `copilot-digest-format.ts` 按渠道渲染：webhook=markdown（飞书/钉钉/企微）、email=HTML 表格、日志=plain；HTML 全字段转义 |
+| 通知预览 | `GET /api/copilot/watch/preview?format=plain|markdown|html`：用当前真实告警数据渲染，不发任何请求 |
+| 文案质量抽检 | `GET /api/copilot/products/copy-quality`：对 `copy_source=ai` 的商品做启发式评分（标题长度/卖点数量/描述长度/SEO/占位词/中文混入），返回分数与问题清单 |
+| 复核标记 | `POST /api/copilot/products/:id/mark-reviewed`：`copy_source` ai → reviewed，移出待复核队列 |
 | 草稿 AI 补全 | 批准 `create_draft_product` 后自动调 CopywriterAgent 生成英文标题/卖点/长描述/SEO 并写回；模型未配置时诚实降级提示 |
 | 上架门禁 | `PATCH /api/products/:id {status:'active'}` 前校验 6 项（中英标题/图片/售价/库存/描述/分类），未通过返回 400 并列出缺失项；`GET /api/products/:id/publish-readiness` 供前端预览 |
 

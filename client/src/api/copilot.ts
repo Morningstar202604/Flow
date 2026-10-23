@@ -170,3 +170,34 @@ export async function backfillProductCopy(
   );
   return data;
 }
+
+export async function previewDigest(
+  format: 'plain' | 'markdown' | 'html' = 'markdown',
+): Promise<{ format: string; subject: string; body: string }> {
+  const { data } = await http.get<{ format: string; subject: string; body: string }>(
+    '/api/copilot/watch/preview',
+    { params: { format } },
+  );
+  return data;
+}
+
+export async function auditAiCopy(limit = 100): Promise<{
+  total: number;
+  needsReview: number;
+  averageScore: number;
+  items: Array<{
+    productId: string;
+    title: string;
+    score: number;
+    issues: Array<{ key: string; label: string; detail: string }>;
+    needsReview: boolean;
+  }>;
+}> {
+  const { data } = await http.get('/api/copilot/products/copy-quality', { params: { limit } });
+  return data;
+}
+
+export async function markCopyReviewed(id: string): Promise<{ id: string }> {
+  const { data } = await http.post<{ id: string }>(`/api/copilot/products/${id}/mark-reviewed`);
+  return data;
+}

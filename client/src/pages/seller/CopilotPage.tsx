@@ -107,6 +107,15 @@ const CopilotPage: React.FC = () => {
   const [auditResult, setAuditResult] = useState<Array<{ id: string; title: string; missing: string[] }> | null>(null);
   const [auditing, setAuditing] = useState<boolean>(false);
   const [backfilling, setBackfilling] = useState<boolean>(false);
+  const [preview, setPreview] = useState<{ subject: string; body: string; format: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [copyAudit, setCopyAudit] = useState<{
+    total: number;
+    needsReview: number;
+    averageScore: number;
+    items: Array<{ productId: string; title: string; score: number; issues: Array<{ key: string; label: string; detail: string }>; needsReview: boolean }>;
+  } | null>(null);
+  const [copyAuditing, setCopyAuditing] = useState<boolean>(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const fetchInsights = useCallback(async (): Promise<void> => {
@@ -221,6 +230,39 @@ const CopilotPage: React.FC = () => {
       notifyError(err, extractErrorMessage(err, '批量补全失败'));
     } finally {
       setBackfilling(false);
+    }
+  };
+
+  const loadPreview = async (format: 'plain' | 'markdown' | 'html'): Promise<void> => {
+    try {
+      setPreviewLoading(true);
+      const data = await copilotApi.previewDigest(format);
+      setPreview({ subject: data.subject, body: data.body, format: data.format });
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '预览失败'));
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const runCopyAudit = async (): Promise<void> => {
+    try {
+      setCopyAuditing(true);
+      setCopyAudit(await copilotApi.auditAiCopy(100));
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '文案抽检失败'));
+    } finally {
+      setCopyAuditing(false);
+    }
+  };
+
+  const markReviewed = async (productId: string): Promise<void> => {
+    try {
+      await copilotApi.markCopyReviewed(productId);
+      toast.success('已标记为人工复核通过');
+      await runCopyAudit();
+    } catch (err) {
+      notifyError(err, extractErrorMessage(err, '标记失败'));
     }
   };
 
@@ -973,6 +1015,52 @@ const CopilotPage: React.FC = () => {
                 )}
               </div>
               <div>
+                <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
+                  <span>AI 文案质量抽检</span>
+                  <button
+                    type="button"
+                    className="text-xs font-normal text-[#00C2B8] hover:underline"
+                    onClick={() => void runCopyAudit()}
+                    disabled={copyAuditing}
+                  >
+                    {copyAuditing ? '抽检中…' : '开始抽检'}
+                  </button>
+                </div>
+                {copyAudit === null ? (
+                  <div className="text-xs text-slate-400">对 AI 生成的文案做启发式质量检查</div>
+                ) : copyAudit.total === 0 ? (
+                  <div className="text-xs text-slate-400">暂无 AI 生成的文案</div>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="text-xs text-slate-600">
+                      共 {copyAudit.total} 个，待复核 {copyAudit.needsReview} 个，平均分 {copyAudit.averageScore}
+                    </div>
+                    <div className="max-h-32 space-y-1 overflow-y-auto">
+                      {copyAudit.items.map((item) => (
+                        <div key={item.productId} className={`rounded border px-2 py-1 text-xs ${item.needsReview ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+                            <span className="shrink-0">{item.score} 分</span>
+                            {item.needsReview && (
+                              <button
+                                type="button"
+                                className="shrink-0 rounded border border-amber-300 bg-white px-1.5 py-0.5 text-[11px] hover:bg-amber-100"
+                                onClick={() => void markReviewed(item.productId)}
+                              >
+                                复核通过
+                              </button>
+                            )}
+                          </div>
+                          {item.issues.length > 0 && (
+                            <div className="mt-0.5 opacity-80">{item.issues.map((issue) => issue.label).join('、')}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div>
                 <div className="mb-1 text-xs font-semibold text-slate-600">买家热搜词 TOP 10</div>
                 {funnel.topQueries.length === 0 ? (
                   <div className="text-xs text-slate-400">暂无搜索记录</div>
@@ -1135,6 +1223,22 @@ const CopilotPage: React.FC = () => {
                       onBlur={() => void saveWatch({ notifySubjectTemplate: watch.notifySubjectTemplate })}
                     />
                   </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => void loadPreview('markdown')} disabled={previewLoading}>
+                      预览 markdown
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => void loadPreview('html')} disabled={previewLoading}>
+                      预览 HTML
+                    </Button>
+                  </div>
+                  {preview && (
+                    <div className="mt-1 rounded border border-slate-200 bg-slate-900 p-2">
+                      <div className="mb-1 text-[11px] text-slate-400">主题：{preview.subject}</div>
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px] text-slate-100">
+                        {preview.format === 'html' ? preview.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : preview.body}
+                      </pre>
+                    </div>
+                  )}
                 </div>
               )}
               <Button size="sm" variant="outline" className="w-full" onClick={() => void runWatch()} disabled={watchRunning}>

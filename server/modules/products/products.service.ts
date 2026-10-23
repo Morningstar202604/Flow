@@ -11,6 +11,7 @@ import type {
 } from '../../../shared/api.interface';
 import { AuditService } from '../audit/audit.service';
 import { evaluatePublishReadiness } from './product-publish-check';
+import { evaluateCopyQuality, type CopyQualityReport } from './copy-quality';
 import Papa from 'papaparse';
 
 export interface ImportFailure { row: number; reason: string; }
@@ -423,6 +424,11 @@ export class ProductsService {
     if (input.bulletPointsZh !== undefined) patch.bulletPointsZh = input.bulletPointsZh;
     if (input.bulletPointsEn !== undefined) patch.bulletPointsEn = input.bulletPointsEn;
     if (input.weight !== undefined) patch.weight = String(input.weight);
+    // 内部字段：仅 backfillCopy 使用，外部请求经 DTO 白名单已剔除
+    const copySource = (input as { copySource?: unknown }).copySource;
+    if (copySource === 'ai' || copySource === 'reviewed' || copySource === 'manual') {
+      patch.copySource = copySource;
+    }
 
     // 价格/库存同步（界面编辑路径）：
     // - 无变体 → 用新价格/库存补建默认变体（修复历史商品）
@@ -572,6 +578,8 @@ export class ProductsService {
         }
 
         if (Object.keys(patch).length > 0) {
+          // 标记文案来源为 AI，进入"待人工复核"队列
+          patch.copySource = 'ai';
           await this.update(id, patch, actor.userId, { role: actor.role });
         }
 
@@ -594,6 +602,44 @@ export class ProductsService {
     }
 
     return results;
+  }
+
+  /** AI 文案质量抽检：对 copy_source=ai 的商品做启发式评估 */
+  async auditAiCopy(limit = 100): Promise<{
+    total: number;
+    needsReview: number;
+    averageScore: number;
+    items: CopyQualityReport[];
+  }> {
+    const rows = await this.db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.copySource, 'ai'))
+      .orderBy(desc(products.updatedAt))
+      .limit(Math.max(1, Math.min(500, Math.round(limit))));
+
+    const items: CopyQualityReport[] = [];
+    for (const row of rows) {
+      items.push(evaluateCopyQuality(await this.findOne(row.id)));
+    }
+    const needsReview = items.filter((item) => item.needsReview).length;
+    const averageScore = items.length === 0
+      ? 100
+      : Math.round(items.reduce((sum, item) => sum + item.score, 0) / items.length);
+
+    items.sort((a, b) => a.score - b.score);
+    return { total: items.length, needsReview, averageScore, items };
+  }
+
+  /** 人工复核通过：copy_source ai → reviewed */
+  async markCopyReviewed(id: string, actorId: string): Promise<{ id: string }> {
+    const rows = await this.db.select({ id: products.id }).from(products).where(eq(products.id, id));
+    if (rows.length === 0) throw new NotFoundException('商品不存在');
+    await this.db
+      .update(products)
+      .set({ copySource: 'reviewed', updatedAt: new Date(), updatedBy: actorId })
+      .where(eq(products.id, id));
+    return { id };
   }
 
   async remove(id: string): Promise<{ id: string }> {

@@ -21,7 +21,8 @@ import { CopilotToolService } from './copilot-tool.service';
 import { ProductsService } from '../products/products.service';
 import { CopywriterService } from '../ai/copywriter.service';
 import { CopilotInsightsService } from './copilot-insights.service';
-import { CopilotWatchService, type WatchSettings } from './copilot-watch.service';
+import { CopilotWatchService, renderSubject, type WatchSettings } from './copilot-watch.service';
+import { renderDigest } from './copilot-digest-format';
 import { ShopperAnalyticsService } from '../shopper/shopper-analytics.service';
 import { sanitizeInsightThresholds } from './copilot-insight-thresholds';
 import type {
@@ -263,6 +264,31 @@ export class CopilotController {
         targetMarket: '北美市场',
       }, actor.userId),
     );
+  }
+
+  @Get('watch/preview')
+  async previewDigest(
+    @Query('format') format?: string,
+  ): Promise<{ format: string; subject: string; body: string }> {
+    const safeFormat = format === 'html' || format === 'markdown' ? format : 'plain';
+    const settings = await this.watchService.getSettings();
+    const { insights, generatedAt } = await this.insightsService.getInsights();
+    const at = new Date(generatedAt);
+    const subject = renderSubject(settings.notifySubjectTemplate, insights, []);
+    const body = renderDigest({ insights, newInsights: [], at }, safeFormat);
+    return { format: safeFormat, subject, body };
+  }
+
+  @Get('products/copy-quality')
+  async auditAiCopy(@Query('limit') limit?: string) {
+    const parsed = limit ? parseInt(limit, 10) : 100;
+    return this.productsService.auditAiCopy(Number.isFinite(parsed) ? parsed : 100);
+  }
+
+  @Post('products/:id/mark-reviewed')
+  async markReviewed(@Req() req: Request, @Param('id') id: string) {
+    const actor = this.getActor(req);
+    return this.productsService.markCopyReviewed(id, actor.userId);
   }
 
   @Get('shopper-product-funnel')

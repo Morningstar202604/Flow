@@ -15,7 +15,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 [![GitHub](https://img.shields.io/badge/GitHub-X33834%2FGlobalEcom--AI-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![Gitee](https://img.shields.io/badge/Gitee-badhope%2FGlobalEcom--AI-C71D23?style=flat-square&logo=gitee&logoColor=white)](https://gitee.com/badhope/GlobalEcom-AI)
 [![GitCode](https://img.shields.io/badge/GitCode-badhope%2FGlobalEcom--AI-2F6BFF?style=flat-square&logo=git&logoColor=white)](https://gitcode.com/badhope/GlobalEcom-AI)
-[![Version](https://img.shields.io/badge/version-v1.18.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.18.0)
+[![Version](https://img.shields.io/badge/version-v1.19.0-00C2B8?style=flat-square)](https://github.com/X33834/GlobalEcom-AI/releases/tag/v1.19.0)
 [![Stars](https://img.shields.io/github/stars/X33834/GlobalEcom-AI?style=flat-square&logo=github&logoColor=white)](https://github.com/X33834/GlobalEcom-AI)
 [![CI](https://img.shields.io/github/actions/workflow/status/X33834/GlobalEcom-AI/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/X33834/GlobalEcom-AI/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -33,7 +33,7 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 - **品牌定位 / Positioning**：出口电商平台 · Cross-Border Commerce Platform
 - **主传播语 / Tagline**：让跨境生意更简单 · Cross-Border Commerce, Simplified
 - **主色 / Brand Colors**：深海军蓝 `#0B1F3A` + 科技青 `#00C2B8`
-- **当前版本 / Version**：v1.18.0（[CHANGELOG.md](CHANGELOG.md)）
+- **当前版本 / Version**：v1.19.0（[CHANGELOG.md](CHANGELOG.md)）
 
 ---
 
@@ -137,6 +137,8 @@ One codebase, two experiences — a B2C buyer storefront and a seller AI workben
 - **在售商品体检**：一键扫描历史在售商品，列出信息不完整项
 - **通知多通道**：Webhook（飞书/企微/钉钉/Slack，markdown 排版）+ SMTP 邮件（HTML 表格），主题模板可配
 - **一键补全文案**：体检出的不完整商品可批量生成英文标题/卖点/描述/SEO
+- **文案质量抽检**：AI 生成的文案按 6 项启发式指标打分，低分进人工复核队列
+- **通知预览**：设置里直接看 markdown / HTML 排版效果，用真实告警数据渲染
 - **草稿 AI 补全**：新建草稿商品自动生成英文文案与 SEO 关键词
 - **人工审批门禁（fail-closed）**：写工具在模型循环内**永不执行**，只落 `copilot_actions(pending)`；只有会话所有者点"批准执行"才经既有业务服务落地（订单状态机、库存回补、积分回滚、审计日志与手动操作完全一致）
 - **参数强校验**：每个工具声明 JSON Schema 式参数（类型 / 枚举 / 范围 / 正则 / 长度），未知参数一律拒绝，防模型幻觉与参数注入
