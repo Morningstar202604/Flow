@@ -115,3 +115,29 @@ jobs:
 
       - name: Transaction smoke
         run: SMOKE_BASE=http://127.0.0.1:3000 SMOKE_SELLER_CODE=smoke-secret node scripts/smoke.mjs
+
+      - name: Start provider mock
+        run: |
+          MOCK_PORT=4880 APP_WEBHOOK_BASE=http://127.0.0.1:3000 STRIPE_WEBHOOK_SECRET=whsec_mock             node scripts/mock-providers.mjs &
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:4880/_mock/state; then exit 0; fi
+            sleep 1
+          done
+          echo "mock providers did not start" >&2
+          exit 1
+
+      - name: Start app with mock providers + LLM
+        run: |
+          LLM_BASE_URL=http://127.0.0.1:4880/llm LLM_API_KEY=mock-key LLM_MODEL=mock-model           STRIPE_SECRET_KEY=sk_test_mock STRIPE_WEBHOOK_SECRET=whsec_mock STRIPE_API_BASE=http://127.0.0.1:4880/stripe           PAYPAL_CLIENT_ID=mock-cid PAYPAL_CLIENT_SECRET=mock-sec PAYPAL_WEBHOOK_ID=mock-wh PAYPAL_API_BASE=http://127.0.0.1:4880/paypal           PORT=3100 node dist-server/server/main.js &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3100/api/health; then exit 0; fi
+            sleep 2
+          done
+          echo "provider app did not become healthy" >&2
+          exit 1
+
+      - name: Provider + copilot + shopper smoke
+        run: |
+          SMOKE_BASE=http://127.0.0.1:3100 MOCK_BASE=http://127.0.0.1:4880 node scripts/smoke-providers.mjs
+          SMOKE_BASE=http://127.0.0.1:3100 MOCK_BASE=http://127.0.0.1:4880 node scripts/smoke-copilot.mjs
+          SMOKE_BASE=http://127.0.0.1:3100 MOCK_BASE=http://127.0.0.1:4880 node scripts/smoke-shopper.mjs

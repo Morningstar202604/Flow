@@ -109,6 +109,10 @@ export interface Translations {
       date: string;
       viewDetail: string;
       tracking: string;
+      payNow: string;
+      paymentSuccess: string;
+      paymentPending: string;
+      writeReview: string;
       statusTimeline: string;
       empty: string;
       shippingInfo: string;
@@ -151,6 +155,8 @@ export interface Translations {
     shipped: string;
     delivered: string;
     cancelled: string;
+    refunded: string;
+    partially_refunded: string;
   };
   chat: {
     title: string;
@@ -391,6 +397,10 @@ export const translations: Record<Language, Translations> = {
       date: '下单时间',
       viewDetail: '查看详情',
       tracking: '物流跟踪',
+      payNow: '去支付',
+      paymentSuccess: '支付成功',
+      paymentPending: '支付已创建，等待渠道确认',
+      writeReview: '去评价',
       statusTimeline: '订单进度',
       empty: '暂无订单',
       shippingInfo: '收货信息',
@@ -433,6 +443,8 @@ export const translations: Record<Language, Translations> = {
       shipped: '已发货',
       delivered: '已送达',
       cancelled: '已取消',
+      refunded: '已退款',
+      partially_refunded: '部分退款',
     },
     chat: {
       title: '智能客服',
@@ -671,6 +683,10 @@ export const translations: Record<Language, Translations> = {
       date: 'Order Date',
       viewDetail: 'View Detail',
       tracking: 'Tracking',
+      payNow: 'Pay now',
+      paymentSuccess: 'Payment successful',
+      paymentPending: 'Payment created, awaiting provider confirmation',
+      writeReview: 'Write a review',
       statusTimeline: 'Order Progress',
       empty: 'No orders yet',
       shippingInfo: 'Shipping Info',
@@ -714,6 +730,8 @@ export const translations: Record<Language, Translations> = {
       shipped: 'Shipped',
       delivered: 'Delivered',
       cancelled: 'Cancelled',
+      refunded: 'Refunded',
+      partially_refunded: 'Partially refunded',
     },
     chat: {
       title: 'AI Support',
@@ -953,6 +971,10 @@ export const translations: Record<Language, Translations> = {
       date: 'Fecha del Pedido',
       viewDetail: 'Ver Detalle',
       tracking: 'Seguimiento',
+      payNow: 'Pagar ahora',
+      paymentSuccess: 'Pago exitoso',
+      paymentPending: 'Pago creado, esperando confirmación',
+      writeReview: 'Escribir reseña',
       statusTimeline: 'Progreso del Pedido',
       empty: 'Aún no hay pedidos',
       shippingInfo: 'Datos de Envío',
@@ -996,6 +1018,8 @@ export const translations: Record<Language, Translations> = {
       shipped: 'Enviado',
       delivered: 'Entregado',
       cancelled: 'Cancelado',
+      refunded: 'Reembolsado',
+      partially_refunded: 'Reembolso parcial',
     },
     chat: {
       title: 'Asistencia IA',
@@ -1237,6 +1261,10 @@ export const translations: Record<Language, Translations> = {
       date: 'Data do Pedido',
       viewDetail: 'Ver Detalhes',
       tracking: 'Rastreamento',
+      payNow: 'Pagar agora',
+      paymentSuccess: 'Pagamento concluído',
+      paymentPending: 'Pagamento criado, aguardando confirmação',
+      writeReview: 'Escrever avaliação',
       statusTimeline: 'Andamento do Pedido',
       empty: 'Ainda não há pedidos',
       shippingInfo: 'Dados de Entrega',
@@ -1280,6 +1308,8 @@ export const translations: Record<Language, Translations> = {
       shipped: 'Enviado',
       delivered: 'Entregue',
       cancelled: 'Cancelado',
+      refunded: 'Reembolsado',
+      partially_refunded: 'Reembolso parcial',
     },
     chat: {
       title: 'Suporte IA',

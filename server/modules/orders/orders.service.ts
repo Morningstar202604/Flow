@@ -13,7 +13,7 @@ import { AuditService } from '../audit/audit.service';
 import { ShippingService } from '../shipping/shipping.service';
 import { PaymentsService } from '../payments/payments.service';
 import { computeOrderPricing } from '../../common/pricing/order-pricing';
-import { isPlatformAdmin, resolveSingleSellerId } from '../../common/tenant/tenant-scope';
+import { canAccessSellerResource, isPlatformAdmin, resolveSingleSellerId } from '../../common/tenant/tenant-scope';
 import { canTransitionOrderStatus } from './order-status';
 import type {
   Order,
@@ -385,24 +385,20 @@ export class OrdersService {
     actorId: string | undefined,
     role?: string,
   ): Promise<Order> {
-    const rows = await this.db
-      .select({ sellerId: orders.sellerId })
-      .from(orders)
-      .where(eq(orders.id, id));
-    if (rows.length === 0) {
-      throw new NotFoundException('订单不存在');
-    }
-    if (!isPlatformAdmin(role) && (!actorId || rows[0].sellerId !== actorId)) {
-      throw new ForbiddenException('无权访问该订单');
-    }
-    return this.getOrderDetail(id, undefined, undefined, true);
+    return this.getOrderDetail(id, undefined, undefined, { id: actorId, role });
   }
 
+  /**
+   * 订单详情。三种调用者：
+   * - 买家（userId / sessionId 归属）
+   * - 卖家（必须订单 sellerId === 操作者，管理员可跨店）
+   * - 内部服务（actor.role = 'admin'）
+   */
   async getOrderDetail(
     id: string,
     userId?: string,
     sessionId?: string,
-    isSeller = false,
+    actor?: { id?: string; role?: string },
   ): Promise<Order> {
     const orderRows = await this.db.select().from(orders).where(eq(orders.id, id));
     if (orderRows.length === 0) {
@@ -410,7 +406,11 @@ export class OrdersService {
     }
     const orderRow = orderRows[0];
 
-    if (!isSeller) {
+    if (actor) {
+      if (!canAccessSellerResource(orderRow.sellerId, actor.id, actor.role)) {
+        throw new ForbiddenException('无权访问该订单');
+      }
+    } else {
       if (userId && orderRow.userId && orderRow.userId === userId) {
         // owner
       } else if (sessionId && orderRow.addressSnapshot) {
@@ -616,8 +616,13 @@ export class OrdersService {
         }
         variantId = matched.id;
       } else {
-        const activeVariant = variants.find((v) => v.status === 'active');
-        variantId = activeVariant?.id ?? variants[0]?.id;
+        const activeVariants = variants.filter((v) => v.status === 'active');
+        // 多规格商品必须显式选择规格，禁止静默回退到首个规格（会买错颜色/尺码）
+        if (activeVariants.length > 1) {
+          const product = productMap.get(item.productId)!;
+          throw new BadRequestException(`商品 ${product.titleEn} 有多个规格，请先选择规格`);
+        }
+        variantId = activeVariants[0]?.id ?? variants[0]?.id;
       }
       if (!variantId) {
         const product = productMap.get(item.productId)!;
@@ -692,6 +697,7 @@ export class OrdersService {
         dto.couponCode.trim(),
         subtotalStr,
         userId,
+        dto.items.map((item) => item.productId),
       );
       if (!validation.valid) {
         throw new BadRequestException(validation.message || '优惠券无效');
@@ -715,9 +721,14 @@ export class OrdersService {
       subtotal: Number(subtotalStr),
     });
 
+    // 免运费券：把运费归零（券面额 0，通过 free_shipping 标记表达）
+    const freeShippingCoupon = dto.couponCode?.trim()
+      ? (await this.couponsService.getCouponByCode(dto.couponCode.trim()))?.type === 'free_shipping'
+      : false;
+
     const pricing = computeOrderPricing({
       items: orderItemValues.map((item) => ({ unitPrice: item.unitPrice, quantity: item.quantity })),
-      shippingFee: shippingQuote.fee,
+      shippingFee: freeShippingCoupon ? 0 : shippingQuote.fee,
       discountAmount: discountAmount.toFixed(2),
     });
 
@@ -827,7 +838,16 @@ export class OrdersService {
       return newOrder;
     });
 
-    const createdOrder = await this.getOrderDetail(result.id, userId, sessionId, false);
+    // 记录每用户用量（per_user_limit 的判定依据；唯一索引保证幂等）
+    if (couponId && userId) {
+      try {
+        await this.couponsService.recordCouponUsage(couponId, userId, result.id);
+      } catch (error) {
+        this.logger.warn(`记录优惠券用量失败（不影响下单）：${(error as Error).message}`);
+      }
+    }
+
+    const createdOrder = await this.getOrderDetail(result.id, userId, sessionId);
 
     // Audit log for order creation
     try {
@@ -887,6 +907,12 @@ export class OrdersService {
     const newStatus = dto.status;
     const orderNo = currentOrder.orderNo;
 
+    // 归属校验：卖家只能操作自己店铺的订单（管理员可跨店）；
+    // 买家取消订单由控制器先做 userId/sessionId 详情校验，此处不再按卖家归属拦截。
+    if (role === 'seller' && !canAccessSellerResource(currentOrder.sellerId, userId, role)) {
+      throw new ForbiddenException('无权操作该订单');
+    }
+
     if (!canTransitionOrderStatus(currentStatus, newStatus)) {
       throw new BadRequestException(`不允许的订单状态变更: ${currentStatus} → ${newStatus}`);
     }
@@ -941,7 +967,7 @@ export class OrdersService {
           .where(eq(orders.id, id));
       });
 
-      const updatedOrder = await this.getOrderDetail(id, undefined, undefined, true);
+      const updatedOrder = await this.getOrderDetail(id, undefined, undefined, { role: 'admin' });
 
       // Audit log for status change
       try {
@@ -993,7 +1019,7 @@ export class OrdersService {
         .where(eq(orders.id, id));
     }
 
-    const updatedOrder = await this.getOrderDetail(id, undefined, undefined, true);
+    const updatedOrder = await this.getOrderDetail(id, undefined, undefined, { role: 'admin' });
 
     // Audit log for status change
     try {

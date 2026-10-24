@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { extractErrorMessage } from '@/lib/error-feedback';
 import logoMain from '@/assets/branding/logo-main.png';
 import { Image } from '@/components/ui/image';
 
@@ -36,8 +37,7 @@ const LoginPage: React.FC = () => {
       navigate(from, { replace: true });
     } catch (err) {
       console.error('Login failed', err);
-      const msg = (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message || '登录失败';
-      toast.error(msg);
+      toast.error(extractErrorMessage(err, '登录失败'));
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,6 @@
 import { Injectable, Inject, Logger, ConflictException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { eq, desc, count, and, asc } from 'drizzle-orm';
+import { eq, desc, count, and, asc, or, isNull } from 'drizzle-orm';
 import { inquirySessions, inquiryMessages } from '../../database/schema';
 import type {
   InquirySession,
@@ -20,6 +20,7 @@ export class InquiryService {
     page: number,
     pageSize: number,
     status?: string,
+    actor?: { sellerId?: string; role?: string },
   ): Promise<{
     items: InquirySession[];
     total: number;
@@ -27,6 +28,13 @@ export class InquiryService {
     pageSize: number;
   }> {
     const conditions = [];
+    // 卖家看「已分配给自己」+「尚未分配」的会话；管理员看全量。
+    // 未分配会话在卖家首次回复时绑定归属（assertSellerCanReply 会拒绝已归属他人的会话）。
+    if (actor?.sellerId && actor.role !== 'admin') {
+      conditions.push(
+        or(eq(inquirySessions.sellerId, actor.sellerId), isNull(inquirySessions.sellerId)),
+      );
+    }
     if (status) {
       conditions.push(eq(inquirySessions.status, status));
     }
@@ -88,6 +96,7 @@ export class InquiryService {
     body: SendMessageRequest,
     sellerUserId?: string,
   ): Promise<InquiryMessage> {
+    await this.assertSellerCanReply(body.sessionId, sellerUserId);
     const [inserted] = await this.db
       .insert(inquiryMessages)
       .values({
@@ -109,11 +118,11 @@ export class InquiryService {
       })
       .where(eq(inquirySessions.sessionId, body.sessionId));
 
-    // if seller responded, mark status
+    // if seller responded, mark status + 绑定会话归属（首个回复的卖家接管）
     if (sellerUserId && body.role === 'seller') {
       await this.db
         .update(inquirySessions)
-        .set({ status: 'active' })
+        .set({ status: 'active', sellerId: sellerUserId })
         .where(eq(inquirySessions.sessionId, body.sessionId));
     }
 
@@ -126,9 +135,23 @@ export class InquiryService {
     };
   }
 
+  /** 卖家回复前校验会话归属：已归属他人的会话拒绝；未归属则允许接管 */
+  private async assertSellerCanReply(sessionId: string, sellerId?: string): Promise<void> {
+    if (!sellerId) return;
+    const rows = await this.db
+      .select({ sellerId: inquirySessions.sellerId })
+      .from(inquirySessions)
+      .where(eq(inquirySessions.sessionId, sessionId))
+      .limit(1);
+    if (rows.length > 0 && rows[0].sellerId && rows[0].sellerId !== sellerId) {
+      throw new ConflictException('该会话已由其他卖家接管');
+    }
+  }
+
   async createSession(
     sessionId: string,
     userId?: string,
+    sellerId?: string,
   ): Promise<InquirySession> {
     try {
       const [inserted] = await this.db
@@ -136,6 +159,7 @@ export class InquiryService {
         .values({
           sessionId,
           userId: userId || null,
+          sellerId: sellerId || null,
           status: 'active',
         })
         .returning();

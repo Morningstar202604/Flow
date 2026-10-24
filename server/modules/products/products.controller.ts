@@ -11,6 +11,7 @@ import {
   Res,
   UseGuards,
   BadRequestException,
+  ForbiddenException,
   PayloadTooLargeException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -25,6 +26,7 @@ import {
   IsObject,
   IsIn,
   Min,
+  Max,
   MinLength,
   MaxLength,
   ValidateNested,
@@ -37,7 +39,7 @@ import type {
   UpdateProductRequest,
   ProductListParams,
 } from '../../../shared/api.interface';
-import { ProductsService } from './products.service';
+import { ProductsService, type UpdateVariantDto } from './products.service';
 import { evaluatePublishReadiness } from './product-publish-check';
 
 const PRODUCT_SORT_BY = ['price_asc', 'price_desc', 'sold_desc', 'newest'] as const;
@@ -54,6 +56,7 @@ class ProductListQueryDto implements ProductListParams {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100)
   pageSize?: number;
 
   @IsOptional()
@@ -349,6 +352,48 @@ export class ProductsController {
     return this.productsService.findByIds(list, true);
   }
 
+  // ==================== Variants (SPU -> SKU) ====================
+
+  @Get(':id/variants')
+  async listVariants(@Param('id') id: string) {
+    return this.productsService.listVariants(id);
+  }
+
+  @UseGuards(new RolesGuard(['seller', 'admin']))
+  @Post(':id/variants')
+  async createVariant(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() body: CreateVariantDto,
+  ) {
+    return this.productsService.createVariant(id, body, {
+      userId: req.user?.id,
+      role: req.user?.role,
+    });
+  }
+
+  @UseGuards(new RolesGuard(['seller', 'admin']))
+  @Patch('variants/:variantId')
+  async updateVariant(
+    @Req() req: Request,
+    @Param('variantId') variantId: string,
+    @Body() body: UpdateVariantDto,
+  ) {
+    return this.productsService.updateVariant(variantId, body, {
+      userId: req.user?.id,
+      role: req.user?.role,
+    });
+  }
+
+  @UseGuards(new RolesGuard(['seller', 'admin']))
+  @Delete('variants/:variantId')
+  async deleteVariant(@Req() req: Request, @Param('variantId') variantId: string) {
+    return this.productsService.deleteVariant(variantId, {
+      userId: req.user?.id,
+      role: req.user?.role,
+    });
+  }
+
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get('audit/active')
   async auditActive(@Query('limit') limit?: string) {
@@ -359,13 +404,23 @@ export class ProductsController {
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get(':id/publish-readiness')
   async getPublishReadiness(@Param('id') id: string) {
-    const product = await this.productsService.findOne(id);
+    const product = await this.productsService.findOne(id, { includeUnpublished: true });
     return evaluatePublishReadiness(product);
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<Product> {
-    return this.productsService.findOne(id);
+  async findOne(@Req() req: Request, @Param('id') id: string): Promise<Product> {
+    // 卖家读草稿仅限本店商品；买家/游客只能读上架商品
+    const isSeller = !!req.user && ['seller', 'admin'].includes(req.user.role);
+    const product = await this.productsService.findOne(id, { includeUnpublished: isSeller });
+    if (
+      product.status !== 'active'
+      && req.user?.role === 'seller'
+      && product.sellerId !== req.user.id
+    ) {
+      throw new ForbiddenException('无权查看该商品');
+    }
+    return product;
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
@@ -398,6 +453,40 @@ export class ProductsController {
   async remove(@Req() req: Request, @Param('id') id: string): Promise<{ id: string }> {
     return this.productsService.remove(id, {
       userId: req.user?.id,
+      role: req.user?.role,
+    });
+  }
+
+  @UseGuards(new RolesGuard(['seller', 'admin']))
+  @Get('export/csv')
+  async exportCsv(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const userId = req.user?.id;
+    if (!userId) throw new BadRequestException('用户未登录');
+    const csv = await this.productsService.exportCsv({
+      userId,
+      role: req.user?.role,
+    });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="products-export.csv"');
+    res.send(csv);
+  }
+
+  @UseGuards(new RolesGuard(['seller', 'admin']))
+  @Post('bulk-status')
+  async bulkStatus(
+    @Req() req: Request,
+    @Body() body: { ids: string[]; status: 'draft' | 'active' | 'inactive' },
+  ) {
+    const userId = req.user?.id;
+    if (!userId) throw new BadRequestException('用户未登录');
+    if (!Array.isArray(body.ids) || body.ids.length === 0) {
+      throw new BadRequestException('请选择至少一个商品');
+    }
+    if (!['draft', 'active', 'inactive'].includes(body.status)) {
+      throw new BadRequestException('无效的状态');
+    }
+    return this.productsService.bulkUpdateStatus(body.ids, body.status, {
+      userId,
       role: req.user?.role,
     });
   }

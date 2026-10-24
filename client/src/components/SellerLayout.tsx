@@ -54,65 +54,66 @@ const SellerLayout: React.FC = () => {
     navigate('/login');
   };
 
+  const zh = language === 'zh';
   const navItems = [
     {
       to: '/seller/copilot',
-      label: 'AI 运营副驾',
+      label: zh ? 'AI 运营副驾' : 'AI Copilot',
       icon: Bot,
     },
     {
       to: '/seller/dashboard',
-      label: '数据看板',
+      label: zh ? '数据看板' : 'Dashboard',
       icon: LayoutDashboard,
     },
     {
       to: '/seller/products',
-      label: '商品管理',
+      label: zh ? '商品管理' : 'Products',
       icon: Package,
     },
     {
       to: '/seller/orders',
-      label: '订单管理',
+      label: zh ? '订单管理' : 'Orders',
       icon: ShoppingCart,
     },
     {
       to: '/seller/inquiries',
-      label: '咨询管理',
+      label: zh ? '咨询管理' : 'Inquiries',
       icon: MessageSquare,
     },
     {
       to: '/seller/ai-center',
-      label: 'AI 分析中心',
+      label: zh ? 'AI 分析中心' : 'AI Center',
       icon: Sparkles,
     },
     {
       to: '/seller/coupons',
-      label: '优惠券管理',
+      label: zh ? '优惠券管理' : 'Coupons',
       icon: Tag,
     },
     {
       to: '/seller/refunds',
-      label: '退款管理',
+      label: zh ? '退款管理' : 'Refunds',
       icon: RotateCcw,
     },
     {
       to: '/seller/shipping-templates',
-      label: '运费模板',
+      label: zh ? '运费模板' : 'Shipping',
       icon: Truck,
     },
     {
       to: '/seller/collections',
-      label: '集合管理',
+      label: zh ? '集合管理' : 'Collections',
       icon: Layers,
     },
     {
       to: '/seller/cms-pages',
-      label: '页面管理',
+      label: zh ? '页面管理' : 'CMS Pages',
       icon: FileText,
     },
     {
       to: '/seller/audit-logs',
-      label: '操作审计',
+      label: zh ? '操作审计' : 'Audit Logs',
       icon: FileText,
     },
   ];
@@ -121,7 +122,7 @@ const SellerLayout: React.FC = () => {
 
   const getPageTitle = (): string => {
     const item = navItems.find((nav) => location.pathname.startsWith(nav.to));
-    return item?.label ?? '卖家中心';
+    return item?.label ?? (zh ? '卖家中心' : 'Seller Center');
   };
 
   return (
@@ -137,7 +138,7 @@ const SellerLayout: React.FC = () => {
           />
           <div>
             <div className="text-base font-bold text-white">Flow</div>
-            <div className="text-xs text-slate-400">卖家中心</div>
+            <div className="text-xs text-slate-400">{zh ? '卖家中心' : 'Seller Center'}</div>
           </div>
         </div>
 
@@ -171,7 +172,7 @@ const SellerLayout: React.FC = () => {
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-[#1a3a5c] hover:text-white"
           >
             <Store className="h-4 w-4" />
-            前往商城
+            {zh ? '前往商城' : 'View storefront'}
           </NavLink>
         </div>
       </aside>
@@ -252,14 +253,14 @@ const SellerLayout: React.FC = () => {
               className="flex items-center gap-1 text-sm text-slate-500 hover:text-red-600 transition-colors"
             >
               <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">退出</span>
+              <span className="hidden sm:inline">{zh ? '退出' : 'Sign out'}</span>
             </button>
           </div>
         </header>
 
         {/* 面包屑 */}
         <div className="flex items-center gap-2 px-6 py-3 text-sm text-muted-foreground">
-          <span>卖家中心</span>
+          <span>{zh ? '卖家中心' : 'Seller Center'}</span>
           <span>/</span>
           <span className="text-slate-700">{getPageTitle()}</span>
         </div>

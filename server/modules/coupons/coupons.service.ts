@@ -8,12 +8,12 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { eq, and, desc, count, sql } from 'drizzle-orm';
+import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
 import { computeCouponDiscount, type CouponDiscountType } from './coupon-discount';
 import { nanoid } from 'nanoid';
 
-import { coupons, couponUsage } from '../../database/schema';
+import { coupons, couponUsage, products } from '../../database/schema';
 import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
 import type {
   Coupon,
@@ -165,10 +165,13 @@ export class CouponsService {
     const patch: Partial<typeof coupons.$inferInsert> = {};
     if (dto.code !== undefined) {
       const code = dto.code.trim().toUpperCase();
+      // 排除自身后检查重复码；原来把 id 也加入条件导致永远查不到重复，
+      // 改码撞唯一索引时直接 500。
       const dup = await this.db
         .select({ id: coupons.id })
         .from(coupons)
-        .where(and(eq(coupons.code, code), eq(coupons.id, id)));
+        .where(eq(coupons.code, code))
+        .limit(1);
       if (dup.length > 0 && dup[0].id !== id) {
         throw new ConflictException('优惠码已存在');
       }
@@ -207,6 +210,7 @@ export class CouponsService {
     code: string,
     orderAmountStr: string,
     userId?: string,
+    productIds?: string[],
   ): Promise<ValidateCouponResponse> {
     if (!code?.trim()) {
       return {
@@ -291,6 +295,37 @@ export class CouponsService {
       }
     }
 
+    // 适用范围校验：category / product 必须命中订单内商品。
+    // 仅当调用方提供商品清单时校验；结账前预览（只传金额）不做拦截，
+    // 下单时 OrdersService 必定传入商品清单，因此不会被绕过。
+    if (coupon.appliesTo && coupon.appliesTo !== 'all' && productIds && productIds.length > 0) {
+      if (coupon.appliesTo === 'product') {
+        const allowed = new Set(coupon.appliesToIds ?? []);
+        if (!productIds.some((id) => allowed.has(id))) {
+          return {
+            valid: false,
+            discountAmount: 0,
+            finalAmount: orderAmount.toNumber(),
+            message: '订单中没有可使用该优惠码的商品',
+          };
+        }
+      } else if (coupon.appliesTo === 'category') {
+        const allowed = new Set(coupon.appliesToIds ?? []);
+        const rows = await this.db
+          .select({ id: products.id })
+          .from(products)
+          .where(and(inArray(products.id, productIds), inArray(products.categoryId, [...allowed])));
+        if (rows.length === 0) {
+          return {
+            valid: false,
+            discountAmount: 0,
+            finalAmount: orderAmount.toNumber(),
+            message: '订单中没有可使用该优惠码的分类商品',
+          };
+        }
+      }
+    }
+
     const minOrderAmount = new Decimal(coupon.minOrderAmount as string);
     if (orderAmount.lt(minOrderAmount)) {
       return {
@@ -301,7 +336,8 @@ export class CouponsService {
       };
     }
 
-    // Handle free_shipping type
+    // Handle free_shipping type（折扣金额由下单侧把运费归零实现；
+    // 这里返回 freeShipping 标记供调用方使用）
     if (coupon.type === 'free_shipping') {
       if (coupon.freeShipping) {
         return {

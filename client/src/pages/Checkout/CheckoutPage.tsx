@@ -50,6 +50,7 @@ const CheckoutPage: React.FC = () => {
     stripeConfigured: boolean;
     paypalConfigured: boolean;
     demoMode: boolean;
+    stripePublishableKey?: string;
   } | null>(null);
   const [, setOrderId] = useState<string | null>(null);
   const [couponCodeInput, setCouponCodeInput] = useState<string>('');
@@ -58,6 +59,8 @@ const CheckoutPage: React.FC = () => {
   const [couponMessage, setCouponMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState<boolean>(false);
   const [shippingFee, setShippingFee] = useState<number>(0);
+  const [freeShippingApplied, setFreeShippingApplied] = useState<boolean>(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const { language, t } = useLanguage();
@@ -206,15 +209,26 @@ const CheckoutPage: React.FC = () => {
           weightTotal,
           country: watchedCountry || undefined,
         });
-        if (!cancelled) setShippingFee(Number(quote.fee) || 0);
+        if (!cancelled) {
+          setShippingFee(Number(quote.fee) || 0);
+          setQuoteError(null);
+        }
       } catch {
-        if (!cancelled) setShippingFee(0);
+        // 报价失败不能静默当 0 运费：服务端会按真实运费重算，前后金额会不一致
+        if (!cancelled) {
+          setShippingFee(0);
+          setQuoteError(
+            language === 'zh'
+              ? '运费报价失败，请检查网络或稍后重试（下单仍会按服务端运费计算）'
+              : 'Failed to quote shipping. The server will still calculate the real fee at checkout.',
+          );
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [cart, subtotal, qtyTotal, weightTotal, watchedCountry]);
+  }, [cart, subtotal, qtyTotal, weightTotal, watchedCountry, language]);
 
   const handlePlaceOrder: SubmitHandler<CheckoutFormValues> = async (
     values: CheckoutFormValues,
@@ -235,6 +249,7 @@ const CheckoutPage: React.FC = () => {
         couponCode: appliedCouponCode || undefined,
         items: cart.items.map((item) => ({
           productId: item.productId,
+          variantId: item.variantId,
           quantity: item.quantity,
         })),
       };
@@ -248,7 +263,8 @@ const CheckoutPage: React.FC = () => {
     }
   };
 
-  const finalAmount: number = Math.max(0, subtotal + shippingFee - discountAmount);
+  const effectiveShippingFee = freeShippingApplied ? 0 : shippingFee;
+  const finalAmount: number = Math.max(0, subtotal + effectiveShippingFee - discountAmount);
 
   const handleApplyCoupon = async (): Promise<void> => {
     if (!couponCodeInput.trim()) return;
@@ -262,9 +278,12 @@ const CheckoutPage: React.FC = () => {
       if (result.valid && result.coupon) {
         setAppliedCouponCode(result.coupon.code);
         setDiscountAmount(result.discountAmount);
+        setFreeShippingApplied(result.coupon.type === 'free_shipping');
         setCouponMessage({
           type: 'success',
-          text: `${t.cart.couponApplied}: -$${result.discountAmount.toFixed(2)}`,
+          text: result.coupon.type === 'free_shipping'
+            ? (language === 'zh' ? '免运费已应用' : 'Free shipping applied')
+            : `${t.cart.couponApplied}: -$${result.discountAmount.toFixed(2)}`,
         });
         toast.success(t.cart.couponApplied);
       } else {
@@ -287,6 +306,7 @@ const CheckoutPage: React.FC = () => {
   const handleRemoveCoupon = (): void => {
     setAppliedCouponCode(null);
     setDiscountAmount(0);
+    setFreeShippingApplied(false);
     setCouponMessage(null);
     setCouponCodeInput('');
   };
@@ -298,14 +318,48 @@ const CheckoutPage: React.FC = () => {
         orderId: oId,
         provider: paymentProvider,
       });
-      if (result.success) {
-        toast.success(
-          language === 'zh' ? '支付成功！' : 'Payment successful!',
+      if (!result.success) {
+        toast.error(result.message || t.common.error);
+        navigate(`/orders?order=${oId}`);
+        return;
+      }
+      // 真实渠道：订单已创建但尚未入账，必须完成渠道侧支付后才算成功
+      if (result.paymentStatus === 'pending' && result.approveUrl) {
+        toast.message(
+          language === 'zh' ? '正在跳转 PayPal 完成支付…' : 'Redirecting to PayPal…',
+        );
+        window.location.href = result.approveUrl;
+        return;
+      }
+      if (result.paymentStatus === 'pending' && result.clientSecret && paymentConfig?.stripePublishableKey) {
+        navigate('/checkout/stripe', {
+          state: {
+            clientSecret: result.clientSecret,
+            orderId: oId,
+            publishableKey: paymentConfig.stripePublishableKey,
+          },
+        });
+        return;
+      }
+      if (result.paymentStatus === 'pending') {
+        toast.message(
+          language === 'zh'
+            ? '支付单已创建，但站点未配置 Stripe 公钥，请在渠道后台完成支付确认。'
+            : 'Payment created, but no Stripe publishable key is configured. Please confirm it in your Stripe dashboard.',
         );
         navigate(`/orders?order=${oId}`);
-      } else {
-        toast.error(result.message || t.common.error);
+        return;
       }
+      if (result.paymentStatus === 'paid') {
+        toast.success(language === 'zh' ? '支付成功！' : 'Payment successful!');
+      } else {
+        toast.message(
+          language === 'zh'
+            ? '订单已创建，支付状态以渠道回调为准。'
+            : 'Order created. Payment status will be confirmed by the provider.',
+        );
+      }
+      navigate(`/orders?order=${oId}`);
     } catch (error: unknown) {
       console.error('[checkout] pay error', error);
       toast.error(t.common.error);
@@ -752,8 +806,21 @@ const CheckoutPage: React.FC = () => {
                   </div>
                   <div className="flex justify-between text-slate-600">
                     <span>{t.cart.shipping}</span>
-                    <span>${shippingFee.toFixed(2)}</span>
+                    <span>
+                      {freeShippingApplied ? (
+                        <span className="text-emerald-600">
+                          {language === 'zh' ? '免运费' : 'Free'}
+                        </span>
+                      ) : (
+                        `$${shippingFee.toFixed(2)}`
+                      )}
+                    </span>
                   </div>
+                  {quoteError && (
+                    <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                      {quoteError}
+                    </div>
+                  )}
                   {appliedCouponCode && (
                     <div className="flex justify-between text-emerald-600">
                       <span>{t.cart.discount}</span>

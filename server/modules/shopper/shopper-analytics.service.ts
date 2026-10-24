@@ -90,12 +90,18 @@ export class ShopperAnalyticsService {
    * 商品级漏斗：哪些商品"被推荐但不加购"。
    * 全部以会话去重，便于和整体漏斗同口径对比。
    */
-  async getProductFunnel(days = 30, limit = 20): Promise<ShopperProductFunnelResponse> {
+  async getProductFunnel(days = 30, limit = 20, sellerId?: string): Promise<ShopperProductFunnelResponse> {
     const safeDays = Math.max(1, Math.min(365, Math.round(days)));
     const safeLimit = Math.max(1, Math.min(100, Math.round(limit)));
     const since = new Date(Date.now() - safeDays * 24 * 3600 * 1000);
     const ownerExpr = sql<string>`COALESCE(${shopperEvents.userId}::text, ${shopperEvents.sessionId})`;
 
+    const conditions = [
+      gte(shopperEvents.createdAt, since),
+      sql`${shopperEvents.productId} IS NOT NULL`,
+      sql`${shopperEvents.stage} IN ('product_recommended', 'cart_confirmed')`,
+    ];
+    if (sellerId) conditions.push(sql`${shopperEvents.productId} IN (SELECT id FROM ${products} WHERE seller_id = ${sellerId})`);
     const rows = await this.db
       .select({
         productId: shopperEvents.productId,
@@ -103,11 +109,7 @@ export class ShopperAnalyticsService {
         sessions: sql<number>`COUNT(DISTINCT ${ownerExpr})::int`,
       })
       .from(shopperEvents)
-      .where(and(
-        gte(shopperEvents.createdAt, since),
-        sql`${shopperEvents.productId} IS NOT NULL`,
-        sql`${shopperEvents.stage} IN ('product_recommended', 'cart_confirmed')`,
-      ))
+      .where(and(...conditions))
       .groupBy(shopperEvents.productId, shopperEvents.stage);
 
     const recommended = new Map<string, number>();
@@ -191,18 +193,32 @@ export class ShopperAnalyticsService {
   }
 
   /** 漏斗统计（近 N 天），返回各阶段去重会话数、转化率与热词 */
-  async getFunnel(days = 30): Promise<ShopperFunnelResponse> {
+  async getFunnel(days = 30, sellerId?: string): Promise<ShopperFunnelResponse> {
     const safeDays = Math.max(1, Math.min(365, Math.round(days)));
     const since = new Date(Date.now() - safeDays * 24 * 3600 * 1000);
     const ownerExpr = sql<string>`COALESCE(${shopperEvents.userId}::text, ${shopperEvents.sessionId})`;
 
+    const conditions = [gte(shopperEvents.createdAt, since)];
+    if (sellerId) {
+      // 店铺口径：只统计「与本店商品发生过交互」的会话。
+      // viewed 事件本身没有商品维度，因此用同会话的推荐/加购事件反查归属，
+      // 既不会把别家店铺的会话算进来，也不会漏掉本店会话的"打开"阶段。
+      conditions.push(sql`(
+        ${shopperEvents.productId} IN (SELECT id FROM ${products} WHERE seller_id = ${sellerId})
+        OR ${ownerExpr} IN (
+          SELECT COALESCE(${shopperEvents.userId}::text, ${shopperEvents.sessionId})
+          FROM ${shopperEvents} se2
+          WHERE se2.product_id IN (SELECT id FROM ${products} WHERE seller_id = ${sellerId})
+        )
+      )`);
+    }
     const rows = await this.db
       .select({
         stage: shopperEvents.stage,
         owners: sql<number>`COUNT(DISTINCT ${ownerExpr})::int`,
       })
       .from(shopperEvents)
-      .where(gte(shopperEvents.createdAt, since))
+      .where(and(...conditions))
       .groupBy(shopperEvents.stage);
 
     const byStage = new Map(rows.map((row) => [row.stage, Number(row.owners)]));

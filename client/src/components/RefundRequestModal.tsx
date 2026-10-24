@@ -23,6 +23,7 @@ import { createRefund } from '@/api/refunds';
 import type { Order } from '@shared/api.interface';
 import { toast } from 'sonner';
 import { Image } from '@/components/ui/image';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface RefundRequestModalProps {
   order: Order;
@@ -32,14 +33,14 @@ interface RefundRequestModalProps {
 }
 
 const REFUND_REASONS = [
-  { value: 'quality_issue', label: '商品质量问题' },
-  { value: 'wrong_item', label: '发错商品' },
-  { value: 'not_as_described', label: '商品与描述不符' },
-  { value: 'damaged', label: '商品损坏/破损' },
-  { value: 'missing_parts', label: '缺少配件/零件' },
-  { value: 'changed_mind', label: '不想要了/改变主意' },
-  { value: 'delivery_too_slow', label: '物流太慢' },
-  { value: 'other', label: '其他原因' },
+  { value: 'quality_issue', zh: '商品质量问题', en: 'Quality issue' },
+  { value: 'wrong_item', zh: '发错商品', en: 'Wrong item received' },
+  { value: 'not_as_described', zh: '商品与描述不符', en: 'Not as described' },
+  { value: 'damaged', zh: '商品损坏/破损', en: 'Damaged in transit' },
+  { value: 'missing_parts', zh: '缺少配件/零件', en: 'Missing parts' },
+  { value: 'changed_mind', zh: '不想要了/改变主意', en: 'Changed my mind' },
+  { value: 'delivery_too_slow', zh: '物流太慢', en: 'Delivery too slow' },
+  { value: 'other', zh: '其他原因', en: 'Other reason' },
 ];
 
 const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
@@ -48,6 +49,9 @@ const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { language } = useLanguage();
+  const zh = language === 'zh';
+  const L = (cn: string, en: string): string => (zh ? cn : en);
   const [amount, setAmount] = useState(String(Number(order.totalAmount).toFixed(2)));
   const [reason, setReason] = useState('');
   const [reasonDetail, setReasonDetail] = useState('');
@@ -59,15 +63,15 @@ const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
   const handleSubmit = async () => {
     const numAmount = Number(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      toast.error('请输入有效的退款金额');
+      toast.error(L('请输入有效的退款金额', 'Enter a valid refund amount'));
       return;
     }
     if (numAmount > maxRefund) {
-      toast.error(`退款金额不能超过订单总额 $${maxRefund.toFixed(2)}`);
+      toast.error(L(`退款金额不能超过订单总额 $${maxRefund.toFixed(2)}`, `Refund cannot exceed $${maxRefund.toFixed(2)}`));
       return;
     }
     if (!reason) {
-      toast.error('请选择退款原因');
+      toast.error(L('请选择退款原因', 'Select a refund reason'));
       return;
     }
 
@@ -80,7 +84,7 @@ const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
         reasonDetail: reasonDetail.trim() || undefined,
         refundMethod,
       });
-      toast.success('退款申请已提交，请等待商家处理');
+      toast.success(L('退款申请已提交，请等待商家处理', 'Refund request submitted'));
       onSuccess();
       onClose();
       // Reset form
@@ -88,7 +92,7 @@ const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
       setReason('');
       setReasonDetail('');
     } catch {
-      toast.error('提交退款申请失败，请稍后重试');
+      toast.error(L('提交退款申请失败，请稍后重试', 'Failed to submit refund request'));
     } finally {
       setSubmitting(false);
     }
@@ -100,7 +104,7 @@ const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-amber-500" />
-            申请退款
+            {L('申请退款', 'Request a refund')}
           </DialogTitle>
         </DialogHeader>
 
@@ -109,17 +113,17 @@ const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
           <div className="rounded-lg bg-slate-50 p-3">
             <div className="flex items-center gap-2 mb-2">
               <Package className="h-4 w-4 text-slate-500" />
-              <span className="text-sm font-medium text-slate-700">订单信息</span>
+              <span className="text-sm font-medium text-slate-700">{L('订单信息', 'Order info')}</span>
             </div>
             <div className="text-xs text-slate-500 space-y-1">
-              <div>订单号：<span className="font-mono text-slate-700">{order.orderNo}</span></div>
-              <div>订单总额：<span className="font-semibold text-slate-900">${Number(order.totalAmount).toFixed(2)}</span></div>
+              <div>{L('订单号：', 'Order No.: ')}<span className="font-mono text-slate-700">{order.orderNo}</span></div>
+              <div>{L('订单总额：', 'Order total: ')}<span className="font-semibold text-slate-900">${Number(order.totalAmount).toFixed(2)}</span></div>
             </div>
           </div>
 
           {/* 退款商品 */}
           <div>
-            <Label className="text-sm font-medium mb-2 block">退款商品</Label>
+            <Label className="text-sm font-medium mb-2 block">{L('退款商品', 'Items')}</Label>
             <div className="space-y-2 max-h-32 overflow-y-auto rounded-lg border p-2">
               {order.items.map((item) => (
                 <div key={item.id} className="flex items-center gap-2">
@@ -139,7 +143,7 @@ const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
           {/* 退款金额 */}
           <div>
             <Label htmlFor="refund-amount" className="text-sm font-medium">
-              退款金额 <span className="text-red-500">*</span>
+              {L('退款金额', 'Refund amount')} <span className="text-red-500">*</span>
             </Label>
             <div className="relative mt-1">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
@@ -154,21 +158,21 @@ const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
                 className="pl-7"
               />
             </div>
-            <p className="mt-1 text-xs text-slate-400">最高可退 ${maxRefund.toFixed(2)}</p>
+            <p className="mt-1 text-xs text-slate-400">{L('最高可退', 'Maximum refundable')} ${maxRefund.toFixed(2)}</p>
           </div>
 
           {/* 退款原因 */}
           <div>
             <Label className="text-sm font-medium">
-              退款原因 <span className="text-red-500">*</span>
+              {L('退款原因', 'Refund reason')} <span className="text-red-500">*</span>
             </Label>
             <Select value={reason} onValueChange={setReason}>
               <SelectTrigger className="mt-1">
-                <SelectValue placeholder="请选择退款原因" />
+                <SelectValue placeholder={L('请选择退款原因', 'Select a reason')} />
               </SelectTrigger>
               <SelectContent>
                 {REFUND_REASONS.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  <SelectItem key={r.value} value={r.value}>{zh ? r.zh : r.en}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -176,10 +180,10 @@ const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
 
           {/* 补充说明 */}
           <div>
-            <Label htmlFor="refund-detail" className="text-sm font-medium">补充说明</Label>
+            <Label htmlFor="refund-detail" className="text-sm font-medium">{L('补充说明', 'Additional details')}</Label>
             <Textarea
               id="refund-detail"
-              placeholder="请详细描述您的退款原因（选填）"
+              placeholder={L('请详细描述您的退款原因（选填）', 'Describe the issue (optional)')}
               value={reasonDetail}
               onChange={(e) => setReasonDetail(e.target.value)}
               rows={3}
@@ -189,14 +193,14 @@ const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
 
           {/* 退款方式 */}
           <div>
-            <Label className="text-sm font-medium">退款方式</Label>
+            <Label className="text-sm font-medium">{L('退款方式', 'Refund method')}</Label>
             <Select value={refundMethod} onValueChange={setRefundMethod}>
               <SelectTrigger className="mt-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="original">原路返回</SelectItem>
-                <SelectItem value="balance">退至余额</SelectItem>
+                <SelectItem value="original">{L('原路返回', 'Original payment method')}</SelectItem>
+                <SelectItem value="balance">{L('退至余额', 'Store balance')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -204,14 +208,14 @@ const RefundRequestModal: React.FC<RefundRequestModalProps> = ({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>
-            取消
+            {L('取消', 'Cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={submitting}
             className="bg-amber-600 hover:bg-amber-700"
           >
-            {submitting ? '提交中...' : '提交申请'}
+            {submitting ? L('提交中...', 'Submitting...') : L('提交申请', 'Submit request')}
           </Button>
         </DialogFooter>
       </DialogContent>

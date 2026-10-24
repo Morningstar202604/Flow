@@ -139,9 +139,9 @@ const InquiryManagePage: React.FC = () => {
   );
 
   return (
-    <div className="flex h-[calc(100vh-180px)] gap-4">
+    <div className="flex flex-col gap-4 md:h-[calc(100vh-180px)] md:flex-row">
       {/* 左侧会话列表 */}
-      <Card className="w-72 flex-shrink-0 shadow-sm">
+      <Card className="w-full flex-shrink-0 shadow-sm md:w-72">
         <CardContent className="flex h-full flex-col p-0">
           <div className="border-b p-4">
             <div className="flex items-center gap-2">

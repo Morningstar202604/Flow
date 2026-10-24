@@ -21,11 +21,13 @@ export class DashboardService {
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
   ) {}
 
-  async getStats(): Promise<DashboardData> {
+  async getStats(actor?: { sellerId?: string; role?: string }): Promise<DashboardData> {
+    // 卖家只看本店；管理员（无 sellerId 过滤）看全平台
+    const sellerId = actor && actor.role !== 'admin' ? actor.sellerId : undefined;
     const [statsResult, salesTrend, categorySales] = await Promise.all([
-      this.getDashboardStats(),
-      this.getSalesTrend(),
-      this.getCategorySales(),
+      this.getDashboardStats(sellerId),
+      this.getSalesTrend(sellerId),
+      this.getCategorySales(sellerId),
     ]);
 
     return {
@@ -35,7 +37,7 @@ export class DashboardService {
     };
   }
 
-  private async getDashboardStats(): Promise<DashboardStats> {
+  private async getDashboardStats(sellerId?: string): Promise<DashboardStats> {
     const todayStart = this.getTodayStartIso();
     const windowStart = this.getDaysAgoStartIso(90);
 
@@ -52,12 +54,14 @@ export class DashboardService {
         COALESCE(SUM(CASE WHEN o.status IN ('paid', 'shipped', 'delivered') THEN o.total_amount ELSE 0 END), 0)::text AS gmv,
         COALESCE(COUNT(o.id), 0)::text AS order_count,
         (SELECT COUNT(DISTINCT ${visits.sessionId}) FROM ${visits} WHERE ${visits.createdAt} >= ${windowStart}::timestamptz)::text AS visitor_count,
-        (SELECT COUNT(${products.id}) FROM ${products})::text AS product_count,
+        (SELECT COUNT(${products.id}) FROM ${products}
+          ${sellerId ? sql`WHERE ${products.sellerId} = ${sellerId}` : sql``})::text AS product_count,
         COALESCE(SUM(CASE WHEN o.status IN ('paid', 'shipped', 'delivered') AND o.created_at >= ${todayStart}::timestamptz THEN o.total_amount ELSE 0 END), 0)::text AS today_gmv,
         COALESCE(COUNT(CASE WHEN o.created_at >= ${todayStart}::timestamptz THEN 1 END), 0)::text AS today_orders,
         COALESCE(COUNT(CASE WHEN o.status = 'paid' THEN 1 END), 0)::text AS pending_orders
       FROM orders o
       WHERE o.created_at >= ${windowStart}::timestamptz
+        ${sellerId ? sql`AND o.seller_id = ${sellerId}` : sql``}
     `);
 
     const row = result[0] as {
@@ -92,7 +96,7 @@ export class DashboardService {
     };
   }
 
-  private async getSalesTrend(): Promise<SalesTrendItem[]> {
+  private async getSalesTrend(sellerId?: string): Promise<SalesTrendItem[]> {
     const result = await this.db.execute<{
       date: string;
       amount: string;
@@ -113,6 +117,7 @@ export class DashboardService {
          ON DATE(o.created_at AT TIME ZONE 'Asia/Shanghai') = d.day
          AND o.status IN ('paid', 'shipped', 'delivered')
          AND o.created_at >= (CURRENT_DATE - INTERVAL '29 days')
+         ${sellerId ? sql`AND o.seller_id = ${sellerId}` : sql``}
        GROUP BY d.day
       ORDER BY d.day ASC
     `);
@@ -124,7 +129,7 @@ export class DashboardService {
     }));
   }
 
-  private async getCategorySales(): Promise<CategorySalesItem[]> {
+  private async getCategorySales(sellerId?: string): Promise<CategorySalesItem[]> {
     const result = await this.db.execute<{
       name: string;
       amount: string;
@@ -138,6 +143,7 @@ export class DashboardService {
       LEFT JOIN categories c ON p.category_id = c.id
       WHERE o.status IN ('paid', 'shipped', 'delivered')
         AND o.created_at >= (CURRENT_DATE - INTERVAL '89 days')
+        ${sellerId ? sql`AND o.seller_id = ${sellerId}` : sql``}
       GROUP BY c.name_zh
       ORDER BY SUM(oi.subtotal) DESC
     `);

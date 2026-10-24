@@ -210,7 +210,11 @@ export class ProductsService {
     return { items, total, page, pageSize };
   }
 
-  async findOne(id: string): Promise<Product> {
+  /**
+   * 商品详情。默认只返回上架商品（公开接口防草稿泄露）；
+   * 卖家工作台与内部服务显式传 includeUnpublished。
+   */
+  async findOne(id: string, options?: { includeUnpublished?: boolean }): Promise<Product> {
     const rows = await this.db.select({
       ...(products as any),
       categoryNameZh: categories.nameZh,
@@ -220,6 +224,9 @@ export class ProductsService {
       .where(eq(products.id, id)).limit(1);
 
     if (rows.length === 0) throw new NotFoundException('商品不存在');
+    if (!options?.includeUnpublished && (rows[0] as unknown as { status: string }).status !== 'active') {
+      throw new NotFoundException('商品不存在');
+    }
 
     const result = await this.toDto(rows[0] as unknown as ProductWithCategory);
 
@@ -398,7 +405,18 @@ export class ProductsService {
         return productRow;
       });
 
-      return this.findOne(result.id);
+      // 上架门禁同样覆盖「创建即为 active」路径（此前只在校验更新时生效）
+      const created = await this.findOne(result.id, { includeUnpublished: true });
+      if (created.status === 'active') {
+        const readiness = evaluatePublishReadiness(created);
+        if (!readiness.ready) {
+          const missing = readiness.checks.filter((check) => !check.ok).map((check) => check.label).join('；');
+          // 创建失败即回滚商品，避免留下未通过门禁的在售商品
+          await this.db.delete(products).where(eq(products.id, result.id));
+          throw new BadRequestException(`商品未满足上架条件：${missing}`);
+        }
+      }
+      return created;
     } catch (error) {
       this.logger.error('创建商品失败', error);
       throw error;
@@ -496,7 +514,7 @@ export class ProductsService {
 
     // 上架门禁：draft/inactive → active 必须先通过完整性校验（fail-closed）
     if (input.status === 'active' && oldStatus !== 'active') {
-      const current = await this.findOne(id);
+      const current = await this.findOne(id, { includeUnpublished: true });
       const readiness = evaluatePublishReadiness(current);
       if (!readiness.ready) {
         const missing = readiness.checks.filter((check) => !check.ok).map((check) => check.label).join('；');
@@ -511,7 +529,7 @@ export class ProductsService {
       if (updated.length === 0) throw new NotFoundException('商品不存在');
     }
 
-    const result = await this.findOne(id);
+    const result = await this.findOne(id, { includeUnpublished: true });
 
     if (input.status !== undefined && input.status !== oldStatus) {
       try {
@@ -546,7 +564,7 @@ export class ProductsService {
 
     const results: Array<{ id: string; title: string; missing: string[] }> = [];
     for (const row of rows) {
-      const product = await this.findOne(row.id);
+      const product = await this.findOne(row.id, { includeUnpublished: true });
       const readiness = evaluatePublishReadiness(product);
       if (!readiness.ready) {
         results.push({
@@ -580,7 +598,7 @@ export class ProductsService {
 
     for (const id of targets) {
       try {
-        const product = await this.findOne(id);
+        const product = await this.findOne(id, { includeUnpublished: true });
         const filled: string[] = [];
 
         const copy = await generate({
@@ -649,7 +667,7 @@ export class ProductsService {
 
     const items: CopyQualityReport[] = [];
     for (const row of rows) {
-      items.push(evaluateCopyQuality(await this.findOne(row.id)));
+      items.push(evaluateCopyQuality(await this.findOne(row.id, { includeUnpublished: true })));
     }
     const needsReview = items.filter((item) => item.needsReview).length;
     const averageScore = items.length === 0
@@ -689,7 +707,26 @@ export class ProductsService {
 
   // ── Variant CRUD ─────────────────────────────
 
-  async createVariant(productId: string, dto: CreateVariantDto): Promise<ProductVariant> {
+  private async assertProductOwner(
+    productId: string,
+    actor?: { userId?: string; role?: string },
+  ): Promise<void> {
+    if (!actor || isPlatformAdmin(actor.role)) return;
+    const rows = await this.db
+      .select({ sellerId: products.sellerId })
+      .from(products)
+      .where(eq(products.id, productId))
+      .limit(1);
+    if (rows.length === 0) throw new NotFoundException('商品不存在');
+    if (rows[0].sellerId !== actor.userId) throw new ForbiddenException('无权修改该商品');
+  }
+
+  async createVariant(
+    productId: string,
+    dto: CreateVariantDto,
+    actor?: { userId?: string; role?: string },
+  ): Promise<ProductVariant> {
+    await this.assertProductOwner(productId, actor);
     const productRows = await this.db.select({ id: products.id }).from(products).where(eq(products.id, productId)).limit(1);
     if (productRows.length === 0) throw new NotFoundException('商品不存在');
 
@@ -715,10 +752,15 @@ export class ProductsService {
     return this.variantToDto(result);
   }
 
-  async updateVariant(variantId: string, dto: UpdateVariantDto): Promise<ProductVariant> {
+  async updateVariant(
+    variantId: string,
+    dto: UpdateVariantDto,
+    actor?: { userId?: string; role?: string },
+  ): Promise<ProductVariant> {
     const existingRows = await this.db.select().from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
     if (existingRows.length === 0) throw new NotFoundException('变体不存在');
     const existing = existingRows[0];
+    await this.assertProductOwner(existing.productId, actor);
 
     if (dto.sku && dto.sku !== existing.sku) {
       const dup = await this.db.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.sku, dto.sku)).limit(1);
@@ -750,10 +792,14 @@ export class ProductsService {
     return this.variantToDto(updated[0]);
   }
 
-  async deleteVariant(variantId: string): Promise<{ id: string }> {
+  async deleteVariant(
+    variantId: string,
+    actor?: { userId?: string; role?: string },
+  ): Promise<{ id: string }> {
     const existingRows = await this.db.select().from(productVariants).where(eq(productVariants.id, variantId)).limit(1);
     if (existingRows.length === 0) throw new NotFoundException('变体不存在');
     const existing = existingRows[0];
+    await this.assertProductOwner(existing.productId, actor);
 
     await this.db.transaction(async (tx) => {
       await tx.delete(productVariants).where(eq(productVariants.id, variantId));
@@ -891,7 +937,7 @@ export class ProductsService {
     }
 
     const failures: ImportFailure[] = [];
-    const validRecords: Array<typeof products.$inferInsert> = [];
+    const validRecords: Array<{ row: typeof products.$inferInsert; sourceIndex: number }> = [];
 
     rows.forEach((row: ParsedCsvRow, index: number) => {
       const rowNum = index + 2;
@@ -917,6 +963,8 @@ export class ProductsService {
       const imageList: string[] = row.images ? row.images.split('|').map((s) => s.trim()).filter(Boolean) : [];
 
       validRecords.push({
+        sourceIndex: index,
+        row: {
         sellerId: userId,
         titleZh: row.nameZh.trim(),
         titleEn: row.nameEn.trim(),
@@ -929,6 +977,7 @@ export class ProductsService {
         totalStock: Math.floor(stockNum),
         totalSold: 0,
         updatedBy: userId,
+        },
       });
     });
 
@@ -936,9 +985,11 @@ export class ProductsService {
     if (validRecords.length > 0) {
       try {
         await this.db.transaction(async (tx) => {
-          for (let i = 0; i < validRecords.length; i++) {
-            const [inserted] = await tx.insert(products).values(validRecords[i]).returning();
-            const row = rows[i];
+          for (const record of validRecords) {
+            const [inserted] = await tx.insert(products).values(record.row).returning();
+            // 用记录自带的原始行号取值：validRecords 已经剔除了失败行，
+            // 用循环下标取 rows[i] 会把价格/库存写到错误的商品上。
+            const row = rows[record.sourceIndex];
             await tx.insert(productVariants).values({
               productId: inserted.id as string,
               sku: `SKU-${(inserted.id as string).slice(0, 8).toUpperCase()}`,
@@ -952,8 +1003,8 @@ export class ProductsService {
         successCount = validRecords.length;
       } catch (error) {
         this.logger.error('批量导入商品失败', error);
-        for (let i = 0; i < validRecords.length; i++) {
-          failures.push({ row: i + failures.length + 2, reason: '数据库写入失败' });
+        for (const record of validRecords) {
+          failures.push({ row: record.sourceIndex + 2, reason: '数据库写入失败' });
         }
       }
     }
@@ -968,6 +1019,80 @@ export class ProductsService {
       } catch { /* noop */ }
     }
     return result;
+  }
+
+  /**
+   * 导出商品 CSV（卖家工作台）。
+   * 只导出当前卖家自己的商品；字段与导入模板保持兼容，可直接改完再导入。
+   */
+  async exportCsv(
+    actor: { userId: string; role?: string },
+    limit = 5000,
+  ): Promise<string> {
+    const conditions: SQL[] = [];
+    if (!isPlatformAdmin(actor.role)) conditions.push(eq(products.sellerId, actor.userId));
+    const rows = await this.db
+      .select({
+        id: products.id,
+        titleZh: products.titleZh,
+        titleEn: products.titleEn,
+        categoryName: categories.nameEn,
+        stock: products.totalStock,
+        descZh: products.descZh,
+        descEn: products.descEn,
+        images: products.images,
+        status: products.status,
+      })
+      .from(products)
+      .leftJoin(categories, eq(products.categoryId, categories.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(products.createdAt))
+      .limit(Math.max(1, Math.min(10000, limit)));
+
+    const variantsMap = await this.fetchVariantsForProducts(rows.map((row) => row.id));
+    const escape = (value: unknown): string => {
+      const text = value === null || value === undefined ? '' : String(value);
+      const needsQuote = text.indexOf(',') >= 0 || text.indexOf('"') >= 0 || text.indexOf(String.fromCharCode(10)) >= 0;
+      return needsQuote ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const header = 'nameZh,nameEn,category,price,stock,descriptionZh,descriptionEn,images,status,sku';
+    const lines = rows.map((row) => {
+      const variants = variantsMap.get(row.id) ?? [];
+      const first = variants[0];
+      return [
+        row.titleZh,
+        row.titleEn,
+        row.categoryName ?? '',
+        first?.price ?? '',
+        row.stock,
+        row.descZh,
+        row.descEn,
+        (row.images ?? []).join('|'),
+        row.status,
+        first?.sku ?? row.id,
+      ].map(escape).join(',');
+    });
+    return [header, ...lines].join(String.fromCharCode(10));
+  }
+
+  /** 批量上下架：逐个执行完整校验（含上架门禁），返回成功/失败明细 */
+  async bulkUpdateStatus(
+    ids: string[],
+    status: 'draft' | 'active' | 'inactive',
+    actor: { userId: string; role?: string },
+  ): Promise<{ updated: number; failed: Array<{ id: string; reason: string }> }> {
+    const unique = [...new Set(ids)].slice(0, 200);
+    const failed: Array<{ id: string; reason: string }> = [];
+    let updated = 0;
+    for (const id of unique) {
+      try {
+        await this.update(id, { status }, actor.userId, { role: actor.role });
+        updated += 1;
+      } catch (error) {
+        failed.push({ id, reason: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return { updated, failed };
   }
 
   // CSV 解析使用 papaparse（成熟开源库，正确处理 RFC 4180 转义、换行、BOM）

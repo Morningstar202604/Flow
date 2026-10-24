@@ -29,13 +29,15 @@ export class CopilotInsightsService {
     return mergeInsightThresholds(rows[0]?.value);
   }
 
-  async getInsights(): Promise<CopilotInsightsView> {
+  async getInsights(actor?: { sellerId?: string; role?: string }): Promise<CopilotInsightsView> {
     const thresholds = await this.getThresholds();
+    // 卖家巡检只看本店（管理员不传 sellerId 时看全平台）
+    const sellerId = actor && actor.role !== 'admin' ? actor.sellerId : undefined;
     const [lowStock, staleRefunds, unpaidOrders, staleShipments] = await Promise.all([
-      this.lowStock(thresholds),
-      this.staleRefunds(thresholds),
-      this.unpaidOrders(thresholds),
-      this.staleShipments(thresholds),
+      this.lowStock(thresholds, sellerId),
+      this.staleRefunds(thresholds, sellerId),
+      this.unpaidOrders(thresholds, sellerId),
+      this.staleShipments(thresholds, sellerId),
     ]);
 
     const insights = [...lowStock, ...staleRefunds, ...unpaidOrders, ...staleShipments].sort(
@@ -76,7 +78,9 @@ export class CopilotInsightsService {
     return next;
   }
 
-  private async lowStock(thresholds: CopilotInsightThresholds): Promise<CopilotInsight[]> {
+  private async lowStock(thresholds: CopilotInsightThresholds, sellerId?: string): Promise<CopilotInsight[]> {
+    const conditions = [eq(products.status, 'active'), sql`${products.totalStock} < ${thresholds.lowStock}`];
+    if (sellerId) conditions.push(eq(products.sellerId, sellerId));
     const rows = await this.db
       .select({
         id: products.id,
@@ -85,7 +89,7 @@ export class CopilotInsightsService {
         totalSold: products.totalSold,
       })
       .from(products)
-      .where(and(eq(products.status, 'active'), sql`${products.totalStock} < ${thresholds.lowStock}`))
+      .where(and(...conditions))
       .orderBy(asc(products.totalStock))
       .limit(10);
 
@@ -101,8 +105,9 @@ export class CopilotInsightsService {
     }));
   }
 
-  private async staleRefunds(thresholds: CopilotInsightThresholds): Promise<CopilotInsight[]> {
-    const cutoff = new Date(Date.now() - thresholds.pendingRefundHours * 3600 * 1000);
+  private async staleRefunds(thresholds: CopilotInsightThresholds, sellerId?: string): Promise<CopilotInsight[]> {
+    const conditions = [eq(refunds.status, 'requested'), sql`${refunds.createdAt} < ${cutoffIso(thresholds.pendingRefundHours)}`];
+    if (sellerId) conditions.push(eq(orders.sellerId, sellerId));
     const rows = await this.db
       .select({
         id: refunds.id,
@@ -114,7 +119,7 @@ export class CopilotInsightsService {
       })
       .from(refunds)
       .leftJoin(orders, eq(refunds.orderId, orders.id))
-      .where(and(eq(refunds.status, 'requested'), sql`${refunds.createdAt} < ${cutoff.toISOString()}`))
+      .where(and(...conditions))
       .orderBy(asc(refunds.createdAt))
       .limit(10);
 
@@ -130,8 +135,9 @@ export class CopilotInsightsService {
     }));
   }
 
-  private async unpaidOrders(thresholds: CopilotInsightThresholds): Promise<CopilotInsight[]> {
-    const cutoff = new Date(Date.now() - thresholds.unpaidOrderHours * 3600 * 1000);
+  private async unpaidOrders(thresholds: CopilotInsightThresholds, sellerId?: string): Promise<CopilotInsight[]> {
+    const conditions = [eq(orders.status, 'pending_payment'), sql`${orders.createdAt} < ${cutoffIso(thresholds.unpaidOrderHours)}`];
+    if (sellerId) conditions.push(eq(orders.sellerId, sellerId));
     const rows = await this.db
       .select({
         id: orders.id,
@@ -140,7 +146,7 @@ export class CopilotInsightsService {
         createdAt: orders.createdAt,
       })
       .from(orders)
-      .where(and(eq(orders.status, 'pending_payment'), sql`${orders.createdAt} < ${cutoff.toISOString()}`))
+      .where(and(...conditions))
       .orderBy(asc(orders.createdAt))
       .limit(10);
 
@@ -156,8 +162,13 @@ export class CopilotInsightsService {
     }));
   }
 
-  private async staleShipments(thresholds: CopilotInsightThresholds): Promise<CopilotInsight[]> {
-    const cutoff = new Date(Date.now() - thresholds.staleShippedDays * 24 * 3600 * 1000);
+  private async staleShipments(thresholds: CopilotInsightThresholds, sellerId?: string): Promise<CopilotInsight[]> {
+    const conditions = [
+      eq(orders.status, 'shipped'),
+      gte(orders.shippedAt, sql`'1970-01-01'::timestamptz`),
+      sql`${orders.shippedAt} < ${cutoffIso(thresholds.staleShippedDays * 24)}`,
+    ];
+    if (sellerId) conditions.push(eq(orders.sellerId, sellerId));
     const rows = await this.db
       .select({
         id: orders.id,
@@ -166,11 +177,7 @@ export class CopilotInsightsService {
         trackingNumber: orders.trackingNumber,
       })
       .from(orders)
-      .where(and(
-        eq(orders.status, 'shipped'),
-        gte(orders.shippedAt, sql`'1970-01-01'::timestamptz`),
-        sql`${orders.shippedAt} < ${cutoff.toISOString()}`,
-      ))
+      .where(and(...conditions))
       .orderBy(desc(orders.shippedAt))
       .limit(10);
 
@@ -185,6 +192,11 @@ export class CopilotInsightsService {
       entityId: row.id,
     }));
   }
+}
+
+/** 截止时间：当前时间减去 N 小时（ISO 字符串，供 SQL 参数化比较） */
+function cutoffIso(hours: number): string {
+  return new Date(Date.now() - hours * 3600 * 1000).toISOString();
 }
 
 function severityRank(severity: CopilotInsight['severity']): number {

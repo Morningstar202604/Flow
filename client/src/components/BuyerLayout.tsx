@@ -1,4 +1,6 @@
 import React from 'react';
+import { listProducts } from '@/api/products';
+import type { Product } from '@shared/api.interface';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import ShopperWidget from './ShopperWidget';
 import { ShoppingCart, Store, Globe, Search, User, LogOut, Heart, ChevronDown, Menu, MapPin } from 'lucide-react';
@@ -29,6 +31,9 @@ const BuyerLayout: React.FC = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = React.useState('');
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+  const [suggestions, setSuggestions] = React.useState<Product[]>([]);
+  const [suggestOpen, setSuggestOpen] = React.useState(false);
+  const suggestTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleLanguageSelect = (lang: Language): void => {
     setLanguage(lang);
@@ -46,6 +51,30 @@ const BuyerLayout: React.FC = () => {
     if (searchQuery.trim()) {
       navigate(`/products?keyword=${encodeURIComponent(searchQuery.trim())}`);
     }
+  };
+
+  const handleSearchInput = (value: string): void => {
+    setSearchQuery(value);
+    if (suggestTimer.current) clearTimeout(suggestTimer.current);
+    if (value.trim().length < 2) {
+      setSuggestions([]);
+      setSuggestOpen(false);
+      return;
+    }
+    suggestTimer.current = setTimeout(() => {
+      listProducts({ keyword: value.trim(), pageSize: 5 })
+        .then((res) => {
+          setSuggestions(res.items);
+          setSuggestOpen(true);
+        })
+        .catch(() => setSuggestions([]));
+    }, 250);
+  };
+
+  const selectSuggestion = (product: Product): void => {
+    setSuggestOpen(false);
+    setSearchQuery('');
+    navigate(`/products/${product.id}`);
   };
 
   const handleLogout = (): void => {
@@ -184,17 +213,46 @@ const BuyerLayout: React.FC = () => {
               </nav>
             </div>
 
-            <div className="flex-1 max-w-md hidden sm:block">
+            <div className="flex-1 max-w-md hidden sm:block relative">
               <form onSubmit={handleSearch} className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
                   type="text"
                   placeholder={t.nav.searchPlaceholder}
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => handleSearchInput(e.target.value)}
+                  onFocus={() => suggestions.length > 0 && setSuggestOpen(true)}
+                  onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
                   className="pl-9 pr-4 w-full bg-slate-50 border-slate-200"
+                  autoComplete="off"
                 />
               </form>
+              {suggestOpen && suggestions.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
+                  {suggestions.map((product) => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onMouseDown={() => selectSuggestion(product)}
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-slate-50"
+                    >
+                      <span className="flex size-9 items-center justify-center overflow-hidden rounded bg-slate-100">
+                        {product.coverImage ? (
+                          <img src={product.coverImage} alt="" className="size-full object-cover" loading="lazy" />
+                        ) : (
+                          <Search className="size-4 text-slate-400" />
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-slate-800">
+                          {language === 'zh' ? product.titleZh : product.titleEn}
+                        </span>
+                        <span className="block text-xs text-slate-500">${product.minPrice ?? '0.00'}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
               <div className="flex items-center gap-2">
@@ -320,10 +378,10 @@ const BuyerLayout: React.FC = () => {
                   {language === 'zh' ? '购物指南' : language === 'es' ? 'Guía de Compra' : language === 'pt' ? 'Guia de Compras' : 'Shopping Guide'}
                </h4>
                <ul className="space-y-2 text-sm">
-                 <li>{language === 'zh' ? '如何下单' : language === 'es' ? 'Cómo Pedir' : language === 'pt' ? 'Como Pedir' : 'How to Order'}</li>
-                 <li>{language === 'zh' ? '支付方式' : language === 'es' ? 'Métodos de Pago' : language === 'pt' ? 'Formas de Pagamento' : 'Payment Methods'}</li>
-                 <li>{language === 'zh' ? '配送说明' : language === 'es' ? 'Información de Envío' : language === 'pt' ? 'Informações de Entrega' : 'Shipping Info'}</li>
-                 <li>{language === 'zh' ? '退换货政策' : language === 'es' ? 'Política de Devoluciones' : language === 'pt' ? 'Política de Devolução' : 'Return Policy'}</li>
+                 <li><Link to="/page/how-to-order" className="hover:text-white transition-colors">{language === 'zh' ? '如何下单' : language === 'es' ? 'Cómo Pedir' : language === 'pt' ? 'Como Pedir' : 'How to Order'}</Link></li>
+                 <li><Link to="/page/payment-methods" className="hover:text-white transition-colors">{language === 'zh' ? '支付方式' : language === 'es' ? 'Métodos de Pago' : language === 'pt' ? 'Formas de Pagamento' : 'Payment Methods'}</Link></li>
+                 <li><Link to="/page/shipping-info" className="hover:text-white transition-colors">{language === 'zh' ? '配送说明' : language === 'es' ? 'Información de Envío' : language === 'pt' ? 'Informações de Entrega' : 'Shipping Info'}</Link></li>
+                 <li><Link to="/page/returns" className="hover:text-white transition-colors">{language === 'zh' ? '退换货政策' : language === 'es' ? 'Política de Devoluciones' : language === 'pt' ? 'Política de Devolução' : 'Return Policy'}</Link></li>
                </ul>
              </div>
              <div>
@@ -331,9 +389,9 @@ const BuyerLayout: React.FC = () => {
                   {language === 'zh' ? '客户服务' : language === 'es' ? 'Atención al Cliente' : language === 'pt' ? 'Atendimento ao Cliente' : 'Customer Service'}
                </h4>
                <ul className="space-y-2 text-sm">
-                 <li>{language === 'zh' ? '帮助中心' : language === 'es' ? 'Centro de Ayuda' : language === 'pt' ? 'Central de Ajuda' : 'Help Center'}</li>
-                 <li>{language === 'zh' ? '联系我们' : language === 'es' ? 'Contáctanos' : language === 'pt' ? 'Fale Conosco' : 'Contact Us'}</li>
-                 <li>{language === 'zh' ? '常见问题' : language === 'es' ? 'Preguntas Frecuentes' : language === 'pt' ? 'Perguntas Frequentes' : 'FAQ'}</li>
+                 <li><Link to="/page/help" className="hover:text-white transition-colors">{language === 'zh' ? '帮助中心' : language === 'es' ? 'Centro de Ayuda' : language === 'pt' ? 'Central de Ajuda' : 'Help Center'}</Link></li>
+                 <li><Link to="/page/contact" className="hover:text-white transition-colors">{language === 'zh' ? '联系我们' : language === 'es' ? 'Contáctanos' : language === 'pt' ? 'Fale Conosco' : 'Contact Us'}</Link></li>
+                 <li><Link to="/page/faq" className="hover:text-white transition-colors">{language === 'zh' ? '常见问题' : language === 'es' ? 'Preguntas Frecuentes' : language === 'pt' ? 'Perguntas Frequentes' : 'FAQ'}</Link></li>
                </ul>
              </div>
              <div>
@@ -341,15 +399,18 @@ const BuyerLayout: React.FC = () => {
                   {language === 'zh' ? '关于我们' : language === 'es' ? 'Sobre Nosotros' : language === 'pt' ? 'Sobre Nós' : 'About Us'}
                </h4>
                <ul className="space-y-2 text-sm">
-                 <li>{language === 'zh' ? '公司介绍' : language === 'es' ? 'About Flow' : language === 'pt' ? 'Sobre a Flow' : 'About Flow'}</li>
-                 <li>{language === 'zh' ? '卖家入驻' : language === 'es' ? 'Sell on Flow' : language === 'pt' ? 'Sell on Flow' : 'Sell on Flow'}</li>
-                 <li>{language === 'zh' ? '隐私政策' : language === 'es' ? 'Política de Privacidad' : language === 'pt' ? 'Política de Privacidade' : 'Privacy Policy'}</li>
-                 <li>{language === 'zh' ? '服务条款' : language === 'es' ? 'Términos de Servicio' : language === 'pt' ? 'Termos de Serviço' : 'Terms of Service'}</li>
+                 <li><Link to="/page/about" className="hover:text-white transition-colors">{language === 'zh' ? '公司介绍' : language === 'es' ? 'About Flow' : language === 'pt' ? 'Sobre a Flow' : 'About Flow'}</Link></li>
+                 <li><Link to="/register?role=seller" className="hover:text-white transition-colors">{language === 'zh' ? '卖家入驻' : language === 'es' ? 'Sell on Flow' : language === 'pt' ? 'Sell on Flow' : 'Sell on Flow'}</Link></li>
+                 <li><Link to="/page/privacy" className="hover:text-white transition-colors">{language === 'zh' ? '隐私政策' : language === 'es' ? 'Política de Privacidad' : language === 'pt' ? 'Política de Privacidade' : 'Privacy Policy'}</Link></li>
+                 <li><Link to="/page/terms" className="hover:text-white transition-colors">{language === 'zh' ? '服务条款' : language === 'es' ? 'Términos de Servicio' : language === 'pt' ? 'Termos de Serviço' : 'Terms of Service'}</Link></li>
                </ul>
              </div>
           </div>
-           <div className="border-t border-[#1a3a5c] mt-8 pt-8 text-center text-sm">
-              © 2024 Flow. {language === 'zh' ? '保留所有权利。' : language === 'es' ? 'Todos los derechos reservados.' : language === 'pt' ? 'Todos os direitos reservados.' : 'All rights reserved.'}
+           <div className="border-t border-[#1a3a5c] mt-8 pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm">
+              <span>© {new Date().getFullYear()} Flow. {language === 'zh' ? '保留所有权利。' : language === 'es' ? 'Todos los derechos reservados.' : language === 'pt' ? 'Todos os direitos reservados.' : 'All rights reserved.'}</span>
+              <span className="flex items-center gap-3 text-xs text-slate-500">
+                <span>Stripe</span><span>PayPal</span><span>{language === 'zh' ? '30 天退换' : '30-day returns'}</span><span>{language === 'zh' ? '全球配送' : 'Worldwide shipping'}</span>
+              </span>
             </div>
         </div>
       </footer>

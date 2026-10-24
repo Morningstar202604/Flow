@@ -174,7 +174,11 @@ const ChatWidget: React.FC = () => {
               placeholder={aiConfigured ? chatText.placeholder : chatText.unavailable}
               className="flex-1"
             />
-            <Button onClick={handleSend} disabled={isTyping || !input.trim() || !aiConfigured}>
+            <Button
+              onClick={handleSend}
+              disabled={isTyping || !input.trim() || !aiConfigured}
+              aria-label={chatText.send}
+            >
               <Send className="size-4" />
             </Button>
           </div>
@@ -182,6 +186,8 @@ const ChatWidget: React.FC = () => {
       )}
       <Button
         size="lg"
+        aria-label={isOpen ? chatText.title : t.chat.title}
+        aria-expanded={isOpen}
         className="rounded-full size-14 shadow-lg"
         onClick={toggleChat}
       >

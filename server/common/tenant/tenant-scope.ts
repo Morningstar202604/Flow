@@ -16,8 +16,9 @@ export function canAccessSellerResource(
   actorId: string | undefined,
   role?: string,
 ): boolean {
-  if (!actorId) return false;
+  // 管理员优先：内部服务调用只带 role（无 userId）时也要能跨店读取
   if (isPlatformAdmin(role)) return true;
+  if (!actorId) return false;
   return Boolean(resourceSellerId) && resourceSellerId === actorId;
 }
 

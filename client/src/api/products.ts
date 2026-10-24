@@ -86,6 +86,21 @@ export function downloadImportTemplate(): string {
   return '/api/products/import-template';
 }
 
+export async function exportProductsCsv(): Promise<Blob> {
+  const { data } = await http.get('/api/products/export/csv', {
+    responseType: 'blob',
+  });
+  return data as Blob;
+}
+
+export async function bulkUpdateProductStatus(
+  ids: string[],
+  status: 'draft' | 'active' | 'inactive',
+): Promise<{ updated: number; failed: Array<{ id: string; reason: string }> }> {
+  const { data } = await http.post('/api/products/bulk-status', { ids, status });
+  return data as { updated: number; failed: Array<{ id: string; reason: string }> };
+}
+
 /** 批量按 ID 查询商品（聚合场景，仅上架商品） */
 export async function getProductsByIds(ids: string[]): Promise<Product[]> {
   if (ids.length === 0) return [];

@@ -39,6 +39,8 @@ const STATUS_MAP: Record<OrderStatus, { label: string; variant: string; color: s
   shipped: { label: '已发货', variant: 'default', color: 'text-indigo-600' },
   delivered: { label: '已完成', variant: 'default', color: 'text-emerald-600' },
   cancelled: { label: '已取消', variant: 'destructive', color: '' },
+  refunded: { label: '已退款', variant: 'secondary', color: 'text-slate-500' },
+  partially_refunded: { label: '部分退款', variant: 'secondary', color: 'text-orange-600' },
 };
 
 const PAGE_SIZE = 10;
@@ -88,6 +90,13 @@ const OrderManagePage: React.FC = () => {
   const handleSearch = () => {
     setPage(1);
     fetchOrders({ page: 1 });
+  };
+
+  const handleStatusFilterChange = (value: string) => {
+    setStatusFilter(value);
+    // 筛选变化必须回到第 1 页，否则停在第 N 页会得到空表
+    setPage(1);
+    fetchOrders({ page: 1, status: (value as OrderStatus) || undefined });
   };
 
   const handleViewDetail = async (order: Order) => {
@@ -189,7 +198,7 @@ const OrderManagePage: React.FC = () => {
             />
           </div>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
             <SelectTrigger className="w-36">
               <SelectValue placeholder="全部状态" />
             </SelectTrigger>
@@ -212,7 +221,7 @@ const OrderManagePage: React.FC = () => {
       {/* 订单列表 */}
       <Card className="shadow-sm">
         <CardContent className="p-0">
-          <Table>
+          <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow>
                 <TableHead>订单号</TableHead>

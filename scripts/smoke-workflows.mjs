@@ -109,6 +109,8 @@ try {
       price: 15,
       stock: 0,
       status: 'active',
+      coverImage: `https://example.com/wf-${runId}.png`,
+      descEn: 'Workflow test product description',
       variants: [
         { sku: `WF-${runId}-R`, optionValues: ['红'], price: 15, stock: 20, status: 'active' },
         { sku: `WF-${runId}-B`, optionValues: ['蓝'], price: 18, stock: 10, status: 'active' },
@@ -136,7 +138,7 @@ try {
 
   const uiProduct = await api('POST', '/api/products', {
     cookie: seller.cookie,
-    json: { titleZh: '界面路径商品', titleEn: `UI Path Item ${runId}`, categoryId, price: 9.9, stock: 7, status: 'active' },
+    json: { titleZh: '界面路径商品', titleEn: `UI Path Item ${runId}`, categoryId, price: 9.9, stock: 7, status: 'active', coverImage: `https://example.com/ui-${runId}.png`, descEn: 'UI path product description' },
   });
   assert(uiProduct.body?.variants?.length === 1, `界面路径创建应自动生成默认变体，实际 ${uiProduct.body?.variants?.length}`);
   assert(Number(uiProduct.body?.totalStock) === 7, `聚合库存应为 7，实际 ${uiProduct.body?.totalStock}`);

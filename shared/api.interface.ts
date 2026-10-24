@@ -216,7 +216,14 @@ export interface CartImportCodeRequest {
   code: string;
 }
 
-export type OrderStatus = 'pending_payment' | 'paid' | 'shipped' | 'delivered' | 'cancelled';
+export type OrderStatus =
+  | 'pending_payment'
+  | 'paid'
+  | 'shipped'
+  | 'delivered'
+  | 'cancelled'
+  | 'refunded'
+  | 'partially_refunded';
 
 export interface OrderItem {
   id: string;
@@ -722,6 +729,14 @@ export interface PayResponse {
   order?: Order;
   message?: string;
   demoMode?: boolean;
+  /** Stripe Checkout 托管支付页地址（有值时前端应跳转） */
+  checkoutUrl?: string;
+  /** PayPal 授权链接（有值时前端应跳转） */
+  approveUrl?: string;
+  /** Stripe PaymentIntent client_secret（前端用 Stripe.js 确认支付） */
+  clientSecret?: string;
+  /** 支付状态：paid=已入账；pending=已创建支付单，等待渠道回调确认 */
+  paymentStatus?: 'paid' | 'pending';
 }
 
 export interface ProductReview {
@@ -731,6 +746,11 @@ export interface ProductReview {
   userName: string;
   rating: number;
   comment?: string;
+  /** 评价图片 URL 列表 */
+  images?: string[];
+  sellerReply?: string;
+  verifiedPurchase?: boolean;
+  helpfulCount?: number;
   createdAt: string;
 }
 
@@ -743,6 +763,8 @@ export interface ProductReviewsResponse {
 export interface CreateReviewRequest {
   rating: number;
   comment?: string;
+  /** 最多 6 张图片 URL */
+  images?: string[];
 }
 
 export interface Favorite {
@@ -926,6 +948,8 @@ export interface RefundListParams {
   page?: number;
   pageSize?: number;
   status?: Refund['status'];
+  /** 退款单号 / 订单 ID 模糊搜索（卖家端） */
+  keyword?: string;
 }
 
 export interface RefundListResponse {

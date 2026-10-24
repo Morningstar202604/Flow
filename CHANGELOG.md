@@ -5,6 +5,57 @@
 
 ---
 
+## [1.21.0] — 2026-10-24
+
+定位强化：把「AI 原生跨境出口电商」从功能清单做成可展示、可集成、可运营的开源产品。
+
+### Added
+- **SEO / 发现层**：`/sitemap.xml`、`/robots.txt`、`/llms.txt`、`/api/openapi.json`、
+  `/api/seo/meta`；服务端在 index.html 注入 title/description/canonical/OG/Twitter/JSON-LD（商品 Organization/Product），
+  卖家与交易页自动 noindex。`client/src/lib/seo.ts` 负责客户端路由切换后的同步。
+- **Stripe 站内支付**：`PayResponse.clientSecret` + `stripePublishableKey` + `/checkout/stripe` 支付确认页
+  （Stripe.js PaymentElement）；未配置公钥时诚实提示到渠道后台确认，不再把「创建支付单」误报为支付成功。
+- **PayPal 支付确认**：`POST /api/payments/paypal/capture`，校验归属与 capture 金额后幂等入账；
+  本地 mock provider 增加 capture 端点。
+- **商品运营效率**：CSV 导出（`GET /api/products/export/csv`）、批量上下架（`POST /api/products/bulk-status`）、
+  卖家端多选操作条；SPU/SKU 变体 CRUD 路由（`/api/products/:id/variants`、`/api/products/variants/:variantId`）。
+- **评价增强**：评价图片（最多 6 张）、卖家回复、verifiedPurchase、helpfulCount 透出。
+- **店面体验**：搜索联想下拉、相关商品推荐、最近浏览、页脚真实链接与支付/退货/配送信任标识、
+  Hero 品牌色统一（#0B1F3A → #00C2B8）。
+- **工程能力**：`scripts/cli.mjs`（health/products/search/order/ai-test/export/openapi）、
+  `npm run smoke:all`（embedded-postgres 一键跑 5 套 E2E）、`scripts/mock-smtp.mjs`。
+- **安全与可观测**：安全响应头中间件（CSP/HSTS/nosniff/Referrer-Policy/Permissions-Policy）、
+  `X-Request-Id` 请求追踪、全局异常过滤器（生产脱敏，统一错误结构）、静态资源 immutable 缓存、优雅关闭。
+
+### Fixed
+- **订单详情跨租户读取**：`GET /api/orders/:id` 此前对任意卖家放行；现在卖家只能读本店订单，
+  买家按 userId/sessionId 归属，管理员可跨店（`getOrderDetail` 统一 actor 语义）。
+- **订单状态跨租户写入**：`updateStatus` 增加卖家归属校验，杜绝改他店订单状态/发货。
+- **支付入账并发重复**：`markOrderPaid` 改为 `UPDATE ... WHERE status='pending_payment' RETURNING` 原子抢占，
+  并发 webhook 不再重复累计销量/积分/库存流水。
+- **退款并发重复打款**：审批前原子抢占 `requested → approved`，并发第二请求 409；渠道失败自动回滚状态允许重试。
+- **退款数量校验**：行项数量必须为正整数、不可重复、不可超过购买数量与历史已退数量（防刷库存）。
+- **结算丢失 variantId**：下单 payload 透传规格；服务端对多规格商品缺失 variantId 直接拒绝（不再静默选首个规格）。
+- **优惠券规则**：改码重复检查修正（原条件恒不命中导致 500）；`coupon_usage` 真实写入；适用范围
+  （product/category）参与校验；免运费券在下单时把运费归零。
+- **CSV 导入行错位**：以原始行号回填价格/库存（此前失败行会串行）；导入与创建路径统一走上架门禁。
+- **公开草稿泄露**：`GET /api/products/:id` 公开访问仅返回 active；卖家只能读本店草稿；集合详情过滤下架商品。
+- **卖家看板/巡检/审计/咨询跨店泄露**：全部按 `sellerId` 聚合或过滤；咨询会话新增 `seller_id`（迁移 0007），
+  未分配会话可由首个回复卖家接管，已归属他人则拒绝。
+- **前端状态崩溃**：`OrderStatus` 补齐 `refunded` / `partially_refunded`，卖家订单表与买家徽章不再因未知状态白屏。
+- **列表筛选分页**：订单/退款/商品筛选切换时回到第 1 页；退款关键字真正下发。
+- **多变体改价误导**：卖家端对多规格商品禁用价格/库存输入并提示到规格中维护。
+- **移动端**：咨询页左右栏在窄屏堆叠；商品弹窗网格响应式；订单表横向滚动。
+- **可访问性**：购物车加减/删除、收藏、客服发送/悬浮球、订单详情按钮补齐 `aria-label`/`aria-pressed`。
+
+### Verification
+- 单测 **166/166**（29 文件；新增 SEO/OpenAPI 3 例、租户管理员内部调用 1 例）
+- `npm run lint` 0、双端 `type:check` 0、`npm run build` 通过
+- `npm run smoke:all`：workflows 16 步、degraded、交易 19 步、providers 18 步、copilot 19 步、shopper 9 步全通过
+  （embedded-postgres 17.5 + mock providers，无需 Docker）
+
+---
+
 ## [1.20.0] — 2026-10-23
 
 多租户数据隔离加固 + 商品查询能力补全 + 死代码与依赖清理 + 仓库治理。

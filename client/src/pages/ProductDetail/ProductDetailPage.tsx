@@ -48,6 +48,10 @@ import {
   getProductLongDesc,
   getProductBulletPoints,
 } from '@/utils/product-i18n';
+import { applyCanonical, applyDocumentMeta, injectProductJsonLd, productMeta } from '@/lib/seo';
+import { listProducts } from '@/api/products';
+import ProductCard from '@/components/ProductCard';
+import { getRecentlyViewed, pushRecentlyViewed } from '@/utils/recently-viewed';
 
 const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -74,6 +78,7 @@ const ProductDetailPage: React.FC = () => {
   const [hoverRating, setHoverRating] = useState<number>(0);
   const [reviewComment, setReviewComment] = useState<string>('');
   const [submittingReview, setSubmittingReview] = useState<boolean>(false);
+  const [related, setRelated] = useState<Product[]>([]);
 
   // Derived: selected variant
   const selectedVariant: ProductVariant | undefined = selectedVariantId
@@ -102,6 +107,17 @@ const ProductDetailPage: React.FC = () => {
         // Auto-select first variant if available
         if (data.variants.length > 0) {
           setSelectedVariantId(data.variants[0].id);
+        }
+        const meta = productMeta(data);
+        applyDocumentMeta(meta.title, meta.description);
+        applyCanonical(`/products/${data.id}`);
+        injectProductJsonLd({ product: data, url: `${window.location.origin}/products/${data.id}` });
+        pushRecentlyViewed(data.id);
+        // 相关推荐：同分类最热商品（失败不影响主流程）
+        if (data.categoryId) {
+          listProducts({ categoryId: data.categoryId, pageSize: 5, sortBy: 'sold_desc' })
+            .then((res) => setRelated(res.items.filter((item: Product) => item.id !== data.id).slice(0, 4)))
+            .catch(() => setRelated([]));
         }
       } catch (error: unknown) {
         console.error('[productDetail] load error', error);
@@ -284,7 +300,7 @@ const ProductDetailPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="container mx-auto px-6 py-6">
+      <div className="container mx-auto px-6 py-6" id="reviews">
         <Button
           variant="ghost"
           size="sm"
@@ -640,6 +656,33 @@ const ProductDetailPage: React.FC = () => {
                               {review.comment}
                             </p>
                           )}
+                          {review.images && review.images.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {review.images.map((src, i) => (
+                                <Image
+                                  key={`${review.id}-${i}`}
+                                  src={src}
+                                  alt={`${review.userName} review image ${i + 1}`}
+                                  width={64}
+                                  height={64}
+                                  className="size-16 rounded-lg object-cover border border-slate-200"
+                                />
+                              ))}
+                            </div>
+                          )}
+                          {review.verifiedPurchase && (
+                            <span className="mt-1 inline-block text-xs text-emerald-600">
+                              {language === 'zh' ? '已验证购买' : 'Verified purchase'}
+                            </span>
+                          )}
+                          {review.sellerReply && (
+                            <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                              <span className="font-medium text-slate-700">
+                                {language === 'zh' ? '商家回复：' : 'Seller reply: '}
+                              </span>
+                              {review.sellerReply}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -653,6 +696,19 @@ const ProductDetailPage: React.FC = () => {
             </>
           )}
         </Card>
+
+        {related.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-xl font-semibold text-slate-900 mb-4">
+              {language === 'zh' ? '你可能还喜欢' : 'You may also like'}
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {related.map((item) => (
+                <ProductCard key={item.id} product={item} />
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

@@ -169,15 +169,19 @@ export class CopilotController {
   }
 
   @Get('insights')
-  async getInsights(): Promise<CopilotInsightsView> {
-    return this.insightsService.getInsights();
+  async getInsights(@Req() req: Request): Promise<CopilotInsightsView> {
+    return this.insightsService.getInsights(this.getActor(req));
   }
 
   @Get('shopper-funnel')
-  async getShopperFunnel(@Query('days') days?: string): Promise<ShopperFunnelResponse> {
+  async getShopperFunnel(
+    @Req() req: Request,
+    @Query('days') days?: string,
+  ): Promise<ShopperFunnelResponse> {
     const parsed = days ? parseInt(days, 10) : 30;
     const safeDays = Number.isFinite(parsed) ? Math.min(365, Math.max(1, parsed)) : 30;
-    return this.shopperAnalytics.getFunnel(safeDays);
+    const actor = this.getActor(req);
+    return this.shopperAnalytics.getFunnel(safeDays, actor.role === 'admin' ? undefined : actor.userId);
   }
 
   @Get('shopper-demand-gaps')
@@ -268,11 +272,12 @@ export class CopilotController {
 
   @Get('watch/preview')
   async previewDigest(
+    @Req() req: Request,
     @Query('format') format?: string,
   ): Promise<{ format: string; subject: string; body: string }> {
     const safeFormat = format === 'html' || format === 'markdown' ? format : 'plain';
     const settings = await this.watchService.getSettings();
-    const { insights, generatedAt } = await this.insightsService.getInsights();
+    const { insights, generatedAt } = await this.insightsService.getInsights(this.getActor(req));
     const at = new Date(generatedAt);
     const subject = renderSubject(settings.notifySubjectTemplate, insights, []);
     const body = renderDigest({ insights, newInsights: [], at }, safeFormat);
@@ -293,14 +298,17 @@ export class CopilotController {
 
   @Get('shopper-product-funnel')
   async getShopperProductFunnel(
+    @Req() req: Request,
     @Query('days') days?: string,
     @Query('limit') limit?: string,
   ): Promise<ShopperProductFunnelResponse> {
     const parsedDays = days ? parseInt(days, 10) : 30;
     const parsedLimit = limit ? parseInt(limit, 10) : 20;
+    const actor = this.getActor(req);
     return this.shopperAnalytics.getProductFunnel(
       Number.isFinite(parsedDays) ? parsedDays : 30,
       Number.isFinite(parsedLimit) ? parsedLimit : 20,
+      actor.role === 'admin' ? undefined : actor.userId,
     );
   }
 

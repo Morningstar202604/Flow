@@ -24,6 +24,11 @@ describe('tenant-scope', () => {
 
   it('R1: 匿名访问一律拒绝', () => {
     expect(canAccessSellerResource('seller-a', undefined, undefined)).toBe(false);
+    expect(canAccessSellerResource('seller-a', undefined, 'buyer')).toBe(false);
+  });
+
+  it('R1: 内部服务以 admin 角色调用无需 userId', () => {
+    expect(canAccessSellerResource('seller-a', undefined, 'admin')).toBe(true);
   });
 
   it('R1: 跨卖家商品不能合单', () => {

@@ -86,6 +86,7 @@ const RefundsManagePage: React.FC = () => {
           page,
           pageSize: PAGE_SIZE,
           status: (statusFilter as RefundStatus) || undefined,
+          keyword: keyword.trim() || undefined,
           ...params,
         });
         setRefunds(result.items);
@@ -96,7 +97,7 @@ const RefundsManagePage: React.FC = () => {
         setLoading(false);
       }
     },
-    [page, statusFilter],
+    [page, statusFilter, keyword],
   );
 
   useEffect(() => {
@@ -105,7 +106,7 @@ const RefundsManagePage: React.FC = () => {
 
   const handleSearch = () => {
     setPage(1);
-    fetchRefunds({ page: 1 });
+    fetchRefunds({ page: 1, keyword: keyword.trim() || undefined });
   };
 
   const handleViewDetail = (refund: Refund) => {
@@ -171,7 +172,14 @@ const RefundsManagePage: React.FC = () => {
             />
           </div>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => {
+              setStatusFilter(value);
+              setPage(1);
+              fetchRefunds({ page: 1, status: (value as RefundStatus) || undefined, keyword: keyword.trim() || undefined });
+            }}
+          >
             <SelectTrigger className="w-36">
               <SelectValue placeholder="全部状态" />
             </SelectTrigger>

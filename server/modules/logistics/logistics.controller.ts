@@ -37,6 +37,8 @@ export class LogisticsController {
     const userRole = req.user?.role;
 
     if (userRole === 'seller' || userRole === 'admin') {
+      // 卖家只能查看自己店铺订单的物流（管理员可跨店）
+      await this.logisticsService.verifySellerOwnership(orderId, userId, userRole);
       return this.logisticsService.getTrackingInfo(orderId);
     }
 
@@ -54,8 +56,10 @@ export class LogisticsController {
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Post()
   async registerTracking(
+    @Req() req: Request,
     @Body() dto: RegisterTrackingDto,
   ): Promise<{ success: boolean; isDemo: boolean }> {
+    await this.logisticsService.verifySellerOwnership(dto.orderId, req.user?.id, req.user?.role);
     return this.logisticsService.registerTracking(
       dto.orderId,
       dto.carrier,

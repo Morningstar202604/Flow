@@ -7,13 +7,15 @@ import { Image } from '@/components/ui/image';
 import ProductCard from '@/components/ProductCard';
 import CollectionFloors from '@/components/CollectionFloors';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { getFeaturedProducts, listProducts } from '@/api/products';
+import { getFeaturedProducts, listProducts, getProductsByIds } from '@/api/products';
 import { listCategories } from '@/api/categories';
 import { getStorefront } from '@/api/collections';
 import { checkFavoriteBatch } from '@/api/favorites';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Product, Category, StorefrontSection } from '@shared/api.interface';
 import { notifyError } from '@/lib/error-feedback';
+import { getRecentlyViewed } from '@/utils/recently-viewed';
+import { applyCanonical, applyDocumentMeta, injectOrganizationJsonLd } from '@/lib/seo';
 
 const HomePage: React.FC = () => {
   const { user } = useAuth();
@@ -23,6 +25,7 @@ const HomePage: React.FC = () => {
   const [floors, setFloors] = useState<StorefrontSection[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [recentProducts, setRecentProducts] = useState<Product[]>([]);
   const { language, t } = useLanguage();
   const tRef = useRef(t);
   tRef.current = t;
@@ -62,12 +65,27 @@ const HomePage: React.FC = () => {
     void loadData();
    }, [user]);
 
+  useEffect(() => {
+    applyDocumentMeta(
+      'Flow — 让跨境生意更简单 · Cross-Border Commerce, Simplified',
+      'AI 原生跨境出口电商平台：买家商城 + 卖家 AI 工作台，5 个真实 AI Agent 与人工审批式运营副驾。',
+    );
+    applyCanonical('/');
+    injectOrganizationJsonLd();
+    const ids = getRecentlyViewed();
+    if (ids.length > 0) {
+      getProductsByIds(ids.slice(0, 4))
+        .then((items) => setRecentProducts(items))
+        .catch(() => setRecentProducts([]));
+    }
+  }, []);
+
   const displayCategories: Category[] = categories.slice(0, 5);
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Hero Banner */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-500 to-sky-500">
+      <section className="relative overflow-hidden bg-gradient-to-br from-[#0B1F3A] via-[#12365c] to-[#00C2B8]">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyem0wLTh2MkgyNHYtMmgxMnoiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-30" />
         <div className="container mx-auto px-6 py-20 sm:py-28 relative z-10">
           <div className="max-w-2xl text-white">
@@ -78,12 +96,12 @@ const HomePage: React.FC = () => {
             <h1 className="text-4xl sm:text-5xl font-bold mb-4 leading-tight">
               {t.home.heroTitle}
             </h1>
-            <p className="text-lg sm:text-xl text-blue-100 mb-8">
+            <p className="text-lg sm:text-xl text-cyan-50/90 mb-8">
               {t.home.heroSubtitle}
             </p>
             <Button
               size="lg"
-              className="bg-white text-blue-600 hover:bg-blue-50 shadow-lg"
+              className="bg-white text-[#0B1F3A] hover:bg-cyan-50 shadow-lg"
               onClick={() => navigate('/products')}
             >
               <ShoppingBag className="size-5 mr-2" />
@@ -169,6 +187,19 @@ const HomePage: React.FC = () => {
           </div>
         )}
       </section>
+
+      {recentProducts.length > 0 && (
+        <section className="container mx-auto px-6 py-8">
+          <h2 className="text-xl font-semibold text-slate-900 mb-6">
+            {language === 'zh' ? '最近浏览' : 'Recently viewed'}
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {recentProducts.map((product: Product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* New Arrivals */}
       <section className="container mx-auto px-6 py-8 pb-16">

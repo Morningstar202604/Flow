@@ -148,8 +148,30 @@ export class RefundsService {
     // Calculate refund amount
     let refundAmount: Decimal;
     if (dto.items && dto.items.length > 0) {
+      // 行项校验：数量必须为正整数、不得重复、不得超过购买数量、
+      // 也不得超过该行项历史已退数量（防止用超大 quantity 反复部分退款刷库存）。
+      const seen = new Set<string>();
+      const previous = await this.db
+        .select({ items: refunds.items })
+        .from(refunds)
+        .where(and(eq(refunds.orderId, orderId), eq(refunds.status, 'completed')));
+      const refundedByItem = new Map<string, number>();
+      for (const prev of previous) {
+        for (const entry of this.parseRefundItems(prev.items) ?? []) {
+          refundedByItem.set(entry.orderItemId, (refundedByItem.get(entry.orderItemId) ?? 0) + entry.quantity);
+        }
+      }
+
       refundAmount = new Decimal(0);
       for (const refundItem of dto.items) {
+        if (!refundItem?.orderItemId || !Number.isInteger(refundItem.quantity) || refundItem.quantity <= 0) {
+          throw new BadRequestException('退款行项数量必须是正整数');
+        }
+        if (seen.has(refundItem.orderItemId)) {
+          throw new BadRequestException('同一订单行不能重复提交退款');
+        }
+        seen.add(refundItem.orderItemId);
+
         const itemRows = await this.db
           .select({ unitPrice: orderItems.unitPrice, quantity: orderItems.quantity })
           .from(orderItems)
@@ -157,8 +179,15 @@ export class RefundsService {
             eq(orderItems.id, refundItem.orderItemId),
             eq(orderItems.orderId, orderId),
           ));
-        if (itemRows.length === 0) continue;
+        if (itemRows.length === 0) {
+          throw new BadRequestException('退款行项不属于该订单');
+        }
         const item = itemRows[0];
+        const alreadyRefunded = refundedByItem.get(refundItem.orderItemId) ?? 0;
+        const refundable = item.quantity - alreadyRefunded;
+        if (refundItem.quantity > refundable) {
+          throw new BadRequestException(`退款数量超过可退数量（最多 ${refundable} 件）`);
+        }
         refundAmount = refundAmount.plus(
           new Decimal(item.unitPrice as string).mul(refundItem.quantity),
         );
@@ -239,6 +268,43 @@ export class RefundsService {
       throw new BadRequestException('仅待处理退款可审批');
     }
 
+    // 原子抢占：并发两次「批准」只有一个能把 requested → processing，另一个立即失败，
+    // 避免向 Stripe/PayPal 发起两笔真实退款。
+    const claimed = await this.db
+      .update(refunds)
+      .set({ status: 'approved', approvedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(refunds.id, refundId), eq(refunds.status, 'requested')))
+      .returning({ id: refunds.id });
+    if (claimed.length === 0) {
+      throw new ConflictException('该退款已被其他操作处理，请刷新后重试');
+    }
+
+    try {
+      return await this.approveRefundClaimed(refund, sellerId, dto, actorRole);
+    } catch (error) {
+      // 只有「渠道退款失败」才能安全放回 requested 让卖家重试。
+      // 若渠道已退款成功、但后续写库失败，保持 approved 待人工核对，
+      // 绝不能回退成 requested —— 那会导致同一笔退款被再次打款。
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith('支付退款失败')) {
+        await this.db
+          .update(refunds)
+          .set({ status: 'requested', approvedAt: null, updatedAt: new Date() })
+          .where(and(eq(refunds.id, refundId), eq(refunds.status, 'approved')));
+      } else {
+        this.logger.error(`退款已向渠道提交但落库失败，需人工核对：refund=${refundId} err=${message}`);
+      }
+      throw error;
+    }
+  }
+
+  private async approveRefundClaimed(
+    refund: typeof refunds.$inferSelect,
+    sellerId: string,
+    dto?: { reply?: string },
+    actorRole?: string,
+  ) {
+    const refundId = refund.id;
     const order = await this.loadOrder(refund.orderId);
     const refundAmount = new Decimal(refund.amount as string);
     const orderTotal = new Decimal(order.totalAmount as string);

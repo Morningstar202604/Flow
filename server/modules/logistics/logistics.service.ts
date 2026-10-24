@@ -2,6 +2,7 @@ import { Injectable, Inject, Logger, NotFoundException, ForbiddenException } fro
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { eq, and, desc } from 'drizzle-orm';
 import { logistics, orders, orderFulfillments } from '../../database/schema';
+import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
 
 export interface TrackingEvent {
   time: string;
@@ -211,6 +212,23 @@ export class LogisticsService {
       })),
       isDemo: this.isDemoMode,
     };
+  }
+
+  /** 卖家侧归属校验：订单必须属于当前卖家（管理员可跨店） */
+  async verifySellerOwnership(
+    orderId: string,
+    sellerId: string | undefined,
+    role?: string,
+  ): Promise<void> {
+    const rows = await this.db
+      .select({ sellerId: orders.sellerId })
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+    if (rows.length === 0) throw new NotFoundException('订单不存在');
+    if (!isPlatformAdmin(role) && (!sellerId || rows[0].sellerId !== sellerId)) {
+      throw new ForbiddenException('无权操作该订单物流');
+    }
   }
 
   async verifyOrderOwnership(

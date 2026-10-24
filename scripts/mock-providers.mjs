@@ -389,6 +389,22 @@ const server = createServer(async (req, res) => {
         ],
       });
     }
+    if (method === 'POST' && path.startsWith('/paypal/v2/checkout/orders/') && path.endsWith('/capture')) {
+      const paypalOrderId = path.split('/')[4];
+      const stored = state.paypal.orders.find((o) => o.id === paypalOrderId);
+      if (!stored) return json(res, 404, { error: 'order not found' });
+      seq.paypal += 1;
+      const captureId = `CAP-MOCK-${seq.paypal}`;
+      stored.captureId = captureId;
+      return json(res, 200, {
+        id: stored.id,
+        status: 'COMPLETED',
+        purchase_units: [{
+          amount: { value: stored.amount, currency_code: 'USD' },
+          payments: { captures: [{ id: captureId, status: 'COMPLETED' }] },
+        }],
+      });
+    }
     if (method === 'POST' && path.startsWith('/paypal/v2/payments/captures/') && path.endsWith('/refunds')) {
       const captureId = path.split('/')[5];
       const body = JSON.parse((await readBody(req)) || '{}');

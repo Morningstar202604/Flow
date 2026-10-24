@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import logoMain from '@/assets/branding/logo-main.png';
 import { Image } from '@/components/ui/image';
+import { extractErrorMessage } from '@/lib/error-feedback';
 
 const RegisterPage: React.FC = () => {
   const { t } = useLanguage();
@@ -19,6 +20,8 @@ const RegisterPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [sellerCode, setSellerCode] = useState('');
+  const [asSeller, setAsSeller] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
@@ -31,20 +34,28 @@ const RegisterPage: React.FC = () => {
       toast.error('两次密码输入不一致');
       return;
     }
-    if (password.length < 6) {
-      toast.error('密码长度至少 6 位');
+    if (password.length < 8) {
+      toast.error('密码长度至少 8 位（需包含字母和数字）');
+      return;
+    }
+    if (asSeller && !sellerCode.trim()) {
+      toast.error('卖家注册需要邀请码');
       return;
     }
 
     setLoading(true);
     try {
-      await register({ name, email, password });
+      await register({
+        name,
+        email,
+        password,
+        ...(asSeller ? { role: 'seller' as const, sellerCode: sellerCode.trim() } : {}),
+      });
       toast.success('注册成功');
       navigate('/', { replace: true });
     } catch (err) {
       console.error('Register failed', err);
-      const msg = (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message || '注册失败';
-      toast.error(msg);
+      toast.error(extractErrorMessage(err, '注册失败'));
     } finally {
       setLoading(false);
     }
@@ -101,6 +112,30 @@ const RegisterPage: React.FC = () => {
               autoComplete="new-password"
             />
           </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="asSeller"
+              type="checkbox"
+              checked={asSeller}
+              onChange={(e) => setAsSeller(e.target.checked)}
+              className="size-4 accent-[#00C2B8]"
+            />
+            <Label htmlFor="asSeller" className="text-sm text-slate-600">
+              我是卖家（需要邀请码）
+            </Label>
+          </div>
+          {asSeller && (
+            <div className="space-y-2">
+              <Label htmlFor="sellerCode">卖家邀请码</Label>
+              <Input
+                id="sellerCode"
+                type="text"
+                value={sellerCode}
+                onChange={(e) => setSellerCode(e.target.value)}
+                placeholder="SELLER_REGISTRATION_CODE"
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">{t.auth.confirmPassword}</Label>
             <Input

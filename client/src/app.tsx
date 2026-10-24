@@ -14,6 +14,7 @@ const ProductListPage = lazy(() => import('./pages/ProductList/ProductListPage')
 const ProductDetailPage = lazy(() => import('./pages/ProductDetail/ProductDetailPage'));
 const CartPage = lazy(() => import('./pages/Cart/CartPage'));
 const CheckoutPage = lazy(() => import('./pages/Checkout/CheckoutPage'));
+const StripePaymentPage = lazy(() => import('./pages/Checkout/StripePaymentPage'));
 const OrdersPage = lazy(() => import('./pages/Orders/OrdersPage'));
 const FavoritesPage = lazy(() => import('./pages/Favorites/FavoritesPage'));
 const AddressesPage = lazy(() => import('./pages/AddressesPage'));
@@ -64,6 +65,7 @@ const RoutesComponent = () => {
               <Route path="products/:id" element={<ProductDetailPage />} />
               <Route path="cart" element={<CartPage />} />
               <Route path="checkout" element={<CheckoutPage />} />
+              <Route path="checkout/stripe" element={<StripePaymentPage />} />
               <Route path="orders" element={<OrdersPage />} />
               <Route path="favorites" element={<FavoritesPage />} />
               <Route path="addresses" element={<AddressesPage />} />

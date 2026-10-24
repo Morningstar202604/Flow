@@ -76,11 +76,11 @@ try {
   // ---------- 清理上次演示数据 ----------
   await sql`DELETE FROM collection_products WHERE collection_id IN (SELECT id FROM collections WHERE slug LIKE ${'demo-%'})`;
   await sql`DELETE FROM collections WHERE slug LIKE ${'demo-%'}`;
-  await sql`DELETE FROM cms_pages WHERE slug LIKE ${'demo-%'} OR slug = 'about'`;
+  await sql`DELETE FROM cms_pages WHERE slug IN ('about','faq','privacy','terms','shipping-info','returns','payment-methods','how-to-order','help','contact','demo-faq')`;
   await sql`DELETE FROM products WHERE id IN (
     SELECT DISTINCT product_id FROM product_variants WHERE sku LIKE ${'DEMO-%'}
   )`;
-  await sql`DELETE FROM categories WHERE slug IN ${sql(CATEGORIES.map((c) => c.slug))}`;
+  await sql`DELETE FROM categories WHERE slug IN ${sql([...CATEGORIES.map((c) => c.slug), 'home-living', 'sports-outdoors'])}`;
   console.log('[seed-demo] 旧演示数据已清理');
 
   // ---------- 账号 ----------
@@ -163,9 +163,33 @@ try {
     { slug: 'about', zh: '关于我们', en: 'About Us',
       czh: '<h2>让跨境生意更简单</h2><p>Flow 是一套 AI 原生的出口电商平台，帮助卖家在一个后台里完成开店、上架、获客、成交、客服与复盘的全流程。</p><h3>我们的理念</h3><p>把重复劳动交给 AI：文案、翻译、客服、选品分析，卖家只需做判断。</p>',
       cen: '<h2>Cross-Border Commerce, Simplified</h2><p>Flow is an AI-native export commerce platform that covers the entire loop — launch, list, attract, convert, support and review — in one back office.</p><h3>Our belief</h3><p>Let AI handle the repetitive work: copywriting, translation, support and product research.</p>' },
-    { slug: 'demo-faq', zh: '常见问题', en: 'FAQ',
+    { slug: 'faq', zh: '常见问题', en: 'FAQ',
       czh: '<h2>常见问题</h2><p><strong>发货时效？</strong>付款后 2-5 个工作日内发货，跨境包裹通常 7-15 天送达。</p><p><strong>支持退换吗？</strong>支持 30 天无理由退换，商品需保持全新未使用状态。</p><p><strong>支持哪些支付方式？</strong>信用卡（Stripe）、PayPal，也支持演示支付用于本地体验。</p>',
       cen: '<h2>FAQ</h2><p><strong>Shipping time?</strong> Dispatched within 2-5 business days; cross-border delivery usually takes 7-15 days.</p><p><strong>Returns?</strong> 30-day no-reason returns for unused items.</p><p><strong>Payments?</strong> Cards via Stripe, PayPal, plus a demo mode for local use.</p>' },
+    { slug: 'privacy', zh: '隐私政策', en: 'Privacy Policy',
+      czh: '<h2>隐私政策</h2><p>我们仅收集完成订单所需的信息，不出售用户数据。</p>',
+      cen: '<h2>Privacy Policy</h2><p>We collect only the data required to fulfil orders and never sell user data.</p>' },
+    { slug: 'terms', zh: '服务条款', en: 'Terms of Service',
+      czh: '<h2>服务条款</h2><p>使用本平台即表示同意遵守当地法律法规与平台规则。</p>',
+      cen: '<h2>Terms of Service</h2><p>By using this platform you agree to comply with applicable laws.</p>' },
+    { slug: 'shipping-info', zh: '配送说明', en: 'Shipping Info',
+      czh: '<h2>配送说明</h2><p>跨境包裹通常 7-15 天送达，发货后提供追踪号。</p>',
+      cen: '<h2>Shipping Info</h2><p>Cross-border parcels usually arrive in 7-15 days with tracking.</p>' },
+    { slug: 'returns', zh: '退换货政策', en: 'Return Policy',
+      czh: '<h2>退换货政策</h2><p>签收后 30 天内可申请退换，商品需保持全新。</p>',
+      cen: '<h2>Return Policy</h2><p>Returns accepted within 30 days of delivery for unused items.</p>' },
+    { slug: 'payment-methods', zh: '支付方式', en: 'Payment Methods',
+      czh: '<h2>支付方式</h2><p>支持 Stripe 信用卡、PayPal，以及本地演示支付。</p>',
+      cen: '<h2>Payment Methods</h2><p>Cards via Stripe, PayPal, and demo payments for local use.</p>' },
+    { slug: 'how-to-order', zh: '如何下单', en: 'How to Order',
+      czh: '<h2>如何下单</h2><p>选择规格 → 加入购物车 → 填写地址 → 选择支付 → 完成付款。</p>',
+      cen: '<h2>How to Order</h2><p>Pick a variant, add to cart, enter address, choose payment and pay.</p>' },
+    { slug: 'help', zh: '帮助中心', en: 'Help Center',
+      czh: '<h2>帮助中心</h2><p>遇到问题可查看常见问题，或通过右下角 AI 客服联系我们。</p>',
+      cen: '<h2>Help Center</h2><p>Check the FAQ or reach us through the AI support widget.</p>' },
+    { slug: 'contact', zh: '联系我们', en: 'Contact Us',
+      czh: '<h2>联系我们</h2><p>邮箱：support@flow.example（演示地址）。</p>',
+      cen: '<h2>Contact Us</h2><p>Email: support@flow.example (demo address).</p>' },
   ];
   for (const pg of PAGES) {
     await sql`

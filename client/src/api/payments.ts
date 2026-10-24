@@ -19,11 +19,13 @@ export async function getPaymentConfig(): Promise<{
   stripeConfigured: boolean;
   paypalConfigured: boolean;
   demoMode: boolean;
+  stripePublishableKey?: string;
 }> {
   const { data } = await http.get<{
     stripeConfigured: boolean;
     paypalConfigured: boolean;
     demoMode: boolean;
+    stripePublishableKey?: string;
   }>('/api/payments/config');
   return data;
 }

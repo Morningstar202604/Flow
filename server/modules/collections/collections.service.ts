@@ -408,7 +408,8 @@ export class CollectionsService {
       })
       .from(collectionProducts)
       .innerJoin(products, eq(collectionProducts.productId, products.id))
-      .where(eq(collectionProducts.collectionId, id))
+      // 买家公开接口只展示上架商品；卖家后台也按同一口径展示，避免楼层里出现下架商品
+      .where(and(eq(collectionProducts.collectionId, id), eq(products.status, 'active')))
       .orderBy(asc(collectionProducts.sortOrder));
 
     const productDtos: CollectionProductDto[] = productRows.map((pr: any) => ({

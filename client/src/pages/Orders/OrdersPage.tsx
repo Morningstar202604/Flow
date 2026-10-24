@@ -25,6 +25,8 @@ import {
 } from '@/components/ui/empty';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getBuyerOrders, getOrderDetail } from '@/api/orders';
+import { payForOrder } from '@/api/payments';
+import { useNavigate } from 'react-router-dom';
 import { getLogistics } from '@/api/logistics';
 import type { Order, OrderStatus, LogisticsTracking } from '@shared/api.interface';
 import { notifyError } from '@/lib/error-feedback';
@@ -43,6 +45,8 @@ const statusVariantMap: Record<OrderStatus, string> = {
   shipped: 'bg-purple-100 text-purple-700 border-purple-200',
   delivered: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   cancelled: 'bg-slate-100 text-slate-600 border-slate-200',
+  refunded: 'bg-slate-100 text-slate-600 border-slate-200',
+  partially_refunded: 'bg-orange-100 text-orange-700 border-orange-200',
 };
 
 const OrdersPage: React.FC = () => {
@@ -54,6 +58,8 @@ const OrdersPage: React.FC = () => {
   const [logisticsData, setLogisticsData] = useState<LogisticsTracking | null>(null);
   const [logisticsLoading, setLogisticsLoading] = useState<boolean>(false);
   const { t } = useLanguage();
+  const navigate = useNavigate();
+  const [paying, setPaying] = useState<boolean>(false);
   const tRef = useRef(t);
   tRef.current = t;
   const [refundModalOpen, setRefundModalOpen] = useState(false);
@@ -87,6 +93,31 @@ const OrdersPage: React.FC = () => {
   useEffect(() => {
     void fetchOrders();
   }, [fetchOrders]);
+
+  const handlePayNow = async (order: Order): Promise<void> => {
+    try {
+      setPaying(true);
+      const provider = ['stripe', 'paypal', 'demo'].includes(order.paymentMethod)
+        ? (order.paymentMethod as 'stripe' | 'paypal' | 'demo')
+        : 'demo';
+      const result = await payForOrder({ orderId: order.id, provider });
+      if (result.approveUrl) {
+        window.location.href = result.approveUrl;
+        return;
+      }
+      if (result.paymentStatus === 'paid') {
+        toast.success(t.orders.paymentSuccess ?? '支付成功');
+      } else {
+        toast.message(t.orders.paymentPending ?? '支付已创建，等待渠道确认');
+      }
+      void fetchOrders();
+      void handleViewDetail(order.id);
+    } catch (error: unknown) {
+      notifyError(error, tRef.current.common.error);
+    } finally {
+      setPaying(false);
+    }
+  };
 
   const handleViewDetail = async (orderId: string): Promise<void> => {
     try {
@@ -175,14 +206,14 @@ const OrdersPage: React.FC = () => {
             </div>
           );
         })}
-        {order.status === 'cancelled' && (
+        {(order.status === 'cancelled' || order.status === 'refunded' || order.status === 'partially_refunded') && (
           <div className="flex gap-4">
             <div className="size-9 rounded-full bg-red-100 text-red-500 flex items-center justify-center flex-shrink-0">
               <Clock className="size-4" />
             </div>
             <div className="pt-1">
               <div className="text-sm font-medium text-slate-900">
-                {t.status.cancelled}
+                {t.status[order.status]}
               </div>
             </div>
           </div>
@@ -529,9 +560,19 @@ const OrdersPage: React.FC = () => {
                   </div>
                 </Card>
 
-                {/* Refund Button：仅已支付/已发货/已送达可申请 */}
-                {['paid', 'shipped', 'delivered', 'partially_refunded'].includes(selectedOrder.status) && (
-                  <div className="flex justify-end">
+                {/* 操作区：待付款补付 / 退款 / 评价 */}
+                <div className="flex flex-wrap justify-end gap-2">
+                  {selectedOrder.status === 'pending_payment' && (
+                    <Button
+                      size="sm"
+                      disabled={paying}
+                      onClick={() => void handlePayNow(selectedOrder)}
+                    >
+                      <CreditCard className="mr-1 h-3 w-3" />
+                      {t.orders.payNow ?? '去支付'}
+                    </Button>
+                  )}
+                  {['paid', 'shipped', 'delivered', 'partially_refunded'].includes(selectedOrder.status) && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -541,8 +582,17 @@ const OrdersPage: React.FC = () => {
                       <RotateCcw className="mr-1 h-3 w-3" />
                       {t.orders.requestRefund}
                     </Button>
-                  </div>
-                )}
+                  )}
+                  {selectedOrder.status === 'delivered' && selectedOrder.items[0]?.productId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/products/${selectedOrder.items[0].productId}#reviews`)}
+                    >
+                      {t.orders.writeReview ?? '去评价'}
+                    </Button>
+                  )}
+                </div>
               </>
             ) : (
               <Card className="rounded-xl bg-white p-12 text-center text-slate-500">

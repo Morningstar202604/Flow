@@ -1,4 +1,5 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
 import { DashboardService } from './dashboard.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { DashboardData } from '../../../shared/api.interface';
@@ -9,7 +10,10 @@ export class DashboardController {
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get('stats')
-  async getStats(): Promise<DashboardData> {
-    return this.dashboardService.getStats();
+  async getStats(@Req() req: Request): Promise<DashboardData> {
+    return this.dashboardService.getStats({
+      sellerId: req.user?.id,
+      role: req.user?.role,
+    });
   }
 }

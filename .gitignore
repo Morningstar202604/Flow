@@ -87,6 +87,12 @@ docker/postgres/data/
 .chrome-shot-profile*/
 chrome-shot-profile*/
 
+# ===== E2E / 抓图临时库 =====
+.e2e-pg/
+.capture-pg/
+.e2e-run.mjs
+.capture-frames/
+
 # ===== 本地验证残留（截图等）=====
 shots/
 *.shot.png

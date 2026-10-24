@@ -76,6 +76,8 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, favorited = false })
             onClick={handleToggleFavorite}
             disabled={favLoading}
             className="absolute top-2 right-2 size-8 rounded-full bg-white/90 shadow-sm flex items-center justify-center hover:bg-white transition-colors backdrop-blur-sm"
+            aria-label={isFavorited ? t.product.removeFromFavorites : t.product.addToFavorites}
+            aria-pressed={isFavorited}
             title={isFavorited ? t.product.removeFromFavorites : t.product.addToFavorites}
           >
             <Heart

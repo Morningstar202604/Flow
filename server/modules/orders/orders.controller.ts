@@ -81,8 +81,11 @@ export class OrdersController {
   ): Promise<Order> {
     const userId = req.user?.id;
     const sessionId = this.getSessionId(req);
-    const isSeller = !!req.user && ['seller', 'admin'].includes(req.user.role);
-    return this.ordersService.getOrderDetail(id, userId, sessionId, isSeller);
+    // 仅卖家/管理员走卖家归属校验；买家按 userId/sessionId 归属校验
+    const actor = req.user && ['seller', 'admin'].includes(req.user.role)
+      ? { id: req.user.id, role: req.user.role }
+      : undefined;
+    return this.ordersService.getOrderDetail(id, userId, sessionId, actor);
   }
 
   @Post()

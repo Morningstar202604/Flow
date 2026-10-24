@@ -38,6 +38,7 @@ export class InquiryController {
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get('sessions')
   async getSessions(
+    @Req() req: Request,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('status') status?: string,
@@ -47,7 +48,10 @@ export class InquiryController {
     if (pageNum < 1 || pageSizeNum < 1) {
       throw new BadRequestException('分页参数非法');
     }
-    return this.inquiryService.getSessions(pageNum, pageSizeNum, status);
+    return this.inquiryService.getSessions(pageNum, pageSizeNum, status, {
+      sellerId: req.user?.id,
+      role: req.user?.role,
+    });
   }
 
   @Get('sessions/:sessionId/messages')

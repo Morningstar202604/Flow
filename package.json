@@ -1,7 +1,7 @@
 {
   "name": "flow",
-  "version": "1.20.0",
-  "description": "AI 原生跨境出货台 · AI-Native Cross-Border Commerce Platform",
+  "version": "1.21.0",
+  "description": "AI 原生跨境出货台 · AI-Native Cross-Border Commerce Platform (storefront + seller AI workbench)",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -37,7 +37,10 @@
     "capture:video": "node scripts/capture/record-demo.mjs",
     "format": "prettier --write \"client/src/**/*.{ts,tsx,css}\" \"server/**/*.ts\" \"shared/**/*.ts\" \"scripts/**/*.mjs\"",
     "format:check": "prettier --check \"client/src/**/*.{ts,tsx,css}\" \"server/**/*.ts\" \"shared/**/*.ts\" \"scripts/**/*.mjs\"",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "cli": "node scripts/cli.mjs",
+    "smoke:all": "node scripts/run-all-smoke.mjs",
+    "capture:all": "node scripts/capture/run-capture.mjs"
   },
   "dependencies": {
     "@nestjs/axios": "^12.0.1",

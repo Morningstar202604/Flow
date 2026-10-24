@@ -25,6 +25,7 @@ if (!DATABASE_URL) {
 }
 
 const runId = Date.now().toString(36);
+const startedAt = new Date().toISOString();
 const sql = postgres(DATABASE_URL, { max: 1, onnotice: () => {} });
 let step = 0;
 
@@ -109,7 +110,7 @@ try {
 
   const settingsSaved = await api('PUT', '/api/ai/settings', {
     cookie: seller.cookie,
-    json: { baseUrl: 'http://127.0.0.1:4880/llm', apiKey: 'sk-db-mock-1234', model: 'deepseek-chat' },
+    json: { baseUrl: `${MOCK}/llm`, apiKey: 'sk-db-mock-1234', model: 'deepseek-chat' },
   });
   assert(settingsSaved.body?.source === 'db', `保存后来源应为 db，实际 ${settingsSaved.body?.source}`);
   assert(settingsSaved.body?.apiKeyMasked === 'sk-****1234', `掩码应为 sk-****1234，实际 ${settingsSaved.body?.apiKeyMasked}`);
@@ -157,7 +158,7 @@ try {
   assert(chatRows.length === 2, `客服对话应落库 2 条（user+assistant），实际 ${chatRows.length}`);
   ok('SupportAgent：回复返回 + 会话落库（卖家咨询管理可回看）');
 
-  const usage = await api('GET', '/api/ai/usage-stats', { cookie: seller.cookie });
+  const usage = await api('GET', `/api/ai/usage-stats?startDate=${encodeURIComponent(startedAt)}`, { cookie: seller.cookie });
   assert(usage.body?.totalCalls >= 6, `用量统计应 >= 6 次，实际 ${usage.body?.totalCalls}`);
   assert(usage.body?.successRate === 1, `成功率应为 1，实际 ${usage.body?.successRate}`);
   for (const agent of ['copywriter', 'translation', 'select', 'trend', 'support']) {
@@ -289,7 +290,7 @@ try {
     cookie: buyer.cookie,
     json: { orderId: ppOrder.body.id, provider: 'paypal' },
   });
-  assert((ppPay.body?.message ?? '').includes('PPO-MOCK'), '应返回 Mock PayPal 审批链接');
+  assert((ppPay.body?.approveUrl ?? '').includes('PPO-MOCK'), '应返回 Mock PayPal 审批链接');
   ok('PayPal：checkout order 创建（审批链接返回）');
 
   await sql`UPDATE payments SET status = 'paid', transaction_id = 'CAP-MOCK-1' WHERE order_id = ${ppOrder.body.id}`;

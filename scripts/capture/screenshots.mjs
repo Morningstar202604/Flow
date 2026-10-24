@@ -16,6 +16,7 @@ import puppeteer from 'puppeteer-core';
 const BASE = process.env.CAPTURE_BASE ?? 'http://127.0.0.1:3300';
 const OUT = path.resolve('docs/screenshots');
 const VIEWPORT = { width: 1440, height: 900 };
+const MOBILE_VIEWPORT = { width: 390, height: 844 };
 
 const SELLER = { email: 'seller@example.com', password: 'seller123' };
 const BUYER = { email: 'buyer@example.com', password: 'buyer123' };
@@ -113,6 +114,9 @@ const SHOTS = [
   { file: '25-seller-collections.png', path: '/seller/collections', lang: 'en', as: 'seller' },
   { file: '26-seller-cms.png', path: '/seller/cms-pages', lang: 'en', as: 'seller' },
   { file: '27-seller-audit-logs.png', path: '/seller/audit-logs', lang: 'en', as: 'seller' },
+  { file: '28-seller-copilot.png', path: '/seller/copilot', lang: 'zh', as: 'seller' },
+  { file: '29-seller-copilot-en.png', path: '/seller/copilot', lang: 'en', as: 'seller' },
+  { file: '30-mobile-home.png', path: '/', lang: 'zh', as: 'buyer', mobile: true },
 ];
 
 async function main() {
@@ -155,6 +159,7 @@ async function main() {
     if (url.includes('collections/:first')) continue;
 
     try {
+      await page.setViewport(shot.mobile ? MOBILE_VIEWPORT : VIEWPORT);
       // 登录态（按角色缓存，仅在角色切换时重新登录）
       if (shot.as === 'seller') {
         const logged = await login(page, SELLER, 'seller');

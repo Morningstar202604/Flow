@@ -23,6 +23,7 @@ import { LogisticsModule } from './modules/logistics/logistics.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { HealthModule } from './modules/health/health.module';
+import { SeoModule } from './modules/seo/seo.module';
 import { SeedModule } from './modules/seed/seed.module';
 import { CopilotModule } from './modules/copilot/copilot.module';
 import { ShopperModule } from './modules/shopper/shopper.module';
@@ -44,6 +45,7 @@ const businessModules = [
   DashboardModule,
   FavoritesModule,
   HealthModule,
+  SeoModule,
   InquiryModule,
   LogisticsModule,
   OrdersModule,

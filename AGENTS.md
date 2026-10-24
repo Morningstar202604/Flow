@@ -55,7 +55,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 ## 模块划分
 
 ### 买家端（/）
-- 首页 `/` - Banner、分类、**运营楼层（精选集合）**、热销、新品
+- 首页 `/` - Banner、分类、**运营楼层（精选集合）**、热销、新品、最近浏览
 - 商品列表 `/products` - 筛选、排序、分页、搜索
 - 商品详情 `/products/:id` - 多图、规格、加购
 - 购物车 `/cart` - 列表、增减、跨设备迁移码、结算
@@ -66,6 +66,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - AI 导购 - 买家侧浮窗 Agent：搜索/详情/购物车/加购（加购需确认）
 
 ### 卖家端（/seller）
+- SEO/OpenAPI/CLI：`/sitemap.xml`、`/robots.txt`、`/llms.txt`、`/api/openapi.json`、`npm run cli --`
 - **AI 运营副驾** `/seller/copilot` - 工具调用 Agent：读店铺数据 + 写操作人工审批
 - 数据看板 `/seller/dashboard` - GMV、订单、访客、趋势图
 - 商品管理 `/seller/products` - CRUD、上下架、变体、CSV 批量导入、AI 文案
@@ -75,7 +76,7 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 - AI 分析中心 `/seller/ai-center` - **模型设置**、用量统计、历史报告、**我的 Agent（自定义）**
 - 优惠券 / 运费模板 / 集合 / CMS 页面 / 审计日志
 
-## 数据库表（共 39 张，以 `server/database/schema.ts` 为准）
+## 数据库表（共 39 张，以 `server/database/schema.ts` 为准；咨询会话已加 seller_id 归属）
 
 - 用户与地址：`users` `addresses`
 - 商品：`categories` `products` `productVariants` `stockMovements`
@@ -130,7 +131,8 @@ AI Agent 驱动的出口电商平台，包含买家端 B2C 商城和卖家端 AI
 
 ## 验证入口
 
-- `npm run lint` / `npm run type:check` / `npm test`（162 例单测）/ `npm run build`
+- `npm run lint` / `npm run type:check` / `npm test`（166 例单测）/ `npm run build`
+- `npm run smoke:all`（embedded-postgres 一键跑完以下 5 套，无需 Docker）
 - `npm run smoke:workflows`（16 步全业务工作流）/ `npm run smoke:degraded`（无 Key 降级）/ `npm run smoke`（19 步交易闭环）
 - `npm run smoke:copilot`（副驾：读工具 → 待审批 → 批准执行 → 拒绝无副作用 → 巡检 → 多步计划 → 越权 403）
 - `npm run smoke:shopper`（导购：工具隔离 → 搜索/详情 → 加购确认 → 会话隔离）

@@ -46,6 +46,7 @@ export class PaymentsController {
     stripeConfigured: boolean;
     paypalConfigured: boolean;
     demoMode: boolean;
+    stripePublishableKey?: string;
   }> {
     return this.paymentsService.getPaymentConfig();
   }
@@ -74,6 +75,25 @@ export class PaymentsController {
     return { received: true };
   }
 
+  /**
+   * PayPal 支付确认：买家在 PayPal 授权后回到站内调用，服务端 capture 后入账。
+   * PayPal webhook 仍作为兜底（同一流水号幂等）。
+   */
+  @Post('paypal/capture')
+  async capturePayPal(
+    @Req() req: Request,
+    @Body() body: { orderId: string; paypalOrderId: string },
+  ): Promise<PayResponse> {
+    const userId = req.user?.id;
+    const sessionId = this.getSessionId(req);
+    return this.paymentsService.capturePayPalOrder(
+      body.orderId,
+      body.paypalOrderId,
+      userId,
+      sessionId,
+    );
+  }
+
   @Get('order/:orderId')
   async getPaymentsByOrder(
     @Req() req: Request,
@@ -81,7 +101,9 @@ export class PaymentsController {
   ): Promise<Payment[]> {
     const userId = req.user?.id;
     const sessionId = this.getSessionId(req);
-    const isSeller = !!req.user && ['seller', 'admin'].includes(req.user.role);
-    return this.paymentsService.getPaymentsByOrder(orderId, userId, sessionId, isSeller);
+    const actor = req.user && ['seller', 'admin'].includes(req.user.role)
+      ? { id: req.user.id, role: req.user.role }
+      : undefined;
+    return this.paymentsService.getPaymentsByOrder(orderId, userId, sessionId, actor);
   }
 }

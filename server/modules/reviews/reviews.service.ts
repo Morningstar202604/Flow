@@ -39,6 +39,10 @@ export class ReviewsService {
         userName: users.name,
         rating: reviews.rating,
         content: reviews.content,
+        images: reviews.images,
+        sellerReply: reviews.sellerReply,
+        verifiedPurchase: reviews.verifiedPurchase,
+        helpfulCount: reviews.helpfulCount,
         createdAt: reviews.createdAt,
       })
       .from(reviews)
@@ -63,6 +67,10 @@ export class ReviewsService {
       userName: row.userName,
       rating: Number(row.rating),
       content: row.content ?? undefined,
+      images: row.images ?? [],
+      sellerReply: row.sellerReply ?? undefined,
+      verifiedPurchase: row.verifiedPurchase,
+      helpfulCount: row.helpfulCount,
       createdAt: row.createdAt.toISOString(),
     }));
 
@@ -127,6 +135,8 @@ export class ReviewsService {
         userId,
         rating: dto.rating,
         content: dto.comment ?? undefined,
+        images: (dto.images ?? []).slice(0, 6),
+        verifiedPurchase: true,
       })
       .returning();
 
@@ -142,6 +152,8 @@ export class ReviewsService {
       userName: userRows[0]?.name ?? '用户',
       rating: Number(inserted[0].rating),
       comment: inserted[0].content ?? undefined,
+      images: inserted[0].images ?? [],
+      verifiedPurchase: inserted[0].verifiedPurchase,
       createdAt: inserted[0].createdAt.toISOString(),
     };
   }
@@ -159,6 +171,10 @@ export class ReviewsService {
         userName: users.name,
         rating: reviews.rating,
         content: reviews.content,
+        images: reviews.images,
+        sellerReply: reviews.sellerReply,
+        verifiedPurchase: reviews.verifiedPurchase,
+        helpfulCount: reviews.helpfulCount,
         createdAt: reviews.createdAt,
       })
       .from(reviews)
@@ -174,6 +190,10 @@ export class ReviewsService {
       userName: rows[0].userName,
       rating: Number(rows[0].rating),
       comment: rows[0].content ?? undefined,
+      images: rows[0].images ?? [],
+      sellerReply: rows[0].sellerReply ?? undefined,
+      verifiedPurchase: rows[0].verifiedPurchase,
+      helpfulCount: rows[0].helpfulCount,
       createdAt: rows[0].createdAt.toISOString(),
     };
   }

@@ -12,6 +12,8 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuditService } from './audit.service';
 import type { AuditLogListResponse } from '../../../shared/api.interface';
 
+/** 审计查询：卖家按 userId 收口，管理员可看全量 */
+
 class AuditLogQueryDto {
   @IsOptional()
   @Type(() => Number)
@@ -48,6 +50,11 @@ export class AuditController {
     @Req() req: Request,
     @Query() query: AuditLogQueryDto,
   ): Promise<AuditLogListResponse> {
-    return this.auditService.getAuditLogs(query);
+    // 卖家仅看自己产生的审计记录（管理员看全量），避免跨店操作与 IP 泄露
+    const isAdmin = req.user?.role === 'admin';
+    return this.auditService.getAuditLogs({
+      ...query,
+      userId: isAdmin ? undefined : req.user?.id,
+    });
   }
 }

@@ -58,7 +58,7 @@ export class PayPalService {
           },
         ],
         application_context: {
-          return_url: `${process.env.APP_URL || ''}/orders?paypal=success`,
+          return_url: `${process.env.APP_URL || ''}/orders?paypal=success&order=${encodeURIComponent(orderId)}`,
           cancel_url: `${process.env.APP_URL || ''}/checkout?paypal=cancel`,
         },
       }),

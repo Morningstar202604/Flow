@@ -129,6 +129,44 @@ const ProductManagePage: React.FC = () => {
     useState<AICopywriterResponse | null>(null);
   const [copywriterLoading, setCopywriterLoading] = useState<boolean>(false);
 
+  // 批量选择（上下架）
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const toggleSelect = (id: string): void => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (): void => {
+    setSelectedIds((prev) =>
+      prev.size === products.length ? new Set() : new Set(products.map((p) => p.id)),
+    );
+  };
+
+  const handleBulkStatus = async (status: 'active' | 'inactive'): Promise<void> => {
+    if (selectedIds.size === 0) return;
+    try {
+      setBulkBusy(true);
+      const result = await productsApi.bulkUpdateProductStatus([...selectedIds], status);
+      if (result.failed.length > 0) {
+        toast(`成功 ${result.updated} 个，失败 ${result.failed.length} 个：${result.failed[0].reason}`);
+      } else {
+        toast.success(`已${status === 'active' ? '上架' : '下架'} ${result.updated} 个商品`);
+      }
+      setSelectedIds(new Set());
+      fetchProducts();
+    } catch (err) {
+      notifyError(err, '批量操作失败');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   // CSV 批量导入
   const [importOpen, setImportOpen] = useState<boolean>(false);
   const [importLoading, setImportLoading] = useState<boolean>(false);
@@ -208,6 +246,23 @@ const ProductManagePage: React.FC = () => {
   const handleSearch = () => {
     setPage(1);
     fetchProducts({ page: 1 });
+  };
+
+  const handleExport = async (): Promise<void> => {
+    try {
+      const blob = await productsApi.exportProductsCsv();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `products-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success('已导出商品 CSV');
+    } catch (err) {
+      notifyError(err, '导出失败，请重试');
+    }
   };
 
   const handleAdd = () => {
@@ -468,7 +523,14 @@ const ProductManagePage: React.FC = () => {
             />
           </div>
 
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <Select
+            value={categoryFilter}
+            onValueChange={(value) => {
+              setCategoryFilter(value);
+              setPage(1);
+              fetchProducts({ page: 1, categoryId: value || undefined });
+            }}
+          >
             <SelectTrigger className="w-40">
               <SelectValue placeholder="全部分类" />
             </SelectTrigger>
@@ -487,6 +549,10 @@ const ProductManagePage: React.FC = () => {
           </Button>
 
            <div className="ml-auto flex gap-2">
+             <Button onClick={() => void handleExport()} variant="outline">
+               <Download className="h-4 w-4 mr-1" />
+               导出 CSV
+             </Button>
              <Button onClick={() => setImportOpen(true)} variant="outline">
                <Upload className="h-4 w-4 mr-1" />
                批量导入
@@ -501,10 +567,33 @@ const ProductManagePage: React.FC = () => {
 
       {/* 商品列表 */}
       <Card className="shadow-sm">
+        {selectedIds.size > 0 && (
+          <div className="flex flex-wrap items-center gap-3 border-b bg-blue-50/60 px-4 py-2 text-sm">
+            <span className="text-slate-700">已选 {selectedIds.size} 个商品</span>
+            <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => void handleBulkStatus('active')}>
+              批量上架
+            </Button>
+            <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => void handleBulkStatus('inactive')}>
+              批量下架
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+              取消选择
+            </Button>
+          </div>
+        )}
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <input
+                    type="checkbox"
+                    aria-label="全选商品"
+                    checked={products.length > 0 && selectedIds.size === products.length}
+                    onChange={toggleSelectAll}
+                    className="size-4 accent-blue-600"
+                  />
+                </TableHead>
                 <TableHead>图片</TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead>名称</TableHead>
@@ -519,21 +608,30 @@ const ProductManagePage: React.FC = () => {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     加载中...
                   </TableCell>
                 </TableRow>
               )}
               {!loading && products.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     暂无商品
                   </TableCell>
                 </TableRow>
               )}
               {!loading &&
                 products.map((product) => (
-                  <TableRow key={product.id}>
+                  <TableRow key={product.id} data-state={selectedIds.has(product.id) ? 'selected' : undefined}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        aria-label={`选择 ${product.titleZh}`}
+                        checked={selectedIds.has(product.id)}
+                        onChange={() => toggleSelect(product.id)}
+                        className="size-4 accent-blue-600"
+                      />
+                    </TableCell>
                     <TableCell>
                       {product.coverImage && (
                         <div className="h-10 w-10 overflow-hidden rounded-md">
@@ -640,7 +738,7 @@ const ProductManagePage: React.FC = () => {
               onSubmit={productForm.handleSubmit(handleSubmit)}
               className="space-y-4"
             >
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField
                   control={productForm.control}
                   name="categoryId"
@@ -670,7 +768,7 @@ const ProductManagePage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField
                   control={productForm.control}
                   name="titleZh"
@@ -712,7 +810,12 @@ const ProductManagePage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              {editingProduct && editingProduct.variants.length > 1 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  该商品有 {editingProduct.variants.length} 个规格：价格与库存请在规格中单独维护，此处的修改不会生效。
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <FormField
                   control={productForm.control}
                   name="price"
@@ -720,7 +823,12 @@ const ProductManagePage: React.FC = () => {
                     <FormItem>
                       <FormLabel>售价 ($)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" {...field} />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          {...field}
+                          disabled={Boolean(editingProduct && editingProduct.variants.length > 1)}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -734,7 +842,12 @@ const ProductManagePage: React.FC = () => {
                     <FormItem>
                       <FormLabel>原价 ($)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" {...field} />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          {...field}
+                          disabled={Boolean(editingProduct && editingProduct.variants.length > 1)}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -748,7 +861,11 @@ const ProductManagePage: React.FC = () => {
                     <FormItem>
                       <FormLabel>库存</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} />
+                        <Input
+                          type="number"
+                          {...field}
+                          disabled={Boolean(editingProduct && editingProduct.variants.length > 1)}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -756,7 +873,7 @@ const ProductManagePage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField
                   control={productForm.control}
                   name="status"
@@ -1000,7 +1117,7 @@ const ProductManagePage: React.FC = () => {
             {/* 导入结果 */}
             {importResult && (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center">
                     <CheckCircle className="size-6 mx-auto text-emerald-600 mb-1" />
                     <div className="text-2xl font-bold text-emerald-700">

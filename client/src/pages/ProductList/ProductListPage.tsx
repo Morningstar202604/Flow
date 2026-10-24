@@ -31,11 +31,12 @@ import type {
   ProductListParams,
 } from '@shared/api.interface';
 import { notifyError } from '@/lib/error-feedback';
+import { applyCanonical, applyDocumentMeta } from '@/lib/seo';
 
 type SortBy = 'newest' | 'price_asc' | 'price_desc' | 'sold_desc';
 
 const ProductListPage: React.FC = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { language, t } = useLanguage();
   const tRef = useRef(t);
@@ -70,6 +71,32 @@ const ProductListPage: React.FC = () => {
     searchParams.get('maxPrice') || '',
   );
   const pageSize: number = 12;
+
+  // URL 是列表状态的唯一事实源：顶部导航搜索、浏览器前进/后退、
+  // 商品详情返回等都会只改 URL 不重挂组件，必须在这里同步回本地状态。
+  useEffect(() => {
+    const nextKeyword = searchParams.get('keyword') || '';
+    const nextCategory = searchParams.get('category') || '';
+    const nextSort = (searchParams.get('sortBy') as SortBy) || 'newest';
+    const nextPage = parseInt(searchParams.get('page') || '1', 10);
+    setKeyword(nextKeyword);
+    setSearchInput(nextKeyword);
+    setCategoryId(nextCategory);
+    setSortBy(nextSort);
+    setPage(Number.isFinite(nextPage) && nextPage > 0 ? nextPage : 1);
+    setMinPrice(searchParams.get('minPrice') || '');
+    setMaxPrice(searchParams.get('maxPrice') || '');
+  }, [searchParams]);
+
+  useEffect(() => {
+    applyDocumentMeta(
+      keyword
+        ? `${keyword} · 搜索 · Flow`
+        : '全部商品 · Flow',
+      '浏览 Flow 跨境出口商城的全部在售商品：按分类、价格、销量筛选，支持多语言与多规格。',
+    );
+    applyCanonical('/products');
+  }, [keyword]);
 
   const fetchProducts = useCallback(async (): Promise<void> => {
     const params: ProductListParams = {

@@ -488,10 +488,14 @@ export const inquirySessions = pgTable('inquiry_sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
   sessionId: varchar('session_id', { length: 64 }).notNull().unique(),
   userId: uuid('user_id'),
+  /** 会话归属卖家：null = 平台级/未分配（历史数据），仅管理员可见 */
+  sellerId: uuid('seller_id').references(() => users.id, { onDelete: 'set null' }),
   status: varchar('status', { length: 20 }).notNull().default('active'),
   lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  sellerIdx: index('inquiry_sessions_seller_idx').on(t.sellerId, t.lastMessageAt),
+}));
 
 export const aiUsageLog = pgTable('ai_usage_log', {
   id: uuid('id').primaryKey().defaultRandom(),

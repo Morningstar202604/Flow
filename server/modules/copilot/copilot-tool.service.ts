@@ -54,7 +54,7 @@ export class CopilotToolService {
     try {
       switch (tool.name) {
         case 'get_store_overview':
-          return await this.getStoreOverview();
+          return await this.getStoreOverview(actor);
         case 'list_orders':
           return await this.listOrders(args, actor);
         case 'list_products':
@@ -100,8 +100,11 @@ export class CopilotToolService {
 
   // ==================== Read tools ====================
 
-  private async getStoreOverview(): Promise<ToolExecutionResult> {
-    const data = await this.dashboardService.getStats();
+  private async getStoreOverview(actor: { userId: string; role: string }): Promise<ToolExecutionResult> {
+    const data = await this.dashboardService.getStats({
+      sellerId: actor.userId,
+      role: actor.role,
+    });
     const { stats } = data;
     return {
       ok: true,

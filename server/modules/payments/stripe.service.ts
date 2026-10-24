@@ -27,6 +27,11 @@ export class StripeService {
     return !!this.secretKey;
   }
 
+  /** 前端 Stripe.js 所需公钥（仅 publishable key，可公开） */
+  getPublishableKey(): string | undefined {
+    return process.env.STRIPE_PUBLISHABLE_KEY || undefined;
+  }
+
   async createPaymentIntent(
     amount: number,
     currency: string,

@@ -30,6 +30,7 @@ import type {
 import { StripeService } from './stripe.service';
 import { PayPalService } from './paypal.service';
 import { AuditService } from '../audit/audit.service';
+import { canAccessSellerResource } from '../../common/tenant/tenant-scope';
 
 type MarkPaidProvider = PaymentProvider | 'manual';
 
@@ -166,6 +167,18 @@ export class PaymentsService {
         return { order, paymentId: null, skipped: true };
       }
 
+      // 原子抢占：只有仍处于 pending_payment 的订单能完成入账。
+      // 并发 webhook / webhook 与手动入账 / 双实例同时回调时，只有一个事务能命中，
+      // 否则会重复累加销量、积分并重复写库存流水。
+      const claimed = await tx
+        .update(orders)
+        .set({ status: 'paid', updatedAt: new Date() })
+        .where(and(eq(orders.id, orderId), eq(orders.status, 'pending_payment')))
+        .returning({ id: orders.id });
+      if (claimed.length === 0) {
+        return { order, paymentId: null, skipped: true };
+      }
+
       const now = new Date();
       const amount = opts.amount ?? (order.totalAmount as string);
       const currency = opts.currency ?? 'USD';
@@ -216,7 +229,6 @@ export class PaymentsService {
       const updatedOrders = await tx
         .update(orders)
         .set({
-          status: 'paid',
           paidAt: now,
           paymentMethod: opts.provider === 'manual' ? 'demo' : opts.provider,
           paymentId: opts.transactionId,
@@ -337,7 +349,7 @@ export class PaymentsService {
     const currency = 'USD';
 
     if (provider === 'stripe' && this.stripeService.isConfigured()) {
-      const { paymentIntentId } = await this.stripeService.createPaymentIntent(
+      const { paymentIntentId, clientSecret } = await this.stripeService.createPaymentIntent(
         amount,
         currency,
         orderId,
@@ -350,6 +362,8 @@ export class PaymentsService {
           createdAt: new Date(paymentRow.createdAt),
         }),
         message: 'Stripe payment intent created',
+        clientSecret: clientSecret || undefined,
+        paymentStatus: 'pending',
       };
     }
 
@@ -366,11 +380,81 @@ export class PaymentsService {
           ...paymentRow,
           createdAt: new Date(paymentRow.createdAt),
         }),
-        message: approveUrl,
+        message: approveUrl ? 'PayPal approval required' : 'PayPal order created',
+        approveUrl: approveUrl || undefined,
+        paymentStatus: 'pending',
       };
     }
 
     return this.processDemoPayment(orderId, provider, order, auditMeta);
+  }
+
+  /**
+   * 买家从 PayPal 授权页返回后确认支付：capture → 校验金额 → 幂等入账。
+   * 校验项：订单归属、订单状态、capture 金额与订单总额一致（防篡改）。
+   */
+  async capturePayPalOrder(
+    orderId: string,
+    paypalOrderId: string,
+    userId?: string,
+    sessionId?: string,
+  ): Promise<PayResponse> {
+    const orderRows = await this.db.select().from(orders).where(eq(orders.id, orderId));
+    if (orderRows.length === 0) {
+      throw new NotFoundException('订单不存在');
+    }
+    const order = orderRows[0];
+    const isOwner = (userId && order.userId && order.userId === userId)
+      || (sessionId && order.addressSnapshot && this.checkSessionOwnership(order.addressSnapshot, sessionId));
+    if (!isOwner) {
+      throw new ForbiddenException('无权支付该订单');
+    }
+    if (order.status === 'paid') {
+      throw new BadRequestException('订单已支付');
+    }
+    if (order.status !== 'pending_payment') {
+      throw new BadRequestException('当前订单状态无法支付');
+    }
+
+    // 绑定校验：只能 capture 本订单创建的 PayPal order，防止拿别人的 order id 顶账
+    const boundRows = await this.db
+      .select({ id: payments.id })
+      .from(payments)
+      .where(and(
+        eq(payments.orderId, orderId),
+        eq(payments.provider, 'paypal'),
+        eq(payments.transactionId, paypalOrderId),
+        eq(payments.status, 'pending'),
+      ))
+      .limit(1);
+    if (boundRows.length === 0) {
+      throw new BadRequestException('PayPal 支付单不属于该订单');
+    }
+
+    const capture = await this.payPalService.captureOrder(paypalOrderId);
+    const expected = Number(order.totalAmount);
+    if (Number.isFinite(expected) && Math.abs(capture.amount - expected) > 0.01) {
+      throw new BadRequestException('支付金额与订单金额不一致，已拒绝入账');
+    }
+
+    const result = await this.markOrderPaid(orderId, {
+      provider: 'paypal',
+      transactionId: capture.transactionId || paypalOrderId,
+      amount: capture.amount.toFixed(2),
+      currency: capture.currency || 'USD',
+    });
+
+    const items = await this.db
+      .select()
+      .from(orderItems)
+      .where(eq(orderItems.orderId, orderId));
+
+    return {
+      success: true,
+      order: this.mapOrderForResponse(result.order, items),
+      paymentStatus: 'paid',
+      message: 'PayPal 支付成功',
+    };
   }
 
   private checkSessionOwnership(addressSnapshot: string, sessionId: string): boolean {
@@ -417,6 +501,7 @@ export class PaymentsService {
         : undefined,
       order: this.mapOrderForResponse(result.order, items),
       demoMode: true,
+      paymentStatus: 'paid',
       message: '演示支付成功',
     };
   }
@@ -510,14 +595,20 @@ export class PaymentsService {
     orderId: string,
     userId?: string,
     sessionId?: string,
-    isSeller = false,
+    actor?: { id?: string; role?: string },
   ): Promise<Payment[]> {
-    if (!isSeller) {
-      const orderRows = await this.db.select().from(orders).where(eq(orders.id, orderId));
-      if (orderRows.length === 0) {
-        throw new NotFoundException('订单不存在');
+    const orderRows = await this.db.select().from(orders).where(eq(orders.id, orderId));
+    if (orderRows.length === 0) {
+      throw new NotFoundException('订单不存在');
+    }
+    const order = orderRows[0];
+
+    if (actor) {
+      // 卖家只能查自己店铺订单的支付流水（管理员可跨店）
+      if (!canAccessSellerResource(order.sellerId, actor.id, actor.role)) {
+        throw new ForbiddenException('无权查看该订单的支付记录');
       }
-      const order = orderRows[0];
+    } else {
       const isOwner = (userId && order.userId && order.userId === userId)
         || (sessionId && order.addressSnapshot && this.checkSessionOwnership(order.addressSnapshot, sessionId));
       if (!isOwner) {
@@ -543,6 +634,7 @@ export class PaymentsService {
     stripeConfigured: boolean;
     paypalConfigured: boolean;
     demoMode: boolean;
+    stripePublishableKey?: string;
   }> {
     const stripeConfigured = this.stripeService.isConfigured();
     const paypalConfigured = this.payPalService.isConfigured();
@@ -550,6 +642,7 @@ export class PaymentsService {
       stripeConfigured,
       paypalConfigured,
       demoMode: !stripeConfigured && !paypalConfigured,
+      stripePublishableKey: this.stripeService.getPublishableKey(),
     };
   }
 
@@ -589,6 +682,22 @@ export class PaymentsService {
     const amount = typeof data.amount_received === 'number'
       ? (data.amount_received / 100).toFixed(2)
       : undefined;
+
+    // 金额校验：实收必须覆盖订单总额，防止改价/部分支付被当成全额入账
+    const orderRows = await this.db
+      .select({ totalAmount: orders.totalAmount })
+      .from(orders)
+      .where(eq(orders.id, orderId));
+    if (orderRows.length === 0) {
+      this.logger.warn(`Stripe webhook: order ${orderId} not found`);
+      return false;
+    }
+    if (amount !== undefined && Number(amount) + 0.005 < Number(orderRows[0].totalAmount)) {
+      this.logger.error(
+        `Stripe webhook amount mismatch: order=${orderId} paid=${amount} expected=${orderRows[0].totalAmount}`,
+      );
+      return false;
+    }
 
     const result = await this.markOrderPaid(orderId, {
       provider: 'stripe',
@@ -636,6 +745,22 @@ export class PaymentsService {
 
     if (!orderId || !transactionId) {
       this.logger.warn('PayPal webhook rejected: missing custom_id (orderId) or capture id');
+      return false;
+    }
+
+    const orderRows = await this.db
+      .select({ totalAmount: orders.totalAmount })
+      .from(orders)
+      .where(eq(orders.id, orderId));
+    if (orderRows.length === 0) {
+      this.logger.warn(`PayPal webhook: order ${orderId} not found`);
+      return false;
+    }
+    const paid = resource.amount?.value;
+    if (paid !== undefined && Number(paid) + 0.005 < Number(orderRows[0].totalAmount)) {
+      this.logger.error(
+        `PayPal webhook amount mismatch: order=${orderId} paid=${paid} expected=${orderRows[0].totalAmount}`,
+      );
       return false;
     }
 

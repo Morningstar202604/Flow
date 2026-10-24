@@ -240,6 +240,7 @@ const CartPage: React.FC = () => {
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label="减少数量"
                               className="size-8 rounded-none border-r border-slate-200"
                               onClick={() =>
                                 void handleUpdateQuantity(
@@ -259,6 +260,7 @@ const CartPage: React.FC = () => {
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label="增加数量"
                               className="size-8 rounded-none border-l border-slate-200"
                               onClick={() =>
                                 void handleUpdateQuantity(
@@ -281,6 +283,7 @@ const CartPage: React.FC = () => {
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label="移除商品"
                               className="size-8 text-slate-400 hover:text-red-500"
                               onClick={() => void handleRemove(item.id)}
                               disabled={updating === item.id}
