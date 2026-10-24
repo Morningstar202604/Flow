@@ -5,6 +5,35 @@
 
 ---
 
+## [1.21.1] — 2026-10-24
+
+仓库统一命名与 CI 全绿。
+
+### Changed
+- **仓库名统一为 `Flow`**（五端）：GitHub `X33834/Flow`、`Morningstar202604/Flow`、`badhope/Flow`；
+  Gitee `badhope/Flow`；GitCode `badhope/Flow`。旧 `GlobalEcom` / `GlobalEcom-AI` 地址自动 301/302 跳转。
+- README / CONTRIBUTING / SECURITY / DEPLOY / ARCHITECTURE 的克隆地址与镜像链接同步为 `Flow`；
+  README 顶部新增三端镜像入口。
+- `package.json` 增加 `repository` / `homepage` / `bugs` 字段，指向 `X33834/Flow`。
+- 依赖升级：react/react-dom 19.3.1、NestJS 12.2.0、vite 8.3.5、vitest 5.0.5、puppeteer-core 25.16.0、
+  lucide-react 1.61.0；清理 27 个未使用的传递依赖（`@aws-sdk/*` 等）。
+- Dependabot 收敛：github-actions 分组并忽略主版本；docker 忽略 `node` 主版本。
+
+### Fixed
+- **CI E2E 红灯根因**：本地渠道模拟器的 webhook 回调指向 3000（无 `STRIPE_WEBHOOK_SECRET` 的降级实例），
+  导致 `stripe-webhook` 验签 400。改为回调持有 mock 密钥的 3100 实例。
+- **CI SEO 断言失败**：smoke job 只构建了 server，SPA 的 `index.html` 不存在导致无法注入 meta；
+  改为启动前执行完整 `npm run build`。
+- 三套渠道冒烟补 429 重试，避免连续运行触发认证限流（5 次/分/IP）。
+- CI 失败时自动输出两实例与 mock 日志，便于定位。
+
+### Verification
+- 三仓 GitHub Actions：`Lint / Typecheck / Test / Build` 与 `E2E Smoke (Postgres)` 全绿（`5499cf3`）。
+- 本地：lint 0 / 双端 typecheck 0 / 166 单测 / build 通过 / `smoke:all` 6 套全通过。
+- 9 个 Dependabot PR 已全部关闭（依赖已集中升级），三仓开放 PR 数为 0。
+
+---
+
 ## [1.21.0] — 2026-10-24
 
 定位强化：把「AI 原生跨境出口电商」从功能清单做成可展示、可集成、可运营的开源产品。

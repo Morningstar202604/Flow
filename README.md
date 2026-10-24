@@ -8,7 +8,7 @@
 
 **从开店、上架、获客、成交、客服到复盘，全链路都在这里。**
 
-[![Version](https://img.shields.io/badge/version-v1.21.0-00C2B8?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.21.1-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
@@ -17,7 +17,9 @@
 [![Tests](https://img.shields.io/badge/tests-166%20passing-10b981?style=flat-square)](server)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
 
-[**90 秒演示视频**](docs/video/demo.mp4) · [**产品截图**](docs/screenshots) · [**架构说明**](docs/ARCHITECTURE.md) · [**部署指南**](docs/DEPLOY.md) · [**OpenAPI**](docs/ARCHITECTURE.md#api-契约)
+[**90 秒演示视频**](docs/video/demo.mp4) · [**产品截图**](docs/screenshots) · [**架构说明**](docs/ARCHITECTURE.md) · [**部署指南**](docs/DEPLOY.md) · [**OpenAPI**](/api/openapi.json)
+
+**镜像 · Mirrors**：[GitHub](https://github.com/X33834/Flow) · [Gitee](https://gitee.com/badhope/Flow) · [GitCode](https://gitcode.com/badhope/Flow)
 
 </div>
 
@@ -258,7 +260,7 @@ Flow 的定位是「AI 原生跨境出口电商」，对标开源 commerce 平
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 架构、数据库表、AI 网关、Copilot 协议、安全模型 |
 | [docs/AI-AGENTS.md](docs/AI-AGENTS.md) | 5 个 Agent、自定义 Agent、Copilot 工具与降级行为 |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | 部署、密钥清单、备份升级、排障 |
-| [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) | v1.21.0 发布说明、升级注意与已知边界 |
+| [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) | v1.21.1 发布说明、升级注意与已知边界 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本历史 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献流程与代码规范 |
 | [SECURITY.md](SECURITY.md) | 安全策略与漏洞报告 |
@@ -269,7 +271,7 @@ Flow 的定位是「AI 原生跨境出口电商」，对标开源 commerce 平
 
 | 状态 | 内容 |
 |---|---|
-| ✅ v1.21 | 租户隔离加固、支付/退款幂等、SEO 注入、OpenAPI、CLI、批量运营、多语言与可访问性修复 |
+| ✅ v1.21 | 租户隔离加固、支付/退款幂等、SEO 注入、OpenAPI、CLI、批量运营、多语言与可访问性；v1.21.1 统一仓库名与 CI 全绿 |
 | 🔜 下一阶段 | Region/多币种与税费、facets 聚合搜索、异步导出中心、MCP 只读服务端、事件总线与签名 webhook |
 | 💡 探索 | 多店铺 SaaS、插件体系、按成交抽佣 |
 

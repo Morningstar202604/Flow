@@ -1,6 +1,7 @@
-# Flow v1.21.0 发布说明
+# Flow v1.21.1 发布说明
 
 **发布时间**：2026-10-24
+**仓库**：[GitHub](https://github.com/X33834/Flow) · [Gitee](https://gitee.com/badhope/Flow) · [GitCode](https://gitcode.com/badhope/Flow)
 **定位**：AI 原生跨境出口电商平台（买家商城 + 卖家 AI 工作台）
 
 ## 本次发布的四个关键词
@@ -17,8 +18,15 @@
 | `npm run lint` | 0 问题 |
 | `npm run type:check` | 前后端 0 错误 |
 | `npm test` | 166/166 通过（29 文件） |
+| GitHub Actions | 三仓 quality + E2E 全绿（commit 5499cf3） |
 | `npm run build` | 通过 |
 | `npm run smoke:all` | 6 套全通过（workflows / degraded / transaction / providers / copilot / shopper） |
+
+## 本版变更（1.21.1）
+
+- 仓库名统一为 `Flow`（五端），旧地址自动跳转
+- CI 修复：mock webhook 回调目标、SEO 断言前完整构建、429 重试、失败日志转储
+- 依赖升级并清理 27 个未使用传递依赖；Dependabot 收敛，开放 PR 清零
 
 ## 升级注意
 
