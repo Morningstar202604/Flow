@@ -21,10 +21,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -42,7 +42,7 @@ jobs:
         run: npm run test:coverage
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-lcov
           path: coverage/lcov.info
@@ -77,10 +77,10 @@ jobs:
       SELLER_REGISTRATION_CODE: smoke-secret
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -91,8 +91,8 @@ jobs:
       - name: Apply migrations
         run: node scripts/db/migrate.mjs
 
-      - name: Build server
-        run: npm run build:server
+      - name: Build (server + client)
+        run: npm run build
 
       # ---------- Instance A：无任何模型/渠道凭据，验证诚实降级 ----------
       - name: Start server (no provider keys)
@@ -166,7 +166,6 @@ jobs:
       # ---------- SEO / 机器可读端点（生产构建的 SPA 回退 + 注入） ----------
       - name: Verify SEO endpoints
         run: |
-          npm run build:client
           for path in /sitemap.xml /robots.txt /llms.txt /api/openapi.json "/api/seo/meta?path=/"; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3100${path}")
             echo "$path -> $code"
