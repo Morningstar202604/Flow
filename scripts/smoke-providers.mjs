@@ -40,6 +40,21 @@ function assert(cond, msg) {
   }
 }
 
+/** 认证类请求遇到 429（登录/注册限流 5 次/分）时等待重试，避免多套冒烟连跑互相打扰 */
+async function withAuthRetry(fn, maxAttempts = 6) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      const status = Number((err && err.message && err.message.match(/-> (\d+)/) || [])[1] || 0);
+      if (status !== 429 || attempt >= maxAttempts) throw err;
+      const waitMs = 15000;
+      console.warn(`[smoke] 命中认证限流，${waitMs / 1000}s 后重试（第 ${attempt} 次）`);
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+}
+
 async function api(method, path, { cookie, json, expect = [200, 201] } = {}) {
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -76,12 +91,12 @@ try {
   await mock('/_mock/reset');
 
   // ---------- 基础：账号与商品 ----------
-  const seller = await api('POST', '/api/auth/register', {
+  const seller = await withAuthRetry(() => api('POST', '/api/auth/register', {
     json: { email: `prov-seller-${runId}@test.dev`, password: 'Passw0rd1', name: 'Prov Seller', role: 'seller', sellerCode: 'smoke-secret' },
-  });
-  const buyer = await api('POST', '/api/auth/register', {
+  }));
+  const buyer = await withAuthRetry(() => api('POST', '/api/auth/register', {
     json: { email: `prov-buyer-${runId}@test.dev`, password: 'Passw0rd1', name: 'Prov Buyer' },
-  });
+  }));
 
   const [category] = await sql`
     INSERT INTO categories (name_zh, name_en, slug)

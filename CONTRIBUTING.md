@@ -25,7 +25,7 @@ Thanks for your interest in contributing to **Flow**! Every kind of help makes t
 ## 如何开始
 
 1. **Fork** 本仓库到你的账号
-2. **Clone** 到本地：`git clone https://github.com/<你的账号>/GlobalEcom.git`
+2. **Clone** 到本地：`git clone https://github.com/<你的账号>/Flow.git`
 3. 创建功能分支：`git checkout -b feat/your-feature`
 4. 开发并本地验证（见下文"开发环境"）
 5. 提交并推送，然后创建 **Pull Request**（目标分支 `main`）
@@ -97,4 +97,4 @@ docs(readme): 更新快速开始
 
 ---
 
-再次感谢你的贡献！有任何问题欢迎在 [Issues](https://github.com/X33834/GlobalEcom/issues) 中提出。
+再次感谢你的贡献！有任何问题欢迎在 [Issues](https://github.com/X33834/Flow/issues) 中提出。

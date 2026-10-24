@@ -139,8 +139,8 @@
 ### 方式一：Docker（推荐）
 
 ```bash
-git clone https://github.com/X33834/GlobalEcom.git
-cd GlobalEcom
+git clone https://github.com/X33834/Flow.git
+cd Flow
 cp .env.example .env          # 至少填写 JWT_SECRET
 # 可选：SEED_DEMO_DATA=true 首次启动写入演示账号/商品/优惠券
 docker compose up -d --build

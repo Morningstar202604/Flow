@@ -56,7 +56,7 @@
 ## 二、Monorepo 目录分层
 
 ```
-GlobalEcom/
+Flow/
 ├── client/        # React 19 + Vite 前端（买家端 + 卖家端双端同仓）
 │   └── src/
 │       ├── pages/         # 买家 14 页面 + 卖家 12 页面（含 CMS/集合详情/404）

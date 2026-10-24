@@ -42,6 +42,21 @@ function assert(condition, message) {
   }
 }
 
+/** 认证类请求遇到 429（登录/注册限流 5 次/分）时等待重试，避免多套冒烟连跑互相打扰 */
+async function withAuthRetry(fn, maxAttempts = 6) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      const status = Number((err && err.message && err.message.match(/-> (\d+)/) || [])[1] || 0);
+      if (status !== 429 || attempt >= maxAttempts) throw err;
+      const waitMs = 15000;
+      console.warn(`[smoke] 命中认证限流，${waitMs / 1000}s 后重试（第 ${attempt} 次）`);
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+}
+
 async function api(method, path, { cookie, json, expect = [200, 201] } = {}) {
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -68,7 +83,7 @@ try {
   await sql`DELETE FROM ai_settings WHERE key IN ('copilot_watch_settings', 'copilot_watch_last_snapshot')`;
 
   // 自行注册（不依赖演示种子数据）：卖家需带邀请码，买家自由注册
-  const seller = await api('POST', '/api/auth/register', {
+  const seller = await withAuthRetry(() => api('POST', '/api/auth/register', {
     json: {
       email: `copilot-seller-${runId}@test.dev`,
       password: 'Passw0rd1',
@@ -76,14 +91,14 @@ try {
       role: 'seller',
       sellerCode: process.env.SELLER_REGISTRATION_CODE ?? 'smoke-secret',
     },
-  });
-  const buyer = await api('POST', '/api/auth/register', {
+  }));
+  const buyer = await withAuthRetry(() => api('POST', '/api/auth/register', {
     json: {
       email: `copilot-buyer-${runId}@test.dev`,
       password: 'Passw0rd1',
       name: 'Copilot Buyer',
     },
-  });
+  }));
   const sellerId = seller.body.user.id;
   ok('卖家/买家注册成功');
 
