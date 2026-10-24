@@ -13,6 +13,7 @@
 - **SEO / 发现层**：`/sitemap.xml`、`/robots.txt`、`/llms.txt`、`/api/openapi.json`、
   `/api/seo/meta`；服务端在 index.html 注入 title/description/canonical/OG/Twitter/JSON-LD（商品 Organization/Product），
   卖家与交易页自动 noindex。`client/src/lib/seo.ts` 负责客户端路由切换后的同步。
+  路由在 `server/main.ts` 根路径直接注册（而非 controller），避免 `/api` 前缀影响 sitemap/robots 的站点根路径。
 - **Stripe 站内支付**：`PayResponse.clientSecret` + `stripePublishableKey` + `/checkout/stripe` 支付确认页
   （Stripe.js PaymentElement）；未配置公钥时诚实提示到渠道后台确认，不再把「创建支付单」误报为支付成功。
 - **PayPal 支付确认**：`POST /api/payments/paypal/capture`，校验归属与 capture 金额后幂等入账；
@@ -23,7 +24,7 @@
 - **店面体验**：搜索联想下拉、相关商品推荐、最近浏览、页脚真实链接与支付/退货/配送信任标识、
   Hero 品牌色统一（#0B1F3A → #00C2B8）。
 - **工程能力**：`scripts/cli.mjs`（health/products/search/order/ai-test/export/openapi）、
-  `npm run smoke:all`（embedded-postgres 一键跑 5 套 E2E）、`scripts/mock-smtp.mjs`。
+  `npm run smoke:all`（embedded-postgres 一键跑 6 套 E2E）、`npm run capture:all`（一键重建截图+视频）、`scripts/mock-smtp.mjs`。
 - **安全与可观测**：安全响应头中间件（CSP/HSTS/nosniff/Referrer-Policy/Permissions-Policy）、
   `X-Request-Id` 请求追踪、全局异常过滤器（生产脱敏，统一错误结构）、静态资源 immutable 缓存、优雅关闭。
 
@@ -51,7 +52,7 @@
 ### Verification
 - 单测 **166/166**（29 文件；新增 SEO/OpenAPI 3 例、租户管理员内部调用 1 例）
 - `npm run lint` 0、双端 `type:check` 0、`npm run build` 通过
-- `npm run smoke:all`：workflows 16 步、degraded、交易 19 步、providers 18 步、copilot 19 步、shopper 9 步全通过
+- `npm run smoke:all`（6 套）：workflows 16 步、degraded、交易 19 步、providers 18 步、copilot 19 步、shopper 9 步全通过
   （embedded-postgres 17.5 + mock providers，无需 Docker）
 
 ---

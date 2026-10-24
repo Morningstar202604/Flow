@@ -193,7 +193,7 @@ FLOW_BASE=http://127.0.0.1:3000 npm run cli -- openapi openapi.json
 |---|---|
 | 类型 | TypeScript strict，前后端共享 `shared/api.interface.ts` 契约 |
 | 测试 | **166 个单元测试**（金额/退款/运费/状态机/验签/租户/查询/SEO/通知） |
-| E2E | **5 套全链路冒烟**：业务工作流 16 步、无 Key 降级、交易 19 步、渠道 18 步、副驾 19 步、导购 9 步 |
+| E2E | **6 套全链路冒烟**：业务工作流 16 步、无 Key 降级、交易 19 步、渠道 18 步、副驾 19 步、导购 9 步 |
 | CI | GitHub Actions：lint → typecheck → test+coverage → build → Postgres E2E |
 | 安全 | HttpOnly Cookie JWT、CSRF 头校验、按端点限流、Stripe/PayPal 验签、租户隔离、SSRF/重放防护 |
 | 可观测 | 请求 ID、全局异常脱敏、结构化错误、AI 用量计量 |

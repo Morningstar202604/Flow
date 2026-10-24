@@ -178,6 +178,10 @@ OpenAI 兼容端点（DeepSeek / 火山方舟 / OpenAI / 通义 / 智谱 ...）
 | `GET /api/openapi.json` | OpenAPI 3.1 描述（商品/购物车/订单/支付/健康检查） |
 | `GET /api/seo/meta?path=` | 单页元信息（title/description/canonical/JSON-LD），客户端路由切换时复用 |
 
+实现位置：`SeoService`（`server/modules/seo/seo.service.ts`）负责数据与渲染；路由在 `server/main.ts` 直接注册，
+确保 `/sitemap.xml`、`/robots.txt`、`/llms.txt` 位于站点根路径（不受 `/api` 前缀与 SPA 回退影响）。
+`buildOpenApiSpec()`（`server/modules/seo/openapi.ts`）为手写 OpenAPI 3.1，零新增依赖。
+
 注入内容：`title`、`description`、`canonical`、`robots`、OpenGraph、Twitter Card、组织/商品 JSON-LD；卖家与交易页面自动 `noindex`。
 
 ---
