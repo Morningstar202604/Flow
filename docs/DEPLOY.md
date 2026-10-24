@@ -152,6 +152,6 @@ docker compose exec -T postgres psql -U flow flow < backup_2026-09-30.sql
 
 ```bash
 npm run smoke:all     # 一键全量 E2E（embedded-postgres，无需 Docker）
-npm run capture:all   # 重建 30 张截图 + 演示视频（需本机 Chrome + ffmpeg）
+npm run capture:all   # 重建 30 张截图 + 演示视频（需本机 Chrome/Edge + ffmpeg；缺构建时自动 npm run build）
 npm run cli -- health # CLI 健康检查
 ```

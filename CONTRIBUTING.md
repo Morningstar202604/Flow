@@ -42,7 +42,17 @@ npm run dev                 # 前端 Vite + 后端 NestJS watch 同时启动
 # 验证
 npm run lint                # ESLint
 npm run type:check          # 前后端 TypeScript 类型检查
+npm test                    # 单元测试（Vitest）
+npm run smoke:all           # 全量 E2E（embedded-postgres，无需 Docker）
 ```
+
+### 文档与演示资产
+
+| 命令 | 作用 |
+|---|---|
+| `npm run cli -- health` | 命令行健康检查（`FLOW_BASE` 指定实例） |
+| `npm run capture:all` | 重建 30 张页面截图 + 演示视频（需本机 Chrome/Edge + ffmpeg；缺构建产物时自动 `npm run build`） |
+| `npm run smoke:all` | workflows / degraded / transaction / providers / copilot / shopper 六套端到端 |
 
 > 未配置 `LLM_API_KEY` 等密钥时，AI 功能会诚实返回 400 且不阻断启动，可正常开发非 AI 模块。
 

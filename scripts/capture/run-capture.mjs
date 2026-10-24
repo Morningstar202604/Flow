@@ -4,9 +4,11 @@
  *
  * 用法：npm run capture:all
  * 依赖：本机 Chrome（或 CHROME_PATH）、ffmpeg（录屏时）。
+ * 说明：缺少 dist/dist-server 时会自动执行 npm run build。
  */
 import EmbeddedPostgres from 'embedded-postgres';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { rm, mkdir } from 'node:fs/promises';
 
@@ -49,8 +51,24 @@ function run(script, env = {}) {
     p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`${script} exited ${code}`))));
   });
 }
+/** 执行 npm 等非 node 可执行文件（Windows 需要 .cmd 后缀） */
+function runBin(command, args) {
+  const bin = process.platform === 'win32' ? `${command}.cmd` : command;
+  return new Promise((resolve, reject) => {
+    const p = spawn(bin, args, { cwd: repo, env: process.env, stdio: 'inherit', shell: process.platform === 'win32' });
+    p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`${command} ${args.join(' ')} exited ${code}`))));
+  });
+}
 
 try {
+  // 截图跑的是生产构建：缺产物时先构建，避免 "cannot find dist-server/server/main.js"
+  if (!existsSync(path.join(repo, 'dist-server/server/main.js')) || !existsSync(path.join(repo, 'dist/index.html'))) {
+    console.log('[capture] 未找到生产构建，先执行 npm run build ...');
+    await runBin('npm', ['run', 'build']).catch(() => {
+      throw new Error('构建失败：请先手动执行 npm run build');
+    });
+  }
+
   console.log('[capture] starting embedded postgres...');
   await pg.initialise();
   await pg.start();

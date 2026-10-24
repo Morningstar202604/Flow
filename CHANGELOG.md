@@ -24,7 +24,7 @@
 - **店面体验**：搜索联想下拉、相关商品推荐、最近浏览、页脚真实链接与支付/退货/配送信任标识、
   Hero 品牌色统一（#0B1F3A → #00C2B8）。
 - **工程能力**：`scripts/cli.mjs`（health/products/search/order/ai-test/export/openapi）、
-  `npm run smoke:all`（embedded-postgres 一键跑 6 套 E2E）、`npm run capture:all`（一键重建截图+视频）、`scripts/mock-smtp.mjs`。
+  `npm run smoke:all`（embedded-postgres 一键跑 6 套 E2E）、`npm run capture:all`（一键重建截图+视频，缺构建产物时自动构建）、`scripts/mock-smtp.mjs`。
 - **安全与可观测**：安全响应头中间件（CSP/HSTS/nosniff/Referrer-Policy/Permissions-Policy）、
   `X-Request-Id` 请求追踪、全局异常过滤器（生产脱敏，统一错误结构）、静态资源 immutable 缓存、优雅关闭。
 
