@@ -2,11 +2,11 @@
 
 <img src="client/src/assets/branding/logo-main.png" alt="Flow" width="220" />
 
-# Flow · 跨境生意的一体化 AI 工作台
+# Flow · AI 原生跨境出口电商平台
 
 ### 一套代码，两个世界：买家商城 + 卖家 AI 工作台
 
-**AI 原生跨境出口电商平台 —— 从开店、上架、获客、成交、客服到复盘，全链路都在这里。**
+**从开店、上架、获客、成交、客服到复盘，全链路都在这里。**
 
 [![Version](https://img.shields.io/badge/version-v1.21.0-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
@@ -139,8 +139,8 @@
 ### 方式一：Docker（推荐）
 
 ```bash
-git clone https://github.com/X33834/GlobalEcom-AI.git
-cd GlobalEcom-AI
+git clone https://github.com/X33834/GlobalEcom.git
+cd GlobalEcom
 cp .env.example .env          # 至少填写 JWT_SECRET
 # 可选：SEED_DEMO_DATA=true 首次启动写入演示账号/商品/优惠券
 docker compose up -d --build

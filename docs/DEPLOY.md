@@ -53,7 +53,8 @@
 
 ```bash
 # 1. 克隆代码后进入项目根目录
-cd GlobalEcom-AI
+git clone https://github.com/X33834/GlobalEcom.git
+cd GlobalEcom
 
 # 2. 复制环境变量模板并填入密钥
 cp .env.example .env

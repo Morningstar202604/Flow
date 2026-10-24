@@ -15,7 +15,7 @@
 
 请通过以下任一私密渠道报告：
 
-1. **GitHub 私密报告**：在 [Security Advisories](https://github.com/X33834/GlobalEcom-AI/security/advisories/new) 中提交（推荐）
+1. **GitHub 私密报告**：在 [Security Advisories](https://github.com/X33834/GlobalEcom/security/advisories/new) 中提交（推荐）
 2. **邮件**：发送至项目维护者邮箱（可在仓库提交记录中获取）
 
 ### 报告内容建议

@@ -56,17 +56,17 @@
 ## 二、Monorepo 目录分层
 
 ```
-GlobalEcom-AI/
+GlobalEcom/
 ├── client/        # React 19 + Vite 前端（买家端 + 卖家端双端同仓）
 │   └── src/
-│       ├── pages/         # 买家 8 页面 + 卖家 7 页面
+│       ├── pages/         # 买家 14 页面 + 卖家 12 页面（含 CMS/集合详情/404）
 │       ├── components/     # shadcn/ui 基础组件 + 业务组件
 │       ├── api/           # fetch 封装（credentials: include）
 │       ├── contexts/      # AuthContext / LanguageContext
 │       └── i18n/          # zh / en / es / pt 四语言
 ├── server/        # NestJS 12 后端
 │   └── src/
-│       ├── modules/       # 16 个业务模块（auth/products/orders/...）
+│       ├── modules/       # 25 个业务模块（auth/products/orders/ai/copilot/...）
 │       ├── common/        # middleware / guards / filters
 │       └── database/      # Drizzle schema
 ├── shared/        # 前后端共享 TypeScript 类型与 DTO 接口
