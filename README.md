@@ -124,7 +124,7 @@
 
 | 数据看板 | AI 运营副驾 |
 |:---:|:---:|
-| ![看板](docs/screenshots/16-seller-dashboard-zh.png) | ![副驾](docs/screenshots/16-seller-dashboard-zh.png) |
+| ![看板](docs/screenshots/16-seller-dashboard-zh.png) | ![副驾](docs/screenshots/28-seller-copilot.png) |
 | **商品管理** | **订单管理** |
 | ![商品](docs/screenshots/18-seller-products.png) | ![订单](docs/screenshots/19-seller-orders.png) |
 | **AI 分析中心** | **退款管理** |
