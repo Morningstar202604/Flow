@@ -4,7 +4,7 @@
 |---|---|
 | 应用 | Flow（出口电商平台） |
 | 技术栈 | React 19 + NestJS 12（Express 5）+ Drizzle ORM + PostgreSQL 16（pg_trgm） |
-| 文档版本 | v1.3.0 / 2026-10-14 |
+| 文档版本 | v1.21.0 / 2026-10-24 |
 
 ---
 
@@ -32,6 +32,7 @@
 | `LLM_MODEL` | 模型名（可选） | 如 `deepseek-chat` |
 | `JWT_SECRET` | 登录签名密钥 | 自生成：`openssl rand -hex 32`（生产必填，≥32 位） |
 | `STRIPE_SECRET_KEY` | 真实收款 | Stripe Dashboard → Developers → API keys（`sk_live_...`） |
+| `STRIPE_PUBLISHABLE_KEY` | 站内卡支付（Stripe.js） | Stripe Dashboard → Developers → API keys（`pk_live_...`，公钥可公开；未配置时仅创建支付单并提示到渠道后台确认） |
 | `STRIPE_WEBHOOK_SECRET` | Stripe 回调验签 | Stripe Dashboard → Webhooks → 新增 endpoint 后获取 |
 | `PAYPAL_CLIENT_ID` | PayPal 收款 | PayPal Developer → Apps & Credentials |
 | `PAYPAL_CLIENT_SECRET` | PayPal 收款 | 同上 |
@@ -126,3 +127,30 @@ docker compose exec -T postgres psql -U flow flow < backup_2026-09-30.sql
 | Stripe 支付后订单未变更 | 确认 webhook 已指向 `{APP_URL}/api/payments/stripe-webhook` 且 `STRIPE_WEBHOOK_SECRET` 正确 |
 | PayPal 支付后订单未变更 | 确认 webhook 已指向 `{APP_URL}/api/payments/paypal-webhook`（事件 `PAYMENT.CAPTURE.COMPLETED`）且 `PAYPAL_WEBHOOK_ID` 正确 |
 | 升级旧库数据 | 1.2.0 起使用 `npm run db:migrate` 管理结构；用 `db:push` 建的旧库请先备份再执行迁移 |
+
+
+---
+
+## 九、SEO 与机器可读端点
+
+部署后可直接访问（无需额外配置）：
+
+| 路径 | 说明 |
+|---|---|
+| `/sitemap.xml` | 商品 / 集合 / CMS 页面 sitemap（动态生成） |
+| `/robots.txt` | 爬虫规则 + sitemap 地址 |
+| `/llms.txt` | 面向 AI 代理的站点说明与公开 API 清单 |
+| `/api/openapi.json` | OpenAPI 3.1 描述 |
+| `/api/seo/meta?path=/products/xxx` | 页面元信息（title/description/JSON-LD） |
+
+> `APP_URL` 必须配置为对外域名，sitemap / canonical / OG 链接才会使用正确地址。
+
+---
+
+## 十、验证与演示资产
+
+```bash
+npm run smoke:all     # 一键全量 E2E（embedded-postgres，无需 Docker）
+npm run capture:all   # 重建 30 张截图 + 演示视频（需本机 Chrome + ffmpeg）
+npm run cli -- health # CLI 健康检查
+```
