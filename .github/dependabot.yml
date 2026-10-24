@@ -28,8 +28,21 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns:
+          - '*'
+    ignore:
+      # Action 主版本升级（如 v4→v7）需人工验证，避免自动 PR 制造红灯
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: monthly
+    ignore:
+      # 基础镜像主版本（node 22→25）不自动跟随，需单独评估兼容性
+      - dependency-name: 'node'
+        update-types: ['version-update:semver-major']
