@@ -277,6 +277,19 @@ Flow 的定位是「AI 原生跨境出口电商」，对标开源 commerce 平
 
 ---
 
+## 项目状态 · Project Status
+
+| 项 | 值 |
+|---|---|
+| 当前版本 | **v1.21.1** |
+| 开发状态 | ✅ 功能闭环，维护模式（bug fix / 安全修复 / 小版本依赖升级） |
+| CI | GitHub Actions：lint / typecheck / test / build + 6 套 E2E，三仓全绿 |
+| 单元测试 | 166 / 166（29 文件） |
+| 许可 | MIT |
+
+**为什么进入维护模式**：核心闭环（商城 + 卖家后台 + AI Agent + 副驾 + 支付退款 + SEO/OpenAPI）已完整交付并有 E2E 覆盖；
+下一阶段的大项（Region/多币种、facets 搜索、MCP、向量检索）需要产品级决策，不适合继续在无需求输入时扩张。
+
 ## 贡献
 
 欢迎 Issue / PR / 文档修正。开始前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。

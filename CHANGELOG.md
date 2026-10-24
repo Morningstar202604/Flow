@@ -28,7 +28,7 @@
 - CI 失败时自动输出两实例与 mock 日志，便于定位。
 
 ### Verification
-- 三仓 GitHub Actions：`Lint / Typecheck / Test / Build` 与 `E2E Smoke (Postgres)` 全绿（`5499cf3`）。
+- 三仓 GitHub Actions：`Lint / Typecheck / Test / Build` 与 `E2E Smoke (Postgres)` 全绿（`f9d1e35`）。
 - 本地：lint 0 / 双端 typecheck 0 / 166 单测 / build 通过 / `smoke:all` 6 套全通过。
 - 9 个 Dependabot PR 已全部关闭（依赖已集中升级），三仓开放 PR 数为 0。
 
